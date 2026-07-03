@@ -4,20 +4,21 @@ on:
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
   check-source-branch:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Allow only develop branch to merge into main
+      - name: Check source branch policy
         run: |
           echo "Base branch: ${{ github.base_ref }}"
           echo "Head branch: ${{ github.head_ref }}"
 
-          if [ "${{ github.head_ref }}" != "develop" ]; then
+          if [ "${{ github.base_ref }}" = "main" ] && [ "${{ github.head_ref }}" != "develop" ]; then
             echo "❌ main 브랜치에는 develop 브랜치에서만 PR을 보낼 수 있습니다."
             exit 1
           fi
 
-          echo "✅ develop 브랜치에서 main으로 보내는 PR입니다."
+          echo "✅ 브랜치 정책을 통과했습니다."
