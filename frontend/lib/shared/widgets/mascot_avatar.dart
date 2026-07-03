@@ -24,7 +24,7 @@ class MascotAvatar extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Image.asset(
-        'assets/images/chihuahua_mascot_logo.png',
+        'assets/images/chihuahua_mascot.png',
         fit: BoxFit.contain,
         semanticLabel: '치와와 마스코트',
       ),
