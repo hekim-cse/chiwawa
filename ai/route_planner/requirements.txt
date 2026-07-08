@@ -2,3 +2,5 @@ httpx
 python-dotenv
 pydantic
 pytest
+modal
+fastapi[standard]
