@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../core/mock_data.dart';
+import '../../../core/models/travel_models.dart';
 import 'schedule_card.dart';
 
 class TodayTimeline extends StatelessWidget {

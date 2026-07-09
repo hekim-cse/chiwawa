@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
-import '../../../core/mock_data.dart';
+import '../../../core/models/travel_models.dart';
 
 class RouteResultCard extends StatelessWidget {
   const RouteResultCard({

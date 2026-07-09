@@ -1,9 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:chiwawa/core/confirmed_route.dart';
+import 'package:chiwawa/core/models/travel_models.dart';
+import 'package:chiwawa/core/repositories/plan_repository.dart';
 import 'package:chiwawa/core/saved_photo_places.dart';
 import 'package:chiwawa/features/explore/explore_screen.dart';
+import 'package:chiwawa/features/plan/plan_screen.dart';
 import 'package:chiwawa/main.dart';
+
+class _FailingPlanRepository implements PlanRepository {
+  @override
+  List<String> get defaultSelectedPlaces => const ['아사쿠사 센소지', '도쿄 타워'];
+
+  @override
+  Future<List<RoutePlace>> optimizeRoute(
+    List<String> places,
+    TravelPreference preference,
+  ) async {
+    throw StateError('mock failure');
+  }
+}
 
 void main() {
   void useMobileTestSurface(WidgetTester tester) {
@@ -207,6 +224,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.text('아사쿠사 센소지 일정 후보에 저장했어요.'), findsOneWidget);
+    expect(find.text('일정 후보 저장됨'), findsOneWidget);
 
     await tester.ensureVisible(find.text('일정에 추가'));
     await tester.pumpAndSettle();
@@ -242,11 +260,151 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('사진으로 저장한 장소'), findsOneWidget);
-    expect(find.widgetWithText(ActionChip, '아사쿠사 센소지'), findsOneWidget);
+    expect(find.byKey(const ValueKey('select-saved-place-아사쿠사 센소지')),
+        findsOneWidget);
 
-    await tester.tap(find.widgetWithText(ActionChip, '아사쿠사 센소지'));
+    await tester.tap(find.byKey(const ValueKey('select-saved-place-아사쿠사 센소지')));
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.widgetWithText(InputChip, '아사쿠사 센소지'), findsOneWidget);
+  });
+
+  testWidgets('Saved photo place can be removed from plan saved section',
+      (tester) async {
+    useMobileTestSurface(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          exploreResultVisibleProvider.overrideWith((ref) => true),
+        ],
+        child: const ChiwawaApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('탐색'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('일정에 추가'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, '일정에 추가'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('일정'));
+    await tester.pumpAndSettle();
+    final removeSavedPlaceButton =
+        find.byKey(const ValueKey('remove-saved-place-아사쿠사 센소지')).last;
+    await tester.ensureVisible(removeSavedPlaceButton);
+    await tester.pumpAndSettle();
+    await tester.tap(removeSavedPlaceButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('아사쿠사 센소지 저장 목록에서 삭제했어요.'), findsOneWidget);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChiwawaApp)),
+    );
+    expect(container.read(savedPhotoPlacesProvider), isEmpty);
+  });
+
+  testWidgets('AI route optimization shows done state results', (tester) async {
+    useMobileTestSurface(tester);
+    await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('일정'));
+    await tester.pumpAndSettle();
+
+    await tester
+        .ensureVisible(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    await tester.pump(const Duration(milliseconds: 1200));
+
+    expect(find.text('최적 경로 결과'), findsOneWidget);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChiwawaApp)),
+    );
+    expect(
+      container.read(routeOptimizationProvider).status,
+      AiJobStatus.done,
+    );
+  });
+
+  testWidgets('Confirmed optimized route appears on memorial preview',
+      (tester) async {
+    useMobileTestSurface(tester);
+    await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('일정'));
+    await tester.pumpAndSettle();
+
+    await tester
+        .ensureVisible(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    await tester.pump(const Duration(milliseconds: 1200));
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChiwawaApp)),
+    );
+    container
+        .read(confirmedRouteProvider.notifier)
+        .confirm(container.read(routeOptimizationProvider).places);
+    await tester.pump();
+
+    await tester.tap(find.text('기록'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('확정 일정 미리보기'), findsOneWidget);
+    expect(find.text('AI 일정 설계에서 확정한 동선을 기록 흐름으로 이어봤어요.'), findsOneWidget);
+    expect(find.text('메이지 신궁'), findsOneWidget);
+  });
+
+  testWidgets('AI route optimization shows failed state and retry',
+      (tester) async {
+    useMobileTestSurface(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWithValue(_FailingPlanRepository()),
+        ],
+        child: const ChiwawaApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('일정'));
+    await tester.pumpAndSettle();
+
+    await tester
+        .ensureVisible(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(find.text('경로 최적화에 실패했어요. 다시 시도해 주세요.'), findsOneWidget);
+    expect(find.text('다시 시도'), findsOneWidget);
+  });
+
+  testWidgets('Travel preference chips store enum state', (tester) async {
+    useMobileTestSurface(tester);
+    await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('일정'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('맛집'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('맛집'));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChiwawaApp)),
+    );
+    expect(
+      container.read(travelPreferenceProvider).themes,
+      contains(TravelTheme.food),
+    );
   });
 }

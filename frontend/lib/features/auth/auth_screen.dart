@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../core/mock_auth.dart';
+import '../../core/repositories/auth_repository.dart';
 import '../../shared/widgets/mascot_avatar.dart';
 
 class AuthScreen extends ConsumerStatefulWidget {
@@ -30,7 +31,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
     final name = _nameController.text.trim();
@@ -46,9 +47,22 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       return;
     }
 
+    final profile = _isSignUp
+        ? await ref.read(authRepositoryProvider).signUp(
+              nickname: name,
+              email: email,
+              password: password,
+            )
+        : await ref.read(authRepositoryProvider).signIn(
+              email: email,
+              password: password,
+            );
+
+    if (!mounted) return;
+
     ref.read(mockAuthProvider.notifier).signIn(
-          email: email,
-          displayName: _isSignUp ? name : null,
+          email: profile.email,
+          displayName: profile.displayName,
         );
     _showSnackBar(_isSignUp ? '회원가입이 완료됐어요.' : '로그인했어요.');
     context.go('/mypage');

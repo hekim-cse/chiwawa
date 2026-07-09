@@ -1,102 +1,8 @@
-class TripInfo {
-  const TripInfo({
-    required this.tripName,
-    required this.period,
-    required this.currentDay,
-    required this.members,
-    required this.city,
-    required this.weather,
-  });
-
-  final String tripName;
-  final String period;
-  final String currentDay;
-  final int members;
-  final String city;
-  final String weather;
-}
-
-class ScheduleItem {
-  const ScheduleItem({
-    required this.time,
-    this.place,
-    this.transport = '',
-    this.freeMinutes,
-    required this.status,
-  });
-
-  final String time;
-  final String? place;
-  final String transport;
-  final int? freeMinutes;
-  final ScheduleStatus status;
-}
-
-enum ScheduleStatus { completed, ongoing, free, upcoming }
-
-class RoutePlace {
-  const RoutePlace({
-    required this.name,
-    required this.duration,
-    required this.transport,
-    required this.category,
-  });
-
-  final String name;
-  final String duration;
-  final String transport;
-  final String category;
-}
-
-class FreeTimeRecommend {
-  const FreeTimeRecommend({
-    required this.name,
-    required this.walk,
-    required this.duration,
-  });
-
-  final String name;
-  final String walk;
-  final String duration;
-}
-
-class PhotoSearchResult {
-  const PhotoSearchResult({
-    required this.name,
-    required this.address,
-    required this.category,
-  });
-
-  final String name;
-  final String address;
-  final String category;
-}
-
-class MemorialSummary {
-  const MemorialSummary({
-    required this.days,
-    required this.places,
-    required this.distance,
-  });
-
-  final int days;
-  final int places;
-  final String distance;
-}
-
-class MemorialDay {
-  const MemorialDay({
-    required this.date,
-    required this.places,
-    required this.photos,
-  });
-
-  final String date;
-  final List<String> places;
-  final int photos;
-}
+import 'assets/app_images.dart';
+import 'models/travel_models.dart';
 
 const tripInfo = TripInfo(
+  tripId: 'trip-tokyo-spring',
   tripName: '도쿄 봄 여행',
   period: '2025.04.01 ~ 04.04',
   currentDay: '3일차',
@@ -107,37 +13,72 @@ const tripInfo = TripInfo(
 
 const schedules = [
   ScheduleItem(
-    time: '09:00',
-    place: '아사쿠사 센소지',
+    id: 'schedule-sensoji',
+    tripId: 'trip-tokyo-spring',
+    date: '2025-04-03',
+    startTime: '09:00',
+    endTime: '10:30',
+    name: '아사쿠사 센소지',
+    placeId: 'place-sensoji',
+    source: 'mock',
     transport: '도보',
     status: ScheduleStatus.ongoing,
   ),
   ScheduleItem(
-    time: '12:00',
-    place: '스카이트리',
+    id: 'schedule-skytree',
+    tripId: 'trip-tokyo-spring',
+    date: '2025-04-03',
+    startTime: '12:00',
+    endTime: '13:00',
+    name: '스카이트리',
+    placeId: 'place-skytree',
+    source: 'mock',
     transport: '지하철',
     status: ScheduleStatus.upcoming,
   ),
   ScheduleItem(
-    time: '13:30',
+    id: 'schedule-free-1',
+    tripId: 'trip-tokyo-spring',
+    date: '2025-04-03',
+    startTime: '13:30',
+    endTime: '14:30',
+    source: 'mock',
     freeMinutes: 60,
     status: ScheduleStatus.free,
   ),
   ScheduleItem(
-    time: '15:00',
-    place: '시부야 스크램블 교차로',
+    id: 'schedule-shibuya',
+    tripId: 'trip-tokyo-spring',
+    date: '2025-04-03',
+    startTime: '15:00',
+    endTime: '16:00',
+    name: '시부야 스크램블 교차로',
+    placeId: 'place-shibuya-crossing',
+    source: 'mock',
     transport: '지하철',
     status: ScheduleStatus.upcoming,
   ),
   ScheduleItem(
-    time: '18:00',
-    place: '신주쿠 맛집 거리',
+    id: 'schedule-shinjuku',
+    tripId: 'trip-tokyo-spring',
+    date: '2025-04-03',
+    startTime: '18:00',
+    endTime: '19:30',
+    name: '신주쿠 맛집 거리',
+    placeId: 'place-shinjuku-food',
+    source: 'mock',
     transport: '지하철',
     status: ScheduleStatus.upcoming,
   ),
   ScheduleItem(
-    time: '20:00',
-    place: '도쿄 타워 야경',
+    id: 'schedule-tokyo-tower',
+    tripId: 'trip-tokyo-spring',
+    date: '2025-04-03',
+    startTime: '20:00',
+    endTime: '21:00',
+    name: '도쿄 타워 야경',
+    placeId: 'place-tokyo-tower',
+    source: 'mock',
     transport: '도보',
     status: ScheduleStatus.upcoming,
   ),
@@ -150,9 +91,14 @@ const freeTimeRecommends = [
 ];
 
 const photoSearchResult = PhotoSearchResult(
+  id: 'place-sensoji',
   name: '아사쿠사 센소지',
   address: '도쿄 다이토구 아사쿠사 2-3-1',
   category: '사찰·관광지',
+  latitude: 35.7148,
+  longitude: 139.7967,
+  confidence: 0.92,
+  imagePath: MockImages.mockPlace01,
 );
 
 const routePlaces = [
@@ -186,25 +132,58 @@ const memorialSummary =
     MemorialSummary(days: 4, places: 12, distance: '38.4km');
 
 const memorialDays = [
-  MemorialDay(date: '4월 1일', places: ['나리타 공항', '아사쿠사', '신주쿠'], photos: 34),
-  MemorialDay(date: '4월 2일', places: ['우에노', '아키하바라', '시부야'], photos: 52),
-  MemorialDay(date: '4월 3일', places: ['하라주쿠', '오모테산도', '롯폰기'], photos: 41),
+  MemorialDay(
+    date: '4월 1일',
+    places: ['나리타 공항', '아사쿠사', '신주쿠'],
+    photos: 34,
+    photoAssetPaths: [
+      MockImages.mockMemorial01,
+      MockImages.mockMemorial02,
+      MockImages.mockMemorial03,
+    ],
+  ),
+  MemorialDay(
+    date: '4월 2일',
+    places: ['우에노', '아키하바라', '시부야'],
+    photos: 52,
+    photoAssetPaths: [
+      MockImages.mockMemorial02,
+      MockImages.mockMemorial03,
+      MockImages.mockMemorial01,
+    ],
+  ),
+  MemorialDay(
+    date: '4월 3일',
+    places: ['하라주쿠', '오모테산도', '롯폰기'],
+    photos: 41,
+    photoAssetPaths: [
+      MockImages.mockMemorial03,
+      MockImages.mockMemorial01,
+      MockImages.mockMemorial02,
+    ],
+  ),
 ];
 
 const recentSearches = [
   PhotoSearchResult(
+    id: 'place-tokyo-tower',
     name: '도쿄 타워',
     address: '일본 도쿄 미나토구 시바코엔 4-2-8',
     category: '전망대',
+    imagePath: MockImages.mockPlace03,
   ),
   PhotoSearchResult(
+    id: 'place-meguro-river',
     name: '메구로강',
     address: '일본 도쿄 메구로구',
     category: '벚꽃 명소',
+    imagePath: MockImages.mockPlace02,
   ),
   PhotoSearchResult(
+    id: 'place-ueno-park',
     name: '우에노 공원',
     address: '일본 도쿄 다이토구',
     category: '공원',
+    imagePath: MockImages.mockPlace01,
   ),
 ];

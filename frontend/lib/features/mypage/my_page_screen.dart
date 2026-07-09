@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../core/mock_auth.dart';
-import '../../core/mock_data.dart';
+import '../../core/providers/data_providers.dart';
 import '../../shared/widgets/mascot_avatar.dart';
 
 class MyPageScreen extends ConsumerWidget {
@@ -58,6 +58,7 @@ class MyPageScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(mockAuthProvider);
+    final tripInfo = ref.watch(tripInfoProvider).valueOrNull;
     final settingItems = [
       _MyPageItem(
         title: '계정 연결',
@@ -109,7 +110,9 @@ class MyPageScreen extends ConsumerWidget {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
                     children: [
-                      const _ProfileCard(),
+                      _ProfileCard(
+                          tripName: tripInfo?.tripName ?? '여행 준비 중',
+                          currentDay: tripInfo?.currentDay ?? ''),
                       const SizedBox(height: 22),
                       const _SectionTitle(title: '내 여행 관리'),
                       const SizedBox(height: 10),
@@ -135,7 +138,13 @@ class MyPageScreen extends ConsumerWidget {
 }
 
 class _ProfileCard extends ConsumerWidget {
-  const _ProfileCard();
+  const _ProfileCard({
+    required this.tripName,
+    required this.currentDay,
+  });
+
+  final String tripName;
+  final String currentDay;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -176,7 +185,7 @@ class _ProfileCard extends ConsumerWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      '${tripInfo.tripName} · ${tripInfo.currentDay}',
+                      '$tripName · $currentDay',
                       style: const TextStyle(
                         color: ChiwawaColors.textSecondary,
                         fontSize: 13,
