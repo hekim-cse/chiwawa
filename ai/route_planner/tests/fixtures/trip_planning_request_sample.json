@@ -1,0 +1,39 @@
+{
+  "trip_id": "trip_001",
+  "timezone": "Asia/Tokyo",
+  "days": [
+    {
+      "day_index": 1,
+      "date": "2026-08-01",
+      "start_place": {
+        "place_id": "place_start_1",
+        "name": "오사카 난바역",
+        "lat": 34.6657531,
+        "lng": 135.5010362
+      },
+      "start_time": "10:00",
+      "end_place": {
+        "place_id": "place_end_1",
+        "name": "우메다 스카이빌딩",
+        "lat": 34.7052872,
+        "lng": 135.4896527
+      },
+      "end_time": "20:00",
+      "max_place_count": 5
+    }
+  ],
+  "pois": [
+    {
+      "poi_id": "poi_001",
+      "place_id": "google_place_001",
+      "name": "도톤보리",
+      "lat": 34.6686471,
+      "lng": 135.5030983,
+      "category": "TOURIST_ATTRACTION",
+      "estimated_stay_minutes": 60,
+      "priority": 1,
+      "must_visit": true,
+      "preferred_day_index": null
+    }
+  ]
+}
