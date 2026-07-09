@@ -1,16 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
-import '../../core/mock_data.dart';
+import '../../core/assets/app_images.dart';
+import '../../core/models/travel_models.dart';
+import '../../core/providers/data_providers.dart';
 import '../assist/widgets/free_time_sheet.dart';
+import '../../shared/widgets/async_value_view.dart';
 import '../../shared/widgets/mascot_avatar.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    return AsyncValueView<HomeData>(
+      value: ref.watch(homeDataProvider),
+      onRetry: () => ref.invalidate(homeDataProvider),
+      builder: (data) => _body(context, data.tripInfo, data.schedules),
+    );
+  }
+
+  Widget _body(
+    BuildContext context,
+    TripInfo tripInfo,
+    List<ScheduleItem> schedules,
+  ) {
     return SafeArea(
       child: SizedBox.expand(
         child: DecoratedBox(
@@ -38,9 +54,16 @@ class HomeScreen extends StatelessWidget {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
                     children: [
-                      const _HomeHeader(),
+                      _HomeHeader(
+                        tripInfo: tripInfo,
+                        onMenuTap: () =>
+                            _showHomeSnackBar(context, '메뉴는 준비 중이에요.'),
+                        onNotificationTap: () =>
+                            _showHomeSnackBar(context, '알림은 준비 중이에요.'),
+                      ),
                       const SizedBox(height: 18),
                       _TodaySchedulePanel(
+                        tripInfo: tripInfo,
                         schedules: schedules,
                         onFreeTap: () => showFreeTimeRecommendSheet(context),
                       ),
@@ -67,7 +90,15 @@ class HomeScreen extends StatelessWidget {
 }
 
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader();
+  const _HomeHeader({
+    required this.tripInfo,
+    required this.onMenuTap,
+    required this.onNotificationTap,
+  });
+
+  final TripInfo tripInfo;
+  final VoidCallback onMenuTap;
+  final VoidCallback onNotificationTap;
 
   @override
   Widget build(BuildContext context) {
@@ -75,7 +106,7 @@ class _HomeHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            _HeaderIconButton(icon: Icons.menu, onTap: () {}),
+            _HeaderIconButton(icon: Icons.menu, onTap: onMenuTap),
             const Expanded(
               child: Center(
                 child: Text(
@@ -90,7 +121,7 @@ class _HomeHeader extends StatelessWidget {
             ),
             _HeaderIconButton(
               icon: Icons.notifications_none_rounded,
-              onTap: () {},
+              onTap: onNotificationTap,
             ),
           ],
         ),
@@ -166,10 +197,12 @@ class _HeaderIconButton extends StatelessWidget {
 
 class _TodaySchedulePanel extends StatelessWidget {
   const _TodaySchedulePanel({
+    required this.tripInfo,
     required this.schedules,
     required this.onFreeTap,
   });
 
+  final TripInfo tripInfo;
   final List<ScheduleItem> schedules;
   final VoidCallback onFreeTap;
 
@@ -350,8 +383,8 @@ class _PlaceThumbnail extends StatelessWidget {
       child: SizedBox(
         width: 72,
         height: 54,
-        child: Image.network(
-          'https://picsum.photos/seed/chiwawa-$seed/180/140',
+        child: Image.asset(
+          MockImages.placeThumbnail(seed),
           fit: BoxFit.cover,
           errorBuilder: (context, error, stackTrace) =>
               _ThumbnailFallback(label: label),
@@ -359,6 +392,12 @@ class _PlaceThumbnail extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showHomeSnackBar(BuildContext context, String message) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
 }
 
 class _ThumbnailFallback extends StatelessWidget {

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
-import '../../../core/mock_data.dart';
+import '../../../core/models/travel_models.dart';
+import '../../../core/providers/data_providers.dart';
+import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/bottom_sheet_base.dart';
 
 void showFreeTimeRecommendSheet(BuildContext context) {
@@ -13,11 +16,13 @@ void showFreeTimeRecommendSheet(BuildContext context) {
   );
 }
 
-class FreeTimeRecommendSheet extends StatelessWidget {
+class FreeTimeRecommendSheet extends ConsumerWidget {
   const FreeTimeRecommendSheet({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final recommendsAsync = ref.watch(freeTimeRecommendsProvider);
+
     return DraggableScrollableSheet(
       initialChildSize: 0.5,
       minChildSize: 0.36,
@@ -38,10 +43,19 @@ class FreeTimeRecommendSheet extends StatelessWidget {
                         ?.copyWith(fontWeight: FontWeight.w900),
                   ),
                   const SizedBox(height: 14),
-                  for (final item in freeTimeRecommends) ...[
-                    _RecommendCard(item: item),
-                    const SizedBox(height: 12),
-                  ],
+                  AsyncValueView<List<FreeTimeRecommend>>(
+                    value: recommendsAsync,
+                    loadingHeight: 120,
+                    onRetry: () => ref.invalidate(freeTimeRecommendsProvider),
+                    builder: (recommends) => Column(
+                      children: [
+                        for (final item in recommends) ...[
+                          _RecommendCard(item: item),
+                          const SizedBox(height: 12),
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),

@@ -1,13 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/theme.dart';
-import '../../../core/mock_data.dart';
+import '../../../core/models/travel_models.dart';
+import '../../../core/providers/data_providers.dart';
+import '../../../shared/widgets/async_value_view.dart';
 
-class WeatherBanner extends StatelessWidget {
+class WeatherBanner extends ConsumerWidget {
   const WeatherBanner({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    return AsyncValueView<TripInfo>(
+      value: ref.watch(tripInfoProvider),
+      loadingHeight: 76,
+      onRetry: () => ref.invalidate(tripInfoProvider),
+      builder: (tripInfo) => _banner(tripInfo),
+    );
+  }
+
+  Widget _banner(TripInfo tripInfo) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

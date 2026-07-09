@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
-import '../../../core/mock_data.dart';
+import '../../../core/assets/app_images.dart';
+import '../../../core/models/travel_models.dart';
 
 class DailySection extends StatelessWidget {
   const DailySection({
@@ -78,14 +79,40 @@ class DailySection extends StatelessWidget {
             itemBuilder: (context, index) {
               return ClipRRect(
                 borderRadius: BorderRadius.circular(8),
-                child: Image.network(
-                  'https://picsum.photos/200/200?random=${seedOffset + index + 30}',
+                child: Image.asset(
+                  day.photoAssetPaths.isEmpty
+                      ? MockImages.memorialPhoto(seedOffset + index)
+                      : day.photoAssetPaths[index % day.photoAssetPaths.length],
                   fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const _PhotoFallback(),
                 ),
               );
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PhotoFallback extends StatelessWidget {
+  const _PhotoFallback();
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFFFDCE4), Color(0xFFFFF4F6)],
+        ),
+      ),
+      child: Icon(
+        Icons.photo_rounded,
+        color: ChiwawaColors.primary,
+        size: 28,
       ),
     );
   }
