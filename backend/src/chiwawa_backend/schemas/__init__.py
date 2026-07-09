@@ -1,3 +1,13 @@
+from chiwawa_backend.schemas.ai_planning import (
+    TripPlanningDayConstraint,
+    TripPlanningDayPlan,
+    TripPlanningPlace,
+    TripPlanningPOI,
+    TripPlanningRequest,
+    TripPlanningResponse,
+    TripPlanningStatus,
+    TripPlanningUnassignedPOI,
+)
 from chiwawa_backend.schemas.base import (
     ErrorResponse,
     HealthResponse,
@@ -90,6 +100,14 @@ __all__ = [
     "TravelStyle",
     "TripCreateRequest",
     "TripListResponse",
+    "TripPlanningDayConstraint",
+    "TripPlanningDayPlan",
+    "TripPlanningPOI",
+    "TripPlanningPlace",
+    "TripPlanningRequest",
+    "TripPlanningResponse",
+    "TripPlanningStatus",
+    "TripPlanningUnassignedPOI",
     "TripRead",
     "TripUpdateRequest",
     "WantedPlaceCreateRequest",
