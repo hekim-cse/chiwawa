@@ -52,6 +52,7 @@ def create_app(state: AppState | None = None) -> FastAPI:
         travel.router,
         assistant.router,
         memorial.router,
+        memorial.album_router,
     ):
         app.include_router(router)
     return app

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -40,7 +41,7 @@ def save_or_update_user(user_data: dict[str, Any]) -> dict[str, Any]:
     name = user_data.get("name")
     picture = user_data.get("picture")
 
-    with _connect() as connection:
+    with closing(_connect()) as connection:
         existing = connection.execute(
             "SELECT created_at FROM google_users WHERE google_sub = ?",
             (google_sub,),
