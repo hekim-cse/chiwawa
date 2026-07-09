@@ -3,10 +3,12 @@ from collections.abc import Callable
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from chiwawa_backend.config import load_env_file
 from chiwawa_backend.dependencies import get_state
 from chiwawa_backend.errors import NotFoundError
 from chiwawa_backend.routers import (
     assistant,
+    auth,
     health,
     memorial,
     photo_places,
@@ -21,6 +23,7 @@ from chiwawa_backend.state import AppState
 
 
 def create_app(state: AppState | None = None) -> FastAPI:
+    load_env_file()
     app_state = state or AppState()
     app = FastAPI(
         title="Chiwawa Backend",
@@ -30,6 +33,7 @@ def create_app(state: AppState | None = None) -> FastAPI:
     _register_exception_handlers(app)
     for router in (
         health.router,
+        auth.router,
         trips.router,
         photo_places.router,
         wanted_places.router,
