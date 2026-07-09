@@ -1,7 +1,7 @@
 from collections.abc import Callable
 
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from chiwawa_backend.config import load_env_file
 from chiwawa_backend.dependencies import get_state
@@ -27,7 +27,17 @@ def create_app(state: AppState | None = None) -> FastAPI:
     app_state = state or AppState()
     app = FastAPI(
         title="Chiwawa Backend",
+        description="AI 기반 일본 자유여행 일정 추천 및 관리 API",
         version="0.1.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+    )
+    app.add_api_route(
+        "/",
+        redirect_to_swagger_ui,
+        methods=["GET"],
+        include_in_schema=False,
     )
     app.dependency_overrides[get_state] = _state_dependency(app_state)
     _register_exception_handlers(app)
@@ -52,6 +62,10 @@ def _state_dependency(state: AppState) -> Callable[[], AppState]:
         return state
 
     return dependency
+
+
+def redirect_to_swagger_ui() -> RedirectResponse:
+    return RedirectResponse(url="/docs")
 
 
 def _register_exception_handlers(app: FastAPI) -> None:
