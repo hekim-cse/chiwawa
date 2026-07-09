@@ -1,5 +1,6 @@
 from chiwawa_backend.routers import (
     assistant,
+    auth,
     health,
     memorial,
     photo_places,
@@ -12,6 +13,7 @@ from chiwawa_backend.routers import (
 
 __all__ = [
     "assistant",
+    "auth",
     "health",
     "memorial",
     "photo_places",
