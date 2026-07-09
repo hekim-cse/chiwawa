@@ -4,11 +4,17 @@ import os
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials
 
 from chiwawa_backend.schemas.auth import GoogleAuthResponse, GoogleUserRead
 from chiwawa_backend.services.auth import save_or_update_user
+from chiwawa_backend.services.jwt_auth import (
+    create_access_token,
+    get_current_user_from_credentials,
+    security,
+)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
@@ -90,4 +96,21 @@ def google_callback(request: Request) -> JSONResponse:
         }
     )
     response = GoogleAuthResponse(user=user)
-    return JSONResponse(status_code=200, content=response.model_dump(mode="json"))
+    access_token = create_access_token(
+        subject=str(user.id),
+        payload={"email": user.email, "name": user.name},
+    )
+    payload = response.model_dump(mode="json")
+    payload["access_token"] = access_token
+    return JSONResponse(status_code=200, content=payload)
+
+
+@router.get("/me")
+def get_me(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> JSONResponse:
+    user = get_current_user_from_credentials(credentials)
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content={"sub": user.get("sub"), "email": user.get("email"), "name": user.get("name")},
+    )
