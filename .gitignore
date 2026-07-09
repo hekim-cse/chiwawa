@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 .DS_Store
 ai/route_planner/.env
+.db
