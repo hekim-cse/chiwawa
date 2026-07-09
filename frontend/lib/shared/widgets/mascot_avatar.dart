@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme.dart';
+import '../../core/assets/app_images.dart';
 
 class MascotAvatar extends StatelessWidget {
   const MascotAvatar({
@@ -24,7 +25,7 @@ class MascotAvatar extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: Image.asset(
-        'assets/images/chihuahua_mascot.png',
+        AppImages.mascot,
         fit: BoxFit.contain,
         semanticLabel: '치와와 마스코트',
       ),

@@ -5,8 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../app/theme.dart';
-import '../../core/mock_data.dart';
+import '../../core/models/travel_models.dart';
+import '../../core/providers/data_providers.dart';
+import '../../core/repositories/photo_place_repository.dart';
 import '../../core/saved_photo_places.dart';
+import '../../shared/widgets/async_value_view.dart';
 import 'widgets/photo_upload_zone.dart';
 import 'widgets/place_result_card.dart';
 
@@ -14,7 +17,7 @@ final exploreImagePathProvider = StateProvider<String?>((ref) => null);
 final exploreAnalyzingProvider = StateProvider<bool>((ref) => false);
 final exploreResultVisibleProvider = StateProvider<bool>((ref) => false);
 final exploreSelectedResultProvider = StateProvider<PhotoSearchResult>(
-  (ref) => photoSearchResult,
+  (ref) => ref.watch(photoPlaceRepositoryProvider).defaultResult,
 );
 
 class ExploreScreen extends ConsumerStatefulWidget {
@@ -93,15 +96,29 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     if (!mounted || picked == null) return;
 
     ref.read(exploreImagePathProvider.notifier).state = picked.path;
-    ref.read(exploreSelectedResultProvider.notifier).state = photoSearchResult;
     ref.read(exploreAnalyzingProvider.notifier).state = true;
     ref.read(exploreResultVisibleProvider.notifier).state = false;
 
-    await Future<void>.delayed(const Duration(milliseconds: 850));
-    if (!mounted) return;
+    try {
+      final result = await ref.read(photoPlaceRepositoryProvider).analyzePhoto(
+            picked.path,
+          );
+      if (!mounted) return;
 
-    ref.read(exploreAnalyzingProvider.notifier).state = false;
-    ref.read(exploreResultVisibleProvider.notifier).state = true;
+      ref.read(exploreSelectedResultProvider.notifier).state = result;
+      ref.read(exploreResultVisibleProvider.notifier).state = true;
+    } catch (_) {
+      if (!mounted) return;
+
+      ref.read(exploreResultVisibleProvider.notifier).state = false;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('사진 분석은 아직 준비 중이에요.')),
+      );
+    } finally {
+      if (mounted) {
+        ref.read(exploreAnalyzingProvider.notifier).state = false;
+      }
+    }
   }
 
   @override
@@ -110,6 +127,11 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final isAnalyzing = ref.watch(exploreAnalyzingProvider);
     final showResult = ref.watch(exploreResultVisibleProvider);
     final selectedResult = ref.watch(exploreSelectedResultProvider);
+    final savedPlaces = ref.watch(savedPhotoPlacesProvider);
+    final recentSearchesAsync = ref.watch(recentPhotoSearchesProvider);
+    final selectedResultSaved = savedPlaces.any(
+      (place) => place.name == selectedResult.name,
+    );
 
     return SafeArea(
       child: ListView(
@@ -138,6 +160,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
             PlaceResultCard(
               result: selectedResult,
               imageFile: imagePath == null ? null : File(imagePath),
+              isSaved: selectedResultSaved,
               onAddToPlan: () => _savePlaceToPlan(selectedResult),
             ),
           ],
@@ -150,20 +173,25 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
                 ?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 12),
-          SizedBox(
-            height: 142,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: recentSearches.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
-              itemBuilder: (context, index) {
-                final item = recentSearches[index];
-                return _RecentSearchCard(
-                  item: item,
-                  index: index,
-                  onTap: () => _showRecentResult(item),
-                );
-              },
+          AsyncValueView<List<PhotoSearchResult>>(
+            value: recentSearchesAsync,
+            loadingHeight: 142,
+            onRetry: () => ref.invalidate(recentPhotoSearchesProvider),
+            builder: (recentSearches) => SizedBox(
+              height: 142,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: recentSearches.length,
+                separatorBuilder: (_, __) => const SizedBox(width: 12),
+                itemBuilder: (context, index) {
+                  final item = recentSearches[index];
+                  return _RecentSearchCard(
+                    item: item,
+                    index: index,
+                    onTap: () => _showRecentResult(item),
+                  );
+                },
+              ),
             ),
           ),
         ],

@@ -3,18 +3,20 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
-import '../../../core/mock_data.dart';
+import '../../../core/models/travel_models.dart';
 
 class PlaceResultCard extends StatelessWidget {
   const PlaceResultCard({
     required this.result,
     required this.imageFile,
+    required this.isSaved,
     required this.onAddToPlan,
     super.key,
   });
 
   final PhotoSearchResult result;
   final File? imageFile;
+  final bool isSaved;
   final VoidCallback onAddToPlan;
 
   @override
@@ -47,6 +49,10 @@ class PlaceResultCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (isSaved) ...[
+                      const _SavedBadge(),
+                      const SizedBox(height: 8),
+                    ],
                     Row(
                       children: [
                         Expanded(
@@ -129,6 +135,41 @@ class PlaceResultCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SavedBadge extends StatelessWidget {
+  const _SavedBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: ChiwawaColors.secondary,
+        borderRadius: BorderRadius.circular(99),
+        border: Border.all(color: ChiwawaColors.border),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.check_circle_rounded,
+            size: 14,
+            color: ChiwawaColors.primary,
+          ),
+          SizedBox(width: 4),
+          Text(
+            '일정 후보 저장됨',
+            style: TextStyle(
+              color: ChiwawaColors.primary,
+              fontSize: 11,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       ),
