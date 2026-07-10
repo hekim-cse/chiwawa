@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/dio_client.dart';
 import '../env.dart';
 import '../mock_data.dart' as mock;
+import '../models/memorial_map_models.dart';
 import '../models/travel_models.dart';
 import '../services/trip_session_service.dart';
 import 'api/api_trip_repository.dart';
@@ -25,6 +26,8 @@ abstract class TripRepository {
   Future<List<FreeTimeRecommend>> fetchFreeTimeRecommendations();
   Future<MemorialSummary> fetchMemorialSummary();
   Future<List<MemorialDay>> fetchMemorialDays();
+  Future<List<DateTime>> fetchMemorialDates();
+  Future<List<MemorialPhotoPoint>> fetchMemorialPhotoPoints(DateTime date);
 }
 
 class MockTripRepository implements TripRepository {
@@ -48,4 +51,18 @@ class MockTripRepository implements TripRepository {
   @override
   Future<List<MemorialDay>> fetchMemorialDays() =>
       Future.value(mock.memorialDays);
+
+  @override
+  Future<List<DateTime>> fetchMemorialDates() =>
+      Future.value(mock.memorialTripDates);
+
+  @override
+  Future<List<MemorialPhotoPoint>> fetchMemorialPhotoPoints(DateTime date) {
+    final points = mock.memorialPhotoPoints.where((point) {
+      return point.takenAt.year == date.year &&
+          point.takenAt.month == date.month &&
+          point.takenAt.day == date.day;
+    }).toList();
+    return Future.value(points);
+  }
 }
