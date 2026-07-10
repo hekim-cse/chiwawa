@@ -4,6 +4,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
+from ai.route_planner.domain.schemas import TravelMode
+
 
 # 장소 카테고리
 class PoiCategory(str, Enum):
@@ -91,6 +93,40 @@ class TripPlanningRequestDTO(BaseModel):
         return self
 
 
+# 경로 정류장 타입
+class RouteStopType(str, Enum):
+    START = "START"
+    POI = "POI"
+    END = "END"
+
+
+# 경로 내 개별 정류장 DTO
+class RouteStopDTO(BaseModel):
+    stop_type: RouteStopType
+    place_id: str
+    name: str
+    lat: float
+    lng: float
+
+
+# 경로 내 한 이동 구간 DTO
+class RouteLegDTO(BaseModel):
+    origin_place_id: str
+    destination_place_id: str
+    travel_minutes: int
+
+
+# day별 이동 방식 경로 옵션 DTO
+class RouteOptionDTO(BaseModel):
+    day_index: int = Field(ge=1)    # 몇 번째 day의 경로 옵션인지
+    travel_mode: TravelMode # 이동 방식 (DRIVE, WALK, TRANSIT 등)
+    total_travel_minutes: int = Field(ge=0)
+    ordered_stops: List[RouteStopDTO]   # 실제 방문 순서
+    route_legs: List[RouteLegDTO]   # 각 이동 구간 정보
+    missing_segments: List[str] = Field(default_factory=list)   # 이동 시간 정보가 부족한 구간(place_id) 리스트
+    warnings: List[str] = Field(default_factory=list)   # 경로 옵션 생성 시 발생한 경고 메시지 리스트
+
+
 # day별 장소 배정 결과 DTO
 class DayPlanDTO(BaseModel):
     day_index: int = Field(ge=1)
@@ -100,12 +136,15 @@ class DayPlanDTO(BaseModel):
     assigned_pois: List[PoiDTO]
     estimated_total_stay_minutes: int = Field(ge=0)
     assignment_reason: str
+    route_options: List[RouteOptionDTO] = Field(default_factory=list)
 
 
 # 배정되지 못한 장소와 사유를 표현하는 DTO
 class UnassignedPoiDTO(BaseModel):
     poi: PoiDTO
     reason: str
+
+
 
 
 # AI가 백엔드에 반환하는 여행 일정 최적화 응답 DTO

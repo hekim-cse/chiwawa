@@ -43,6 +43,10 @@ class GoogleRoutesProvider:
         missing_elements: List[TravelTimeElement] = []
 
         for element in elements:
+            # 출발지와 도착지가 같은 자기 자신 이동 구간은 경로 최적화에 필요하지 않으므로 제외
+            if element.origin_index == element.destination_index:
+                continue
+
             # duration이 없으면 조용히 버리지 않고 누락 구간 목록에 저장
             if element.duration_minutes is None:
                 missing_elements.append(element)
