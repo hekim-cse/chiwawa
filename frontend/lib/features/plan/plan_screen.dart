@@ -150,6 +150,7 @@ class PlanScreen extends ConsumerWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
+              key: const ValueKey('plan-optimize-route'),
               onPressed: routeState.isWorking || places.length < 2
                   ? null
                   : () => _optimizeRoute(ref),

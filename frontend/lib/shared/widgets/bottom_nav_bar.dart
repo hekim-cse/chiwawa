@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
+import 'app_viewport.dart';
 
 class BottomNavBar extends StatelessWidget {
   const BottomNavBar({super.key});
@@ -32,7 +33,9 @@ class BottomNavBar extends StatelessWidget {
         child: Center(
           heightFactor: 1,
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 430),
+            constraints: const BoxConstraints(
+              maxWidth: AppLayout.maxContentWidth,
+            ),
             child: NavigationBar(
               height: 64,
               selectedIndex: currentIndex,

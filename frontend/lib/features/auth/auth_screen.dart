@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
+import '../../shared/widgets/app_viewport.dart';
 import '../../core/api/dio_client.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/env.dart';
@@ -152,7 +153,9 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final contentWidth =
-                    constraints.maxWidth > 430 ? 430.0 : constraints.maxWidth;
+                    constraints.maxWidth > AppLayout.maxContentWidth
+                        ? AppLayout.maxContentWidth
+                        : constraints.maxWidth;
 
                 return Align(
                   alignment: Alignment.topCenter,
