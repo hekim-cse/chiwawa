@@ -1,9 +1,13 @@
 import 'package:chiwawa/core/api/api_exception.dart';
+import 'package:chiwawa/core/auth/auth_controller.dart';
+import 'package:chiwawa/core/auth/deep_link_service.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
 import 'package:chiwawa/core/services/trip_session_service.dart';
 import 'package:chiwawa/core/utils/time_formatters.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   test('formatTime strips backend seconds from time strings', () {
@@ -84,6 +88,40 @@ void main() {
     expect(store.tripId, 'fresh-trip');
     expect(requestedTripIds, ['stale-trip', 'fresh-trip']);
     expect(createCount, 1);
+  });
+
+  test('DeepLinkService exchanges OAuth code and stores auth session',
+      () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final handled = await container
+        .read(deepLinkServiceProvider)
+        .handleAuthRedirect(Uri.parse('chiwawa://auth?code=google-code'));
+
+    final auth = container.read(authControllerProvider);
+    expect(handled, isTrue);
+    expect(auth.isSignedIn, isTrue);
+    expect(auth.token, 'mock-jwt-token');
+    expect(container.read(authTokenProvider), 'mock-jwt-token');
+    expect(auth.user?.email, 'traveler@chiwawa.app');
+  });
+
+  test('DeepLinkService ignores auth redirects without OAuth code', () async {
+    // 계약 기준: code만 처리한다. token 직접 전달은 계약에 없어 무시한다.
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+
+    final handled = await container
+        .read(deepLinkServiceProvider)
+        .handleAuthRedirect(Uri.parse('chiwawa://auth?token=legacy-token'));
+
+    expect(handled, isFalse);
+    expect(container.read(authControllerProvider).isSignedIn, isFalse);
   });
 }
 
