@@ -1,5 +1,5 @@
 # TripPlanningRequest JSON 파일을 읽어 DTO 검증을 수행하는 실행 스크립트
-import argparse
+import argparse # 터미널에서 입력값을 받기 위해 사용하는 Python 기본 라이브러리
 import json
 from pathlib import Path
 
