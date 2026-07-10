@@ -1,75 +1,127 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
-import '../../core/mock_auth.dart';
+import '../../core/api/dio_client.dart';
+import '../../core/auth/auth_controller.dart';
+import '../../core/env.dart';
 import '../../core/repositories/auth_repository.dart';
 import '../../shared/widgets/mascot_avatar.dart';
 
+/// 첫 진입 로그인 화면 — 구글 로그인 + 로그인 없이 둘러보기
 class AuthScreen extends ConsumerStatefulWidget {
-  const AuthScreen({super.key});
+  const AuthScreen({
+    this.oauthCode,
+    this.oauthState,
+    super.key,
+  });
+
+  final String? oauthCode;
+  final String? oauthState;
 
   @override
   ConsumerState<AuthScreen> createState() => _AuthScreenState();
 }
 
 class _AuthScreenState extends ConsumerState<AuthScreen> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _confirmPasswordController = TextEditingController();
-  var _isSignUp = false;
-  var _obscurePassword = true;
+  var _launching = false;
+  var _handledInitialCode = false;
 
   @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _nameController.dispose();
-    _confirmPasswordController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    if (widget.oauthCode != null && widget.oauthCode!.isNotEmpty) {
+      _handledInitialCode = true;
+      unawaited(Future<void>.microtask(_exchangeOAuthCode));
+    }
   }
 
-  Future<void> _submit() async {
-    final email = _emailController.text.trim();
-    final password = _passwordController.text;
-    final name = _nameController.text.trim();
-    final confirmPassword = _confirmPasswordController.text;
-
-    if (email.isEmpty || password.isEmpty || (_isSignUp && name.isEmpty)) {
-      _showSnackBar('필수 정보를 입력해 주세요.');
-      return;
+  @override
+  void didUpdateWidget(covariant AuthScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!_handledInitialCode &&
+        widget.oauthCode != null &&
+        widget.oauthCode!.isNotEmpty &&
+        widget.oauthCode != oldWidget.oauthCode) {
+      _handledInitialCode = true;
+      unawaited(_exchangeOAuthCode());
     }
+  }
 
-    if (_isSignUp && password != confirmPassword) {
-      _showSnackBar('비밀번호가 서로 달라요.');
-      return;
-    }
+  Future<void> _signInWithGoogle() async {
+    if (_launching) return;
+    setState(() => _launching = true);
 
-    final profile = _isSignUp
-        ? await ref.read(authRepositoryProvider).signUp(
-              nickname: name,
-              email: email,
-              password: password,
-            )
-        : await ref.read(authRepositoryProvider).signIn(
-              email: email,
-              password: password,
-            );
-
-    if (!mounted) return;
-
-    ref.read(mockAuthProvider.notifier).signIn(
-          email: profile.email,
-          displayName: profile.displayName,
+    try {
+      if (useApiBackend) {
+        // 실서버: 백엔드가 구글 동의 화면으로 리다이렉트 →
+        // 로그인 완료 시 chiwawa://auth?code=... 로 앱 복귀하면
+        // DeepLinkService가 callback API로 access_token을 교환한다.
+        final baseUrl = ref.read(apiBaseUrlProvider);
+        final loginUri = Uri.parse('$baseUrl/api/v1/auth/google/login');
+        final opened = await launchUrl(
+          loginUri,
+          mode: LaunchMode.externalApplication,
         );
-    _showSnackBar(_isSignUp ? '회원가입이 완료됐어요.' : '로그인했어요.');
-    context.go('/mypage');
+        if (!opened && mounted) {
+          _showSnackBar('브라우저를 열지 못했어요. 잠시 후 다시 시도해 주세요.');
+        }
+      } else {
+        // Mock: 백엔드 없이 로그인 성공 플로우 재현
+        // 영속화(unawaited)는 뒤에서 진행 — 화면 이동을 저장 완료에 묶지 않는다
+        unawaited(
+          ref.read(authControllerProvider.notifier).signInWithToken(
+                'mock-jwt-token',
+                user: const AuthUser(
+                  name: '치와와 여행자',
+                  email: 'traveler@chiwawa.app',
+                ),
+              ),
+        );
+        if (mounted) context.go('/home');
+      }
+    } finally {
+      if (mounted) setState(() => _launching = false);
+    }
   }
 
-  void _continueWithoutSignIn() {
-    context.go('/mypage');
+  Future<void> _exchangeOAuthCode() async {
+    final code = widget.oauthCode;
+    if (code == null || code.isEmpty || _launching) return;
+
+    setState(() => _launching = true);
+    try {
+      final result =
+          await ref.read(authRepositoryProvider).signInWithGoogleCode(
+                code,
+                state: widget.oauthState,
+              );
+      await ref.read(authControllerProvider.notifier).signInWithToken(
+            result.accessToken,
+            user: AuthUser(
+              name: result.profile.displayName,
+              email: result.profile.email,
+              pictureUrl: result.pictureUrl,
+            ),
+          );
+      if (mounted) context.go('/home');
+    } catch (_) {
+      if (mounted) {
+        _showSnackBar('구글 로그인에 실패했어요. 다시 시도해 주세요.');
+      }
+    } finally {
+      if (mounted) setState(() => _launching = false);
+    }
+  }
+
+  void _continueAsGuest() {
+    // 상태 변경은 동기, 영속화는 백그라운드 — 이동이 저장에 막히지 않게 한다
+    unawaited(ref.read(authControllerProvider.notifier).continueAsGuest());
+    context.go('/home');
   }
 
   void _showSnackBar(String message) {
@@ -80,6 +132,8 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final auth = ref.watch(authControllerProvider);
+
     return Scaffold(
       body: SafeArea(
         child: SizedBox.expand(
@@ -106,152 +160,72 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     width: contentWidth,
                     height: constraints.maxHeight,
                     child: ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
                       children: [
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: IconButton(
-                            onPressed: () => context.go('/mypage'),
-                            icon: const Icon(Icons.arrow_back_rounded),
-                            color: ChiwawaColors.textPrimary,
-                            tooltip: '뒤로가기',
-                          ),
+                        if (auth.isGuest)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: IconButton(
+                              onPressed: () => context.go('/mypage'),
+                              icon: const Icon(Icons.arrow_back_rounded),
+                              color: ChiwawaColors.textPrimary,
+                              tooltip: '뒤로가기',
+                            ),
+                          )
+                        else
+                          const SizedBox(height: 48),
+                        const SizedBox(height: 36),
+                        const Center(
+                          child: MascotAvatar(size: 96, padding: 5),
                         ),
-                        const SizedBox(height: 8),
-                        const Center(child: MascotAvatar(size: 82, padding: 4)),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 18),
                         const Text(
-                          'chiwawa',
+                          '치와와',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: ChiwawaColors.primary,
-                            fontSize: 30,
+                            fontSize: 32,
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 8),
                         const Text(
-                          '여행 준비를 이어서 관리해요.',
+                          'AI와 함께하는 일본 여행 플래너',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: ChiwawaColors.textSecondary,
                             fontSize: 14,
-                            fontWeight: FontWeight.w700,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                        const SizedBox(height: 22),
-                        Container(
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.96),
-                            borderRadius: BorderRadius.circular(24),
-                            border: Border.all(color: ChiwawaColors.border),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Color(0x12E45F78),
-                                blurRadius: 24,
-                                offset: Offset(0, 12),
-                              ),
-                            ],
+                        const SizedBox(height: 52),
+                        _GoogleSignInButton(
+                          launching: _launching,
+                          onPressed: _signInWithGoogle,
+                        ),
+                        const SizedBox(height: 14),
+                        TextButton(
+                          onPressed: _continueAsGuest,
+                          style: TextButton.styleFrom(
+                            foregroundColor: ChiwawaColors.textSecondary,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              SegmentedButton<bool>(
-                                segments: const [
-                                  ButtonSegment(
-                                    value: false,
-                                    label: Text('로그인'),
-                                    icon: Icon(Icons.login_rounded),
-                                  ),
-                                  ButtonSegment(
-                                    value: true,
-                                    label: Text('회원가입'),
-                                    icon: Icon(Icons.person_add_alt_rounded),
-                                  ),
-                                ],
-                                selected: {_isSignUp},
-                                onSelectionChanged: (selection) {
-                                  setState(() => _isSignUp = selection.first);
-                                },
-                              ),
-                              const SizedBox(height: 18),
-                              if (_isSignUp) ...[
-                                _AuthTextField(
-                                  key: const ValueKey('auth-name-field'),
-                                  controller: _nameController,
-                                  label: '닉네임',
-                                  icon: Icons.badge_rounded,
-                                  textInputAction: TextInputAction.next,
-                                ),
-                                const SizedBox(height: 12),
-                              ],
-                              _AuthTextField(
-                                key: const ValueKey('auth-email-field'),
-                                controller: _emailController,
-                                label: '이메일',
-                                icon: Icons.mail_rounded,
-                                keyboardType: TextInputType.emailAddress,
-                                textInputAction: TextInputAction.next,
-                              ),
-                              const SizedBox(height: 12),
-                              _AuthTextField(
-                                key: const ValueKey('auth-password-field'),
-                                controller: _passwordController,
-                                label: '비밀번호',
-                                icon: Icons.lock_rounded,
-                                obscureText: _obscurePassword,
-                                textInputAction: _isSignUp
-                                    ? TextInputAction.next
-                                    : TextInputAction.done,
-                                onSubmitted: (_) {
-                                  if (!_isSignUp) _submit();
-                                },
-                                suffixIcon: IconButton(
-                                  onPressed: () {
-                                    setState(() {
-                                      _obscurePassword = !_obscurePassword;
-                                    });
-                                  },
-                                  icon: Icon(
-                                    _obscurePassword
-                                        ? Icons.visibility_rounded
-                                        : Icons.visibility_off_rounded,
-                                  ),
-                                ),
-                              ),
-                              if (_isSignUp) ...[
-                                const SizedBox(height: 12),
-                                _AuthTextField(
-                                  key: const ValueKey(
-                                    'auth-confirm-password-field',
-                                  ),
-                                  controller: _confirmPasswordController,
-                                  label: '비밀번호 확인',
-                                  icon: Icons.verified_user_rounded,
-                                  obscureText: _obscurePassword,
-                                  textInputAction: TextInputAction.done,
-                                  onSubmitted: (_) => _submit(),
-                                ),
-                              ],
-                              const SizedBox(height: 18),
-                              FilledButton.icon(
-                                key: const ValueKey('auth-submit-button'),
-                                onPressed: _submit,
-                                icon: Icon(
-                                  _isSignUp
-                                      ? Icons.person_add_alt_rounded
-                                      : Icons.login_rounded,
-                                  size: 18,
-                                ),
-                                label: Text(_isSignUp ? '회원가입' : '로그인'),
-                              ),
-                              const SizedBox(height: 10),
-                              TextButton(
-                                onPressed: _continueWithoutSignIn,
-                                child: const Text('로그인 없이 둘러보기'),
-                              ),
-                            ],
+                          child: const Text(
+                            '로그인 없이 둘러보기',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          '로그인하면 여행 일정이 계정에 안전하게 보관돼요',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: ChiwawaColors.textSecondary,
+                            fontSize: 12,
                           ),
                         ),
                       ],
@@ -267,46 +241,69 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
   }
 }
 
-class _AuthTextField extends StatelessWidget {
-  const _AuthTextField({
-    super.key,
-    required this.controller,
-    required this.label,
-    required this.icon,
-    this.keyboardType,
-    this.textInputAction,
-    this.obscureText = false,
-    this.suffixIcon,
-    this.onSubmitted,
+class _GoogleSignInButton extends StatelessWidget {
+  const _GoogleSignInButton({
+    required this.launching,
+    required this.onPressed,
   });
 
-  final TextEditingController controller;
-  final String label;
-  final IconData icon;
-  final TextInputType? keyboardType;
-  final TextInputAction? textInputAction;
-  final bool obscureText;
-  final Widget? suffixIcon;
-  final ValueChanged<String>? onSubmitted;
+  final bool launching;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
-      controller: controller,
-      keyboardType: keyboardType,
-      textInputAction: textInputAction,
-      obscureText: obscureText,
-      onSubmitted: onSubmitted,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon),
-        suffixIcon: suffixIcon,
-        filled: true,
-        fillColor: ChiwawaColors.background,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
+    return SizedBox(
+      height: 54,
+      child: OutlinedButton(
+        onPressed: launching ? null : onPressed,
+        style: OutlinedButton.styleFrom(
+          backgroundColor: Colors.white,
+          side: const BorderSide(color: ChiwawaColors.border),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
         ),
+        child: launching
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: ChiwawaColors.primary,
+                ),
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 26,
+                    height: 26,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: ChiwawaColors.border),
+                    ),
+                    child: const Text(
+                      'G',
+                      style: TextStyle(
+                        color: Color(0xFF4285F4),
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Google로 시작하기',
+                    style: TextStyle(
+                      color: ChiwawaColors.textPrimary,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
       ),
     );
   }

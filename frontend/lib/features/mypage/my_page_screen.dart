@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
-import '../../core/mock_auth.dart';
+import '../../core/auth/auth_controller.dart';
 import '../../core/providers/data_providers.dart';
 import '../../shared/widgets/mascot_avatar.dart';
 
@@ -57,15 +57,27 @@ class MyPageScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(mockAuthProvider);
+    final auth = ref.watch(authControllerProvider);
     final tripInfo = ref.watch(tripInfoProvider).valueOrNull;
     final settingItems = [
       _MyPageItem(
         title: '계정 연결',
-        description: auth.isSignedIn ? '${auth.email} 연결됨' : '로그인 없이 둘러보는 중',
+        description: auth.isSignedIn
+            ? '${auth.user?.email ?? '구글 계정'} 연결됨'
+            : '로그인 없이 둘러보는 중 · 구글 계정을 연결해 보세요',
         icon: Icons.account_circle_rounded,
-        route: '/auth',
+        route: auth.isSignedIn ? null : '/auth',
+        onTap: auth.isSignedIn
+            ? () => _showComingSoonSnackBar(context, '계정 관리')
+            : null,
       ),
+      if (auth.isSignedIn)
+        _MyPageItem(
+          title: '로그아웃',
+          description: '이 기기에서 구글 계정 연결을 해제해요.',
+          icon: Icons.logout_rounded,
+          onTap: () => ref.read(authControllerProvider.notifier).signOut(),
+        ),
       const _MyPageItem(
         title: '알림 설정',
         description: '일정 변경과 추천 알림',
@@ -148,7 +160,7 @@ class _ProfileCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final auth = ref.watch(mockAuthProvider);
+    final auth = ref.watch(authControllerProvider);
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -176,7 +188,7 @@ class _ProfileCard extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      auth.displayName,
+                      auth.user?.displayName ?? '치와와 여행자',
                       style: const TextStyle(
                         color: ChiwawaColors.textPrimary,
                         fontSize: 21,
@@ -296,6 +308,11 @@ class _SettingsRow extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(22),
       onTap: () {
+        final customTap = item.onTap;
+        if (customTap != null) {
+          customTap();
+          return;
+        }
         final route = item.route;
         if (route == null) {
           _showComingSoonSnackBar(context, item.title);
@@ -361,12 +378,14 @@ class _MyPageItem {
     required this.description,
     required this.icon,
     this.route,
+    this.onTap,
   });
 
   final String title;
   final String description;
   final IconData icon;
   final String? route;
+  final VoidCallback? onTap;
 }
 
 void _showComingSoonSnackBar(BuildContext context, String label) {
