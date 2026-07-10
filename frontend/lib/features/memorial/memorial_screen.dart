@@ -3,10 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/theme.dart';
 import '../../core/confirmed_route.dart';
+import '../../core/models/memorial_map_models.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/providers/data_providers.dart';
 import '../../shared/widgets/async_value_view.dart';
 import 'widgets/daily_section.dart';
+import 'widgets/memorial_date_strip.dart';
+import 'widgets/paw_map_view.dart';
 import 'widgets/trip_summary_card.dart';
 
 class MemorialScreen extends ConsumerWidget {
@@ -15,26 +18,37 @@ class MemorialScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final confirmedRoute = ref.watch(confirmedRouteProvider);
+    final selectedDate = ref.watch(selectedMemorialDateProvider);
+    final dateOptions = ref.watch(memorialDateOptionsProvider);
+    final pawClusters = ref.watch(pawMapProvider(selectedDate));
 
     return AsyncValueView<MemorialData>(
       value: ref.watch(memorialDataProvider),
       onRetry: () => ref.invalidate(memorialDataProvider),
       builder: (data) => _body(
         context,
+        ref,
         data.tripInfo,
         data.summary,
         data.days,
         confirmedRoute,
+        dateOptions,
+        selectedDate,
+        pawClusters,
       ),
     );
   }
 
   Widget _body(
     BuildContext context,
+    WidgetRef ref,
     TripInfo tripInfo,
     MemorialSummary memorialSummary,
     List<MemorialDay> memorialDays,
     List<RoutePlace> confirmedRoute,
+    AsyncValue<List<DateTime>> dateOptions,
+    DateTime selectedDate,
+    AsyncValue<List<PawCluster>> pawClusters,
   ) {
     return SafeArea(
       child: ListView(
@@ -56,6 +70,26 @@ class MemorialScreen extends ConsumerWidget {
           TripSummaryCard(
             tripInfo: tripInfo,
             summary: memorialSummary,
+          ),
+          const SizedBox(height: 20),
+          AsyncValueView<List<DateTime>>(
+            value: dateOptions,
+            loadingHeight: 44,
+            onRetry: () => ref.invalidate(memorialDateOptionsProvider),
+            builder: (dates) => MemorialDateStrip(
+              dates: dates,
+              selectedDate: selectedDate,
+              onSelected: (date) {
+                ref.read(selectedMemorialDateProvider.notifier).state = date;
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          AsyncValueView<List<PawCluster>>(
+            value: pawClusters,
+            loadingHeight: 260,
+            onRetry: () => ref.invalidate(pawMapProvider(selectedDate)),
+            builder: (clusters) => PawMapView(clusters: clusters),
           ),
           if (confirmedRoute.isNotEmpty) ...[
             const SizedBox(height: 20),
