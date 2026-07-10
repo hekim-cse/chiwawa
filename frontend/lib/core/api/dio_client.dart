@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../auth/auth_controller.dart';
 import 'api_exception.dart';
 
 final apiBaseUrlProvider = Provider<String>(
@@ -32,6 +33,13 @@ final dioClientProvider = Provider<Dio>((ref) {
 
   dio.interceptors.add(
     InterceptorsWrapper(
+      onRequest: (options, handler) {
+        final token = ref.read(authTokenProvider);
+        if (token != null && token.isNotEmpty) {
+          options.headers['Authorization'] = 'Bearer $token';
+        }
+        handler.next(options);
+      },
       onError: (error, handler) {
         handler.reject(
           DioException(

@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:chiwawa/core/confirmed_route.dart';
+import 'package:chiwawa/core/auth/auth_controller.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
 import 'package:chiwawa/core/repositories/plan_repository.dart';
 import 'package:chiwawa/core/saved_photo_places.dart';
+import 'package:chiwawa/features/auth/auth_screen.dart';
 import 'package:chiwawa/features/explore/explore_screen.dart';
 import 'package:chiwawa/features/plan/plan_screen.dart';
 import 'package:chiwawa/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _FailingPlanRepository implements PlanRepository {
   @override
@@ -23,6 +27,11 @@ class _FailingPlanRepository implements PlanRepository {
 }
 
 void main() {
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+  });
+
   void useMobileTestSurface(WidgetTester tester) {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -30,9 +39,16 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
   }
 
-  testWidgets('chiwawa app opens the home screen', (tester) async {
+  // 앱은 로그인 화면으로 시작하므로, 홈 플로우 테스트는 게스트로 입장한다
+  Future<void> pumpAppAsGuest(WidgetTester tester) async {
     await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('로그인 없이 둘러보기'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('chiwawa app opens the home screen', (tester) async {
+    await pumpAppAsGuest(tester);
 
     expect(find.text('치와와'), findsOneWidget);
     expect(find.textContaining('도쿄 봄 여행'), findsOneWidget);
@@ -44,8 +60,7 @@ void main() {
   });
 
   testWidgets('chiwawa app opens the account settings my page', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
-    await tester.pumpAndSettle();
+    await pumpAppAsGuest(tester);
 
     await tester.tap(find.text('마이'));
     await tester.pumpAndSettle();
@@ -68,8 +83,7 @@ void main() {
   });
 
   testWidgets('chiwawa my page route row opens plan screen', (tester) async {
-    await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
-    await tester.pumpAndSettle();
+    await pumpAppAsGuest(tester);
 
     await tester.tap(find.text('마이'));
     await tester.pumpAndSettle();
@@ -83,8 +97,7 @@ void main() {
 
   testWidgets('chiwawa my page account row opens auth screen', (tester) async {
     useMobileTestSurface(tester);
-    await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
-    await tester.pumpAndSettle();
+    await pumpAppAsGuest(tester);
 
     await tester.tap(find.text('마이'));
     await tester.pumpAndSettle();
@@ -94,112 +107,103 @@ void main() {
     await tester.tap(find.text('계정 연결'));
     await tester.pumpAndSettle();
 
-    expect(find.text('chiwawa'), findsOneWidget);
-    expect(find.text('여행 준비를 이어서 관리해요.'), findsOneWidget);
-    expect(find.text('이메일'), findsOneWidget);
-    expect(find.text('비밀번호'), findsOneWidget);
+    expect(find.text('Google로 시작하기'), findsOneWidget);
     expect(find.text('로그인 없이 둘러보기'), findsOneWidget);
-    expect(find.text('홈'), findsNothing);
+    expect(find.text('AI와 함께하는 일본 여행 플래너'), findsOneWidget);
+    expect(find.text('오늘의 일정'), findsNothing);
   });
 
-  testWidgets('chiwawa auth validates empty sign in inputs', (tester) async {
+  testWidgets('auth gate blocks app until choice is made', (tester) async {
     useMobileTestSurface(tester);
     await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('마이'));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('계정 연결'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('계정 연결'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.widgetWithText(FilledButton, '로그인'));
-    await tester.pump(const Duration(milliseconds: 250));
-
-    expect(find.text('필수 정보를 입력해 주세요.'), findsOneWidget);
+    expect(find.text('Google로 시작하기'), findsOneWidget);
+    expect(find.text('로그인 없이 둘러보기'), findsOneWidget);
+    expect(find.text('오늘의 일정'), findsNothing);
   });
 
-  testWidgets('chiwawa auth validates mismatched sign up passwords',
+  testWidgets('mock google sign in enters home with account connected',
       (tester) async {
     useMobileTestSurface(tester);
     await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('Google로 시작하기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('오늘의 일정'), findsOneWidget);
+
     await tester.tap(find.text('마이'));
     await tester.pumpAndSettle();
+
+    expect(find.text('치와와 여행자'), findsOneWidget);
+
     await tester.ensureVisible(find.text('계정 연결'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('계정 연결'));
-    await tester.pumpAndSettle();
 
-    await tester.tap(find.text('회원가입'));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(
-        find.byKey(const ValueKey('auth-name-field')), '왘왘 여행자');
-    await tester.enterText(
-      find.byKey(const ValueKey('auth-email-field')),
-      'user@example.com',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('auth-password-field')),
-      'password123',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('auth-confirm-password-field')),
-      'different123',
-    );
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('auth-submit-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('auth-submit-button')));
-    await tester.pump(const Duration(milliseconds: 600));
-
-    expect(find.text('비밀번호가 서로 달라요.'), findsOneWidget);
+    expect(find.text('traveler@chiwawa.app 연결됨'), findsOneWidget);
+    expect(find.text('로그아웃'), findsOneWidget);
   });
 
-  testWidgets('chiwawa auth signs up with mock state', (tester) async {
+  testWidgets('auth route exchanges OAuth code and enters home',
+      (tester) async {
+    useMobileTestSurface(tester);
+    SharedPreferences.setMockInitialValues({});
+
+    final router = GoRouter(
+      initialLocation: '/auth?code=web-code&state=csrf-state',
+      routes: [
+        GoRoute(
+          path: '/auth',
+          builder: (context, state) => AuthScreen(
+            oauthCode: state.uri.queryParameters['code'],
+            oauthState: state.uri.queryParameters['state'],
+          ),
+        ),
+        GoRoute(
+          path: '/home',
+          builder: (context, state) => const Scaffold(
+            body: Text('홈 도착'),
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(child: MaterialApp.router(routerConfig: router)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('홈 도착'), findsOneWidget);
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.text('홈 도착')),
+    );
+    final auth = container.read(authControllerProvider);
+    expect(auth.isSignedIn, isTrue);
+    expect(auth.token, 'mock-jwt-token');
+    expect(container.read(authTokenProvider), 'mock-jwt-token');
+  });
+
+  testWidgets('logout returns to auth screen', (tester) async {
     useMobileTestSurface(tester);
     await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
     await tester.pumpAndSettle();
 
+    await tester.tap(find.text('Google로 시작하기'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('마이'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('계정 연결'));
+
+    await tester.ensureVisible(find.text('로그아웃'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('계정 연결'));
+    await tester.tap(find.text('로그아웃'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('회원가입'));
-    await tester.pumpAndSettle();
-
-    await tester.enterText(
-        find.byKey(const ValueKey('auth-name-field')), '왘왘 여행자');
-    await tester.enterText(
-      find.byKey(const ValueKey('auth-email-field')),
-      'user@example.com',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('auth-password-field')),
-      'password123',
-    );
-    await tester.enterText(
-      find.byKey(const ValueKey('auth-confirm-password-field')),
-      'password123',
-    );
-    await tester
-        .ensureVisible(find.byKey(const ValueKey('auth-submit-button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('auth-submit-button')));
-    await tester.pumpAndSettle();
-
-    expect(find.text('왘왘 여행자'), findsOneWidget);
-
-    await tester.ensureVisible(find.text('계정 연결'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('user@example.com 연결됨'), findsOneWidget);
+    expect(find.text('Google로 시작하기'), findsOneWidget);
+    expect(find.text('오늘의 일정'), findsNothing);
   });
 
   testWidgets('Photo search result can be saved for plan building',
@@ -213,6 +217,8 @@ void main() {
         child: const ChiwawaApp(),
       ),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('로그인 없이 둘러보기'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('탐색'));
@@ -248,6 +254,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('로그인 없이 둘러보기'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('탐색'));
     await tester.pumpAndSettle();
@@ -281,6 +289,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('로그인 없이 둘러보기'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('탐색'));
     await tester.pumpAndSettle();
@@ -307,8 +317,7 @@ void main() {
 
   testWidgets('AI route optimization shows done state results', (tester) async {
     useMobileTestSurface(tester);
-    await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
-    await tester.pumpAndSettle();
+    await pumpAppAsGuest(tester);
 
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
@@ -332,8 +341,7 @@ void main() {
   testWidgets('Confirmed optimized route appears on memorial preview',
       (tester) async {
     useMobileTestSurface(tester);
-    await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
-    await tester.pumpAndSettle();
+    await pumpAppAsGuest(tester);
 
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
@@ -372,6 +380,8 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('로그인 없이 둘러보기'));
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
@@ -388,8 +398,7 @@ void main() {
 
   testWidgets('Travel preference chips store enum state', (tester) async {
     useMobileTestSurface(tester);
-    await tester.pumpWidget(const ProviderScope(child: ChiwawaApp()));
-    await tester.pumpAndSettle();
+    await pumpAppAsGuest(tester);
 
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
