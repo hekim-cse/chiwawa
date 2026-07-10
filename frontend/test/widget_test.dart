@@ -91,8 +91,8 @@ void main() {
     await tester.tap(find.text('AI 일정 설계'));
     await tester.pumpAndSettle();
 
+    expect(find.byType(PlanScreen), findsOneWidget);
     expect(find.text('AI 일정 설계'), findsOneWidget);
-    expect(find.text('AI 경로 최적화'), findsOneWidget);
   });
 
   testWidgets('chiwawa my page account row opens auth screen', (tester) async {
