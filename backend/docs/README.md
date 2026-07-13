@@ -6,8 +6,10 @@
 
 - 개발·프론트엔드 연동용 프로토타입이다.
 - 여행 도메인 상태는 메모리에만 저장되며 재시작 시 초기화된다.
-- Google 사용자만 Git에서 제외된 로컬 SQLite 파일에 저장된다.
-- `/api/v1/auth/me`만 JWT 보호 대상이며 여행 API는 현재 공개다.
+- Google 사용자와 회원 단위 Memorial 사진 메타데이터는 Git에서 제외된 로컬
+  SQLite 파일에 저장된다.
+- `/api/v1/auth/me`와 회원 단위 Memorial API(`/api/v1/memorial/*`)가 JWT 보호
+  대상이며 여행 API는 현재 공개다.
 - 사진 검색, AI 일정, 동선 최적화, 주변 추천, 빈 시간 추천은 생성 ID와 시각을
   제외하고 같은 규칙을 적용하는 모의 휴리스틱이다.
 
@@ -17,6 +19,7 @@
 | --- | --- |
 | [api/reference.md](./api/reference.md) | 전체 HTTP API 목록과 Swagger/OpenAPI 접근 경로 |
 | [api/auth.md](./api/auth.md) | Google OAuth와 JWT 인증 흐름 |
+| [api/memorial.md](./api/memorial.md) | 회원 단위 추억 사진 업로드와 캘린더·타임라인 조회 |
 | [architecture/backend.md](./architecture/backend.md) | FastAPI 백엔드 모듈 구조와 요청 처리 흐름 |
 | [contracts/ai-planning-dto.md](./contracts/ai-planning-dto.md) | 백엔드와 AI 플래너 사이의 내부 DTO 계약 |
 
