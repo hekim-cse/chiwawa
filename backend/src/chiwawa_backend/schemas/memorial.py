@@ -44,3 +44,48 @@ class MemorialRecordRead(ApiModel):
 class MemorialUpdateRequest(ApiModel):
     title: str | None = Field(default=None, min_length=1)
     summary: str | None = Field(default=None, min_length=1)
+
+
+class MemorialPhotoItem(ApiModel):
+    """회원 단위 memorial에 저장된 사진 한 장의 메타데이터."""
+
+    id: int
+    file_name: str
+    content_type: str
+    taken_at: dt.datetime
+    latitude: float | None
+    longitude: float | None
+    address: str | None
+    memo: str | None
+    file_url: str
+    created_at: dt.datetime
+
+
+class MemorialCalendarDay(ApiModel):
+    day: dt.date
+    photo_count: int = Field(ge=1)
+
+
+class MemorialCalendarResponse(ApiModel):
+    year: int
+    month: int
+    days: list[MemorialCalendarDay]
+
+
+class MemorialTimelineEntry(ApiModel):
+    """seq 순서대로 지도 위 발자국을 찍는다 (0부터 시작)."""
+
+    seq: int = Field(ge=0)
+    photo: MemorialPhotoItem
+
+
+class MemorialDayResponse(ApiModel):
+    day: dt.date
+    items: list[MemorialTimelineEntry]
+
+
+class MemorialPhotoPatchRequest(ApiModel):
+    taken_at: dt.datetime | None = None
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    memo: str | None = Field(default=None, min_length=1)
