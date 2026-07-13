@@ -28,6 +28,23 @@ EMPTY_EXIF = PhotoExif(taken_at=None, latitude=None, longitude=None)
 _DMS_PART_COUNT = 3
 
 
+class InvalidImageError(ValueError):
+    pass
+
+
+def validate_image(data: bytes) -> None:
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            image.verify()
+    except (
+        Image.DecompressionBombError,
+        UnidentifiedImageError,
+        OSError,
+        ValueError,
+    ) as error:
+        raise InvalidImageError from error
+
+
 def read_exif(data: bytes) -> PhotoExif:
     try:
         with Image.open(io.BytesIO(data)) as image:
