@@ -10,9 +10,10 @@ from chiwawa_backend.schemas.memorial import (
 )
 from chiwawa_backend.services.common import require_memorial, require_trip
 from chiwawa_backend.services.schedule import list_schedule
-from chiwawa_backend.state import AppState
+from chiwawa_backend.state import AppState, synchronized
 
 
+@synchronized
 def upload_photo(
     state: AppState,
     trip_id: str,
@@ -32,12 +33,14 @@ def upload_photo(
     return photo
 
 
+@synchronized
 def list_photos(state: AppState, trip_id: str) -> MemorialPhotoListResponse:
     _ = require_trip(state, trip_id)
     items = [photo for photo in state.photos.values() if photo.trip_id == trip_id]
     return MemorialPhotoListResponse(trip_id=trip_id, items=items)
 
 
+@synchronized
 def generate_memorial(
     state: AppState,
     trip_id: str,
@@ -66,10 +69,12 @@ def generate_memorial(
     return memorial
 
 
+@synchronized
 def get_memorial(state: AppState, trip_id: str) -> MemorialRecordRead:
     return require_memorial(state, trip_id)
 
 
+@synchronized
 def update_memorial(
     state: AppState,
     trip_id: str,

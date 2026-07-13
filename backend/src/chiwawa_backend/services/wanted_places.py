@@ -6,9 +6,10 @@ from chiwawa_backend.schemas.places import (
     WantedPlaceUpdateRequest,
 )
 from chiwawa_backend.services.common import require_trip, require_wanted_place
-from chiwawa_backend.state import AppState
+from chiwawa_backend.state import AppState, synchronized
 
 
+@synchronized
 def create_wanted_place(
     state: AppState,
     trip_id: str,
@@ -32,6 +33,7 @@ def create_wanted_place(
     return place
 
 
+@synchronized
 def list_wanted_places(state: AppState, trip_id: str) -> WantedPlaceListResponse:
     _ = require_trip(state, trip_id)
     items = [
@@ -40,6 +42,7 @@ def list_wanted_places(state: AppState, trip_id: str) -> WantedPlaceListResponse
     return WantedPlaceListResponse(items=items)
 
 
+@synchronized
 def update_wanted_place(
     state: AppState,
     trip_id: str,
@@ -65,6 +68,7 @@ def update_wanted_place(
     return updated
 
 
+@synchronized
 def delete_wanted_place(state: AppState, trip_id: str, place_id: str) -> None:
     _ = require_wanted_place(state, trip_id, place_id)
     del state.wanted_places[place_id]

@@ -1,6 +1,7 @@
 import datetime as dt
+from typing import Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from chiwawa_backend.schemas.base import ApiModel, PlaceSource
 
@@ -13,6 +14,16 @@ class ScheduleItemCreateRequest(ApiModel):
     place_id: str | None = Field(default=None, min_length=1)
     notes: str | None = Field(default=None, min_length=1)
     source: PlaceSource = PlaceSource.MANUAL
+
+    @model_validator(mode="after")
+    def require_ordered_times(self) -> Self:
+        if self.start_time.tzinfo is not None or self.end_time.tzinfo is not None:
+            msg = "timezone offsets are not allowed"
+            raise ValueError(msg)
+        if self.end_time <= self.start_time:
+            msg = "end_time must be after start_time"
+            raise ValueError(msg)
+        return self
 
 
 class ScheduleItemUpdateRequest(ApiModel):

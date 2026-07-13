@@ -1,89 +1,96 @@
 # Chiwawa Backend
 
-AI 기반 일본 자유여행 일정 추천 및 관리 서비스를 위한 FastAPI 백엔드입니다.
-프로젝트 계획서와 `docs/api/reference.md`를 기준으로 여행 생성, 사진 기반
-장소 탐색, AI 일정 초안, 일정 확정, 여행 중 추천, 여행 기록 생성 흐름을
-하나의 API 파이프라인으로 연결합니다.
+일본 자유여행 일정 추천·관리 흐름을 검증하기 위한 FastAPI 개발
+프로토타입입니다. 이 디렉터리만으로 실행, 테스트, wheel 빌드가 가능합니다.
 
-## 구현 범위
+## 현재 구현 범위
 
-- 서버 상태 확인: `GET /health`
-- 여행 프로젝트 CRUD: `/api/v1/trips`
-- 사진 기반 장소 후보 검색 및 확정
-- 방문 희망 장소 CRUD
-- AI 일정 생성 요청, 상태 조회, 초안 조회, 확정
-- 방문 장소 기반 동선 최적화
-- 사용자 일정 CRUD 및 전체 일정 조회
-- 오늘 일정, 빈 시간 추천, 추천 일정 추가
-- 현재 위치 기반 주변 추천 및 지연/변경 재추천
-- 여행 사진 메타데이터 업로드, 여행 기록 생성/조회/수정
+- 여행, 방문 희망 장소, 일정, 여행 기록 API
+- Google OAuth 로그인과 8시간 JWT 발급
+- 오늘 일정, 빈 시간 추천, 주변 추천, 지연 재계획
+- Swagger UI, ReDoc, OpenAPI JSON
+- Pydantic 요청 검증과 서비스 계층 도메인 검증
 
-현재 버전은 프론트엔드 연동과 시연을 위한 인메모리 저장소 기반 MVP입니다.
-외부 지도, 사진 인식, AI 모델 연동 지점은 서비스 계층에 모아 두어 교체할 수
-있습니다.
+현재 아래 기능은 외부 공급자와 연결되지 않은 모의 구현입니다.
+
+- 사진 기반 장소 후보 검색
+- AI 일정 초안 생성
+- 방문 동선 최적화
+- 현재 위치 기반 주변 추천
+- 빈 시간 활동 추천
+
+생성 ID와 시각을 제외한 핵심 후보·추천 내용은 같은 입력에 같은 규칙을 적용하는
+시연용 휴리스틱이며, 실제 사진 인식, 지도 경로 계산, 장소 검색, AI 모델 호출을
+의미하지 않습니다.
+
+## 개발 단계의 저장·인증 범위
+
+- 여행·장소·일정·추천·기록은 `AppState` 메모리에 저장되어 서버 재시작 시
+  초기화됩니다.
+- ID는 프로세스 내 숫자 카운터가 아닌 UUID를 사용합니다.
+- Google 사용자만 SQLite `data/google_auth.db`에 저장됩니다. 이 런타임 DB는
+  Git에 포함하지 않으며 패키지 내부 SQL 스키마로 자동 초기화됩니다.
+- OAuth `state`는 서버 메모리에서 1회 검증되고 같은 브라우저의 HttpOnly
+  쿠키와 함께 결합됩니다.
+- 현재 Bearer 인증이 필수인 경로는 `GET /api/v1/auth/me`뿐입니다.
+- 여행 관련 API는 프론트엔드 연동용 프로토타입 계약을 유지하기 위해 현재
+  공개 상태입니다. 공유 개발 서버나 외부 배포 전에는 사용자 소유권과
+  인증 의존성을 추가해야 합니다.
 
 ## 기술 스택
 
 - Python 3.13+
-- FastAPI
-- Pydantic v2
-- Uvicorn
-- uv
-- pytest, ruff, basedpyright
+- FastAPI, Pydantic v2, pydantic-settings
+- SQLite, PyJWT, HTTPX
+- uv, pytest, Ruff, basedpyright
 
 ## 실행
 
 ```bash
-uv sync
-uv run uvicorn chiwawa_backend.main:app --reload --host 0.0.0.0 --port 8000
+uv sync --frozen
+uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.1 --port 8000
 ```
 
-또는 다음 명령을 사용할 수 있습니다.
+또는 `make run`을 사용할 수 있습니다. 인증 API를 테스트하려면
+[`.env.example`](./.env.example)을 복사해 `.env`를 만들고 실제 개발용 값을
+설정합니다. 인증 설정이 없어도 상태 확인, 문서, 여행 프로토타입 API는
+실행됩니다. 기본 실행은 인증 없는 프로토타입 API가 외부에 노출되지 않도록
+로컬 호스트에만 바인딩합니다.
 
-```bash
-make run
-```
+| 문서/상태 | URL |
+| --- | --- |
+| Swagger UI 바로가기 | `http://localhost:8000/` |
+| Swagger UI | `http://localhost:8000/docs` |
+| ReDoc | `http://localhost:8000/redoc` |
+| OpenAPI JSON | `http://localhost:8000/openapi.json` |
+| Health check | `http://localhost:8000/health` |
 
-브라우저에서 다음 문서를 확인할 수 있습니다.
-
-- Swagger UI 바로가기: `http://localhost:8000/`
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
-- OpenAPI JSON: `http://localhost:8000/openapi.json`
-- Health check: `http://localhost:8000/health`
-
-## 품질 파이프라인
+## 품질 검사
 
 ```bash
 uv run ruff format --check .
 uv run ruff check .
 uv run basedpyright
 uv run pytest
+uv build --wheel
 ```
 
-동일한 검증은 다음 명령으로 한 번에 실행할 수 있습니다.
-
-```bash
-make check
-```
+앞의 네 검사는 `make check`로 한 번에 실행할 수 있습니다.
 
 ## 주요 흐름
 
-1. `POST /api/v1/trips`로 여행 프로젝트를 생성합니다.
-2. `POST /api/v1/trips/{trip_id}/wanted-places`로 방문 희망 장소를 등록합니다.
-3. `POST /api/v1/trips/{trip_id}/photo-places/search`로 사진 기반 장소 후보를 받습니다.
-4. `POST /api/v1/trips/{trip_id}/photo-places/{photo_search_id}/confirm`으로 후보를 확정합니다.
-5. `POST /api/v1/trips/{trip_id}/ai-plans`로 일정 초안을 생성합니다.
-6. `GET /api/v1/trips/{trip_id}/plans/{plan_id}`로 초안을 확인합니다.
-7. `POST /api/v1/trips/{trip_id}/plans/{plan_id}/confirm`으로 일정을 확정합니다.
-8. 여행 중에는 `/travel`과 `/assistant` API로 빈 시간 추천, 주변 추천, 재추천을 사용합니다.
-9. 여행 후에는 `/memorial/photos`와 `/memorial/generate`로 기록을 생성합니다.
+1. `POST /api/v1/trips`로 여행을 생성합니다.
+2. `POST /api/v1/trips/{trip_id}/wanted-places`로 장소를 등록합니다.
+3. `POST /api/v1/trips/{trip_id}/ai-plans`로 시간창 안의 모의 일정을 만듭니다.
+4. `GET /api/v1/trips/{trip_id}/plans/{plan_id}`로 초안을 확인합니다.
+5. `POST /api/v1/trips/{trip_id}/plans/{plan_id}/confirm`으로 일정을 확정합니다.
+   같은 계획을 다시 확정해도 일정 항목은 중복 생성되지 않습니다.
+6. 여행 중에는 `/travel`과 `/assistant` API로 추천과 재계획을 사용합니다.
+7. 여행 후에는 `/memorial/photos`와 `/memorial/generate`로 기록을 만듭니다.
 
-## 개발 메모
+현재 여행 기간은 최대 31일이며 일정 시각은 오프셋 없는 일본 현지 시각으로
+입력합니다. `/travel/today`의 기준 시간대는 `Asia/Tokyo`입니다.
 
-- 저장소는 `src/chiwawa_backend/state.py`의 `AppState` 인스턴스에 보관됩니다.
-- API 라우터는 `src/chiwawa_backend/routers/`에 기능별로 분리되어 있습니다.
-- 문서 인덱스는 `docs/README.md`에서 확인합니다.
-- 최신 API 명세는 `docs/api/reference.md`에서 관리합니다.
-- 추천과 일정 생성 로직은 `src/chiwawa_backend/services/`에 모여 있습니다.
-- 실제 DB 도입 시 `AppState`를 repository/ORM 계층으로 교체하면 라우터 계약은 유지됩니다.
+문서 인덱스는 [`docs/README.md`](./docs/README.md), 전체 경로 목록은
+[`docs/api/reference.md`](./docs/api/reference.md), 인증 상세는
+[`docs/api/auth.md`](./docs/api/auth.md)에서 확인합니다.
