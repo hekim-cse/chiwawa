@@ -58,11 +58,41 @@ void main() {
     final profile = AuthProfile.fromJson(const {
       'id': 'user-1',
       'email': 'user@example.com',
-      'nickname': '왘왘 여행자',
+      'name': '왘왘 여행자',
     });
 
     expect(profile.id, 'user-1');
     expect(profile.displayName, '왘왘 여행자');
     expect(profile.toJson()['email'], 'user@example.com');
+  });
+
+  test('AuthProfile parses auth me response fields', () {
+    final profile = AuthProfile.fromJson(const {
+      'sub': 'google-user-1',
+      'email': 'user@gmail.com',
+      'name': 'Google User',
+    });
+
+    expect(profile.id, 'google-user-1');
+    expect(profile.email, 'user@gmail.com');
+    expect(profile.displayName, 'Google User');
+  });
+
+  test('GoogleAuthResult parses callback contract', () {
+    final result = GoogleAuthResult.fromJson(const {
+      'access_token': 'jwt-token',
+      'user': {
+        'id': 'user-1',
+        'google_sub': 'google-sub',
+        'email': 'user@gmail.com',
+        'name': 'Google User',
+        'picture': 'https://lh3.googleusercontent.com/avatar.png',
+      },
+    });
+
+    expect(result.accessToken, 'jwt-token');
+    expect(result.profile.id, 'user-1');
+    expect(result.profile.displayName, 'Google User');
+    expect(result.pictureUrl, contains('googleusercontent.com'));
   });
 }

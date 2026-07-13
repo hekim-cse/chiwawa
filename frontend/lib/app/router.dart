@@ -9,6 +9,7 @@ import '../features/home/home_screen.dart';
 import '../features/memorial/memorial_screen.dart';
 import '../features/mypage/my_page_screen.dart';
 import '../features/plan/plan_screen.dart';
+import '../shared/widgets/app_viewport.dart';
 import '../shared/widgets/bottom_nav_bar.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -89,7 +90,7 @@ class AppShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: child,
+      body: AppViewport(child: child),
       bottomNavigationBar: const BottomNavBar(),
     );
   }

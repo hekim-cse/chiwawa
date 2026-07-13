@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
+import '../../shared/widgets/app_viewport.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/providers/data_providers.dart';
 import '../../shared/widgets/mascot_avatar.dart';
@@ -112,7 +113,9 @@ class MyPageScreen extends ConsumerWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final contentWidth =
-                  constraints.maxWidth > 430 ? 430.0 : constraints.maxWidth;
+                  constraints.maxWidth > AppLayout.maxContentWidth
+                      ? AppLayout.maxContentWidth
+                      : constraints.maxWidth;
 
               return Align(
                 alignment: Alignment.topCenter,
