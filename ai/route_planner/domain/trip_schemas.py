@@ -116,6 +116,30 @@ class RouteLegDTO(BaseModel):
     travel_minutes: int
 
 
+# 시간표 내 개별 정류장 DTO
+class TimelineStopDTO(BaseModel):
+    stop_type: RouteStopType
+    place_id: str
+    name: str
+    arrival_at: str
+    departure_at: str
+    stay_minutes: int = Field(ge=0)
+
+
+# 하나의 경로 옵션에 대한 시간표 DTO
+class TimelineDTO(BaseModel):
+    day_index: int = Field(ge=1)
+    travel_mode: TravelMode
+    planned_start_at: str
+    planned_end_at: str
+    actual_end_at: str
+    total_travel_minutes: int = Field(ge=0)
+    total_stay_minutes: int = Field(ge=0)   # 실제 체류 시간 합계 (POI 체류 시간 합계)
+    timeline_stops: List[TimelineStopDTO]   # 경로 내 정류장별 시간표
+    exceeds_planned_end: bool = False   # 예상 종료 시간보다 실제 종료 시간이 늦은지 여부
+    warnings: List[str] = Field(default_factory=list)
+
+
 # day별 이동 방식 경로 옵션 DTO
 class RouteOptionDTO(BaseModel):
     day_index: int = Field(ge=1)    # 몇 번째 day의 경로 옵션인지
@@ -125,6 +149,7 @@ class RouteOptionDTO(BaseModel):
     route_legs: List[RouteLegDTO]   # 각 이동 구간 정보
     missing_segments: List[str] = Field(default_factory=list)   # 이동 시간 정보가 부족한 구간(place_id) 리스트
     warnings: List[str] = Field(default_factory=list)   # 경로 옵션 생성 시 발생한 경고 메시지 리스트
+    timeline: Optional[TimelineDTO] = None   # 이동 시간과 POI 체류 시간을 반영한 시간표
 
 
 # day별 장소 배정 결과 DTO
