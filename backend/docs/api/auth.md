@@ -1,205 +1,127 @@
 # 인증 API
 
-## 범위
+## 현재 범위
 
-이 문서는 Chiwawa 앱의 Google OAuth 로그인과 JWT 토큰 기반 인증 흐름을
-정의한다.
-프론트엔드는 Google OAuth 인증을 통해 사용자를 인증하고, 백엔드에서 발급한
-JWT 토큰으로 이후의 모든 API 요청을 인증한다.
+Google OAuth callback으로 로컬 사용자 레코드를 만들고 8시간 유효한 HS256
+JWT를 발급합니다. 현재 JWT가 필수인 API는 `GET /api/v1/auth/me`뿐입니다.
+여행 관련 API는 프론트엔드 연동을 위한 개발 프로토타입 계약 때문에 아직
+공개되어 있습니다.
 
----
+공유 개발 서버나 외부 배포 전에는 여행 리소스에 사용자 소유권을 연결하고
+라우터 인증 의존성을 추가해야 합니다.
 
-## 아키텍처
+## 흐름
 
-```
-┌──────────────────────┐
-│   Flutter App        │
-└──────────┬───────────┘
-           │
-    (1) 로그인 요청
-           │
-           ├──→ GET /api/v1/auth/google/login
-           │
-           ├──→ 구글 OAuth 리다이렉트
-           │    (사용자가 구글로 인증)
-           │
-           ├──→ Callback 수신 (code 파라미터)
-           │
-    (2) 토큰 교환
-           │
-           └──→ GET /api/v1/auth/google/callback?code=...
-                └──→ 응답: {user, access_token}
-                    └──→ JWT 토큰 로컬 저장
-           
-    (3) 인증된 요청
-           │
-           ├──→ 모든 API 요청에 토큰 첨부
-           │    Authorization: Bearer <access_token>
-           │
-           └──→ GET /api/v1/auth/me
-                └──→ 토큰 검증 및 사용자 정보 반환
+```text
+클라이언트
+  -> GET /api/v1/auth/google/login
+  <- 302 Google authorize URL + 서버 등록 state + HttpOnly state cookie
+  -> Google 사용자 인증
+  -> GET /api/v1/auth/google/callback?code=...&state=...
+  -> backend가 query state와 브라우저 cookie를 비교하고 state를 1회 소비
+  -> Google token/profile API 호출
+  -> SQLite 사용자 upsert
+  <- GoogleAuthResponse(user, access_token, token_type)
+  -> GET /api/v1/auth/me (Authorization: Bearer <access_token>)
 ```
 
----
+## Google 로그인 시작
 
-## API 명세
+`GET /api/v1/auth/google/login`
 
-### 1. Google 로그인 시작
+- 응답: `302 Found`
+- Google authorize URL에 예측 불가능한 `state`를 포함합니다.
+- 같은 값을 600초 동안 서버 메모리에 등록하고
+  `chiwawa_oauth_state` 쿠키에도 저장합니다.
+- 쿠키 기본값은 `HttpOnly`, `SameSite=Lax`, 600초, 경로
+  `/api/v1/auth/google`입니다.
+- 로컬 HTTP 개발 기본값은 `Secure=false`이며 HTTPS 환경에서는
+  `GOOGLE_OAUTH_COOKIE_SECURE=true`로 설정해야 합니다.
+- 로그인 시작 URL의 호스트와 `GOOGLE_REDIRECT_URI`의 호스트가 같아야 host-only
+  state 쿠키가 callback에도 전달됩니다. 기본 예시는 둘 다 `localhost`입니다.
 
-**엔드포인트**: `GET /api/v1/auth/google/login`
+## Google callback
 
-**설명**: 사용자를 Google OAuth 인증 페이지로 리다이렉트한다.
+`GET /api/v1/auth/google/callback?code=...&state=...`
 
-**응답**:
-- HTTP 302 Redirect
-- Location: Google OAuth 인증 URL
-
----
-
-### 2. Google 로그인 콜백
-
-**엔드포인트**: `GET /api/v1/auth/google/callback`
-
-**쿼리 파라미터**:
-
-| 파라미터 | 타입 | 필수 | 설명 |
-| --- | --- | --- | --- |
-| `code` | string | ✓ | Google OAuth 인증 코드 |
-| `state` | string | | CSRF 보호용 상태값 |
-
-**응답 (200 OK)**:
-
-| 필드 | 타입 | 설명 |
+| 입력 | 필수 | 설명 |
 | --- | --- | --- |
-| `user` | object | 사용자 정보 객체 |
-| `user.id` | string | 서비스 내부 사용자 ID |
-| `user.google_sub` | string | Google의 고유 ID |
-| `user.email` | string | 이메일 주소 |
-| `user.name` | string | 사용자 이름 |
-| `user.picture` | string | 프로필 사진 URL |
-| `user.created_at` | string | 계정 생성 시간 (ISO 8601) |
-| `user.last_login_at` | string | 마지막 로그인 시간 (ISO 8601) |
-| `access_token` | string | JWT 토큰 |
+| query `code` | 예 | Google authorization code |
+| query `state` | 예 | 로그인 시작 응답의 state |
+| cookie `chiwawa_oauth_state` | 예 | 로그인 시작 브라우저를 결합하는 state cookie |
 
-**응답 예**:
+state는 서버에서 발급·등록한 값이어야 하며 callback에서 한 번 소비됩니다.
+query state와 로그인 시작 브라우저의 HttpOnly 쿠키도 일치해야 합니다. 알 수
+없거나 재사용되거나 쿠키와 불일치한 state는 Google API를 호출하기 전에
+거부합니다.
+
+현재 backend callback은 같은 브라우저가 Google redirect를 받는 웹 흐름입니다.
+외부 브라우저가 `chiwawa://auth` 딥링크로 앱에 code를 넘기고 별도 Dio 클라이언트가
+교환하는 기존 모바일 초안은 이 HttpOnly 쿠키를 전달할 수 없습니다. 모바일
+연동 전에는 앱이 시작 state/PKCE verifier를 보관·검증하거나, 백엔드가 일회성
+앱 교환 코드를 발급하는 방식으로 프론트와 계약을 함께 확정해야 합니다.
+
 ```json
 {
+  "message": "login successful",
+  "provider": "google",
+  "token_type": "bearer",
+  "access_token": "<jwt>",
   "user": {
-    "id": "123",
-    "google_sub": "1234567890",
-    "email": "user@gmail.com",
-    "name": "John Doe",
-    "picture": "https://lh3.googleusercontent.com/...",
-    "created_at": "2026-07-09T12:34:56+00:00",
-    "last_login_at": "2026-07-09T13:45:00+00:00"
-  },
-  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjMiLCJpYXQiOjE2ODkwMDAwMDAsImV4cCI6MTY4OTAyODgwMCwiZW1haWwiOiJ1c2VyQGdtYWlsLmNvbSIsIm5hbWUiOiJKb2huIERvZSJ9..."
+    "id": "1",
+    "google_sub": "google-user-id",
+    "email": "traveler@example.com",
+    "name": "Prototype Traveler",
+    "picture": null,
+    "created_at": "2026-07-10T06:00:00Z",
+    "last_login_at": "2026-07-10T06:00:00Z"
+  }
 }
 ```
 
-**에러 응답**:
-
-| 상태 | 메시지 | 원인 |
-| --- | --- | --- |
-| 400 | authorization code is required | code 파라미터 누락 |
-| 500 | Google OAuth is not configured | 서버 환경 변수 미설정 |
-
----
-
-### 3. 현재 사용자 정보 조회
-
-**엔드포인트**: `GET /api/v1/auth/me`
-
-**인증**: 필수 (Bearer Token)
-
-**헤더**:
-
-| 헤더 | 값 |
+| 상태 | 원인 |
 | --- | --- |
-| Authorization | Bearer &lt;access_token&gt; |
+| 400 | 알 수 없는·재사용된 state 또는 쿠키 불일치 |
+| 422 | code/state/cookie 누락 또는 잘못된 query 형식 |
+| 500 | Google 또는 JWT 필수 환경 설정 누락 |
+| 502 | Google token 교환 또는 profile 응답 실패 |
 
-**응답 (200 OK)**:
+## 현재 사용자
 
-| 필드 | 타입 | 설명 |
-| --- | --- | --- |
-| `sub` | string | 사용자 ID |
-| `email` | string | 이메일 주소 |
-| `name` | string | 사용자 이름 |
+`GET /api/v1/auth/me`
 
-**응답 예**:
-```json
-{
-  "sub": "123",
-  "email": "user@gmail.com",
-  "name": "John Doe"
-}
-```
+`Authorization: Bearer <access_token>` 헤더가 필요합니다. 성공 응답은 `sub`,
+`email`, `name`을 반환합니다. 토큰 누락, 만료, 서명 오류는 각각 401입니다.
 
-**에러 응답**:
-
-| 상태 | 메시지 | 원인 |
-| --- | --- | --- |
-| 401 | missing token | Authorization 헤더 누락 |
-| 401 | token expired | 토큰 만료 (유효기간 8시간) |
-| 401 | invalid token | 토큰 서명 검증 실패 |
-
----
-
-## JWT 토큰
-
-### 토큰 구조
-
-JWT는 `header.payload.signature` 3개 부분으로 구성된다.
-
-**Payload 필드**:
-
-| 필드 | 타입 | 설명 |
-| --- | --- | --- |
-| `sub` | string | 사용자 ID |
-| `iat` | integer | 토큰 발급 시간 (Unix Timestamp) |
-| `exp` | integer | 토큰 만료 시간 (Unix Timestamp) - 발급 후 8시간 |
-| `email` | string | 이메일 주소 |
-| `name` | string | 사용자 이름 |
-
-### 토큰 유효기간
-
-- 발급 후 **8시간** 유효
-- 만료된 토큰으로 요청 시 401 응답
-- 갱신 엔드포인트 없음 (만료 시 재로그인 필요)
-
----
+JWT payload는 `sub`, `iat`, `exp`, `email`, `name`으로 구성되고 발급 후
+8시간 유효합니다. 갱신 API는 없으므로 만료 시 다시 로그인합니다.
 
 ## 환경 설정
 
-백엔드 서버 실행 시 다음 환경 변수 설정 필요:
+루트 `.env.example`을 기준으로 백엔드 디렉터리의 `.env` 또는 프로세스 환경
+변수를 사용합니다. 프로세스 환경 변수가 `.env`보다 우선합니다.
 
-| 환경 변수 | 예시 | 설명 |
+| 환경 변수 | 기본값 | 설명 |
 | --- | --- | --- |
-| `GOOGLE_CLIENT_ID` | `xxx.apps.googleusercontent.com` | Google OAuth Client ID |
-| `GOOGLE_CLIENT_SECRET` | `secret-key-string` | Google OAuth Client Secret |
-| `GOOGLE_REDIRECT_URI` | `http://localhost:8000/api/v1/auth/google/callback` | 콜백 URL |
-| `JWT_SECRET` | `long-random-secret-string` | JWT 서명용 비밀키 (프로덕션: 변경 필수) |
-| `GOOGLE_AUTH_DB_PATH` | `./data/google_auth.db` | 사용자 DB 경로 (선택사항) |
+| `GOOGLE_CLIENT_ID` | 없음 | Google OAuth client ID |
+| `GOOGLE_CLIENT_SECRET` | 없음 | Google OAuth client secret |
+| `GOOGLE_REDIRECT_URI` | 없음 | 등록된 callback URL |
+| `JWT_SECRET` | 없음 | 최소 32자의 JWT 서명 키 |
+| `GOOGLE_AUTH_DB_PATH` | `data/google_auth.db` | Google 사용자 SQLite 경로 |
+| `GOOGLE_OAUTH_COOKIE_SECURE` | `false` | HTTPS에서 state cookie Secure 활성화 |
+| `GOOGLE_OAUTH_STATE_TTL_SECONDS` | `600` | 서버 state와 cookie 수명, 60~3600초 |
 
----
+인증 설정이 없어도 앱 시작, `/health`, API 문서, 여행 프로토타입 API는
+동작합니다. Google 로그인과 JWT 발급 시점에만 필수 설정을 검사합니다.
 
-## 코드 위치
+authorization code와 state는 query string에 있으므로 개발 실행 예시는 Uvicorn
+access log를 끕니다. 공유 환경에서는 reverse proxy/APM에서도 callback query를
+기록하지 않거나 반드시 마스킹해야 합니다.
 
-- **라우터**: `backend/src/chiwawa_backend/routers/auth.py`
-- **JWT 유틸**: `backend/src/chiwawa_backend/services/jwt_auth.py`
-- **사용자 저장**: `backend/src/chiwawa_backend/services/auth.py`
-- **스키마**: `backend/src/chiwawa_backend/schemas/auth.py`
-- **테스트**: `backend/tests/test_google_auth.py`
+## 저장 위치
 
----
-
-## 통합 경계
-
-프론트엔드는 다음 조건에서 이 인증 API를 사용할 수 있다:
-
-1. WebView 또는 시스템 브라우저로 `/api/v1/auth/google/login`에 접근
-2. 사용자 구글 인증 완료 후 콜백 URL의 `code` 파라미터 추출
-3. 백엔드 `/api/v1/auth/google/callback` 호출하여 `access_token` 수신
-4. 이후 모든 API 요청의 Authorization 헤더에 토큰 첨부
-
----
+- 사용자 저장 서비스: `src/chiwawa_backend/services/auth.py`
+- 패키지 SQL: `src/chiwawa_backend/sql/001_google_users.sql`
+- 기본 런타임 DB: `data/google_auth.db` (Git 제외)
+- OAuth 라우터: `src/chiwawa_backend/routers/auth.py`
+- JWT 서비스: `src/chiwawa_backend/services/jwt_auth.py`

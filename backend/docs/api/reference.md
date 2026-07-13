@@ -8,7 +8,7 @@
 서버 실행 후 브라우저에서 루트 또는 Swagger UI 주소를 열면 됩니다.
 
 ```bash
-uv run uvicorn chiwawa_backend.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.1 --port 8000
 ```
 
 | 문서 | URL |
@@ -23,10 +23,18 @@ uv run uvicorn chiwawa_backend.main:app --reload --host 0.0.0.0 --port 8000
 
 - API prefix: `/api/v1`
 - 요청/응답 본문: JSON
-- 검증 실패: FastAPI 기본 `422 Unprocessable Entity`
+- 요청 또는 도메인 검증 실패: `422 Unprocessable Content`
 - 존재하지 않는 리소스: `404 {"detail": "..."}`
 - Google 인증 API는 환경 변수 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
-  `GOOGLE_REDIRECT_URI`, `JWT_SECRET_KEY` 설정에 의존합니다.
+  `GOOGLE_REDIRECT_URI`, `JWT_SECRET` 설정에 의존합니다.
+- Bearer 토큰이 필수인 현재 경로는 `/api/v1/auth/me`뿐입니다. 나머지 여행
+  API는 개발 프로토타입 단계에서 공개되어 있습니다.
+- 기본 실행은 `127.0.0.1`에만 바인딩합니다. 공유 개발 서버나 외부 인터페이스에
+  노출하기 전에는 여행 API 인증과 사용자 소유권을 먼저 적용해야 합니다.
+- 여행, 장소, 일정, 추천, 기록은 서버 메모리에 저장되므로 재시작 시
+  초기화됩니다.
+- 사진 검색, AI 일정 생성, 동선 최적화, 주변 추천, 빈 시간 추천은 외부
+  서비스가 아닌 모의 휴리스틱입니다. 생성 ID와 시각은 요청마다 달라질 수 있습니다.
 - 인증 흐름 상세는 [auth.md](./auth.md)를 봅니다.
 - 백엔드 구조는 [backend.md](../architecture/backend.md)를 봅니다.
 
@@ -36,8 +44,8 @@ uv run uvicorn chiwawa_backend.main:app --reload --host 0.0.0.0 --port 8000
 | --- | --- | --- | --- | --- | --- | --- |
 | health | GET | 200 | 서버 상태 확인 | `/health` | - | `HealthResponse` |
 | auth | GET | 302 | Google OAuth 로그인 URL로 이동 | `/api/v1/auth/google/login` | - | Redirect |
-| auth | GET | 200 | Google OAuth callback 처리 후 JWT 발급 | `/api/v1/auth/google/callback` | query: `code` | `GoogleAuthResponse` + `access_token` |
-| auth | GET | 200 | Bearer 토큰 기준 현재 사용자 확인 | `/api/v1/auth/me` | Authorization header | `{sub,email,name}` |
+| auth | GET | 200 | 일회성 state 검증, Google callback 처리, JWT 발급 | `/api/v1/auth/google/callback` | query: `code`, `state`; state cookie | `GoogleAuthResponse` |
+| auth | GET | 200 | Bearer 토큰 기준 현재 사용자 확인 | `/api/v1/auth/me` | Authorization header | `CurrentUserRead` |
 | trips | POST | 201 | 여행 프로젝트 생성 | `/api/v1/trips` | `TripCreateRequest` | `TripRead` |
 | trips | GET | 200 | 여행 프로젝트 목록 조회 | `/api/v1/trips` | - | `TripListResponse` |
 | trips | GET | 200 | 여행 프로젝트 상세 조회 | `/api/v1/trips/{trip_id}` | - | `TripRead` |
@@ -80,3 +88,22 @@ uv run uvicorn chiwawa_backend.main:app --reload --host 0.0.0.0 --port 8000
 7. `POST /api/v1/trips/{trip_id}/route-optimizations`로 방문 동선을 최적화합니다.
 8. 여행 중에는 `/travel`과 `/assistant` API로 빈 시간 추천, 주변 추천, 재추천을 사용합니다.
 9. 여행 후에는 `/memorial/photos`와 `/memorial/generate`로 기록을 생성합니다.
+
+## 현재 검증 규칙
+
+- 여행 종료일은 시작일보다 빠를 수 없습니다.
+- 여행 기간은 시작일과 종료일을 포함해 최대 31일입니다.
+- 일정과 빈 시간 추천의 종료 시각은 시작 시각보다 늦어야 합니다.
+- 일정·추천·계획 시각은 timezone offset 없는 일본 현지 시각이며, 추천과 계획
+  시간창은 최소 1분입니다.
+- 일정과 빈 시간 추천 날짜는 여행 기간 안에 있어야 합니다.
+- 여행 날짜를 수정할 때 기존 일정·추천·계획이 새 범위 밖에 남으면 422로
+  거부합니다.
+- 일정 초안은 요청한 시작·종료 시각 안에서 겹치지 않게 순차 배치됩니다.
+- 동일 계획 확정 요청은 멱등적으로 처리되어 일정이 중복되지 않습니다.
+- 동일 사진 후보 확정과 빈 시간 추천 추가 요청도 기존 결과를 반환해 중복
+  장소·일정을 만들지 않습니다.
+- `assistant/replan`의 `current_item_id`가 있으면 해당 항목부터 지연을
+  적용합니다.
+- 재계획 지연은 최대 1,440분이며 결과가 여행 기간이나 날짜 경계를 넘으면
+  422로 거부합니다.

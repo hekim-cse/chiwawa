@@ -4,3 +4,5 @@
 .codegraph
 __pycache__/
 *.py[cod]
+data/*.db
+data/*.db-*
