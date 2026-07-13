@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
+import '../../shared/widgets/app_viewport.dart';
 import '../../core/assets/app_images.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/providers/data_providers.dart';
@@ -44,7 +45,9 @@ class HomeScreen extends ConsumerWidget {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final contentWidth =
-                  constraints.maxWidth > 430 ? 430.0 : constraints.maxWidth;
+                  constraints.maxWidth > AppLayout.maxContentWidth
+                      ? AppLayout.maxContentWidth
+                      : constraints.maxWidth;
 
               return Align(
                 alignment: Alignment.topCenter,

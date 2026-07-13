@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../api/api_exception.dart';
+import '../../models/memorial_map_models.dart';
 import '../../models/travel_models.dart';
 import '../../services/trip_session_service.dart';
 import '../trip_repository.dart';
@@ -51,8 +52,7 @@ class ApiTripRepository implements TripRepository {
     );
     final items = json['items'] as List<Object?>? ?? const [];
     return [
-      for (final raw in items)
-        _freeTimeFromJson(raw! as Map<String, Object?>),
+      for (final raw in items) _freeTimeFromJson(raw! as Map<String, Object?>),
     ];
   }
 
@@ -76,6 +76,20 @@ class ApiTripRepository implements TripRepository {
   Future<List<MemorialDay>> fetchMemorialDays() async {
     // GET /api/v1/trips/{tripId}/memorial/photos
     throw UnimplementedError('TODO(C6): memorial 사진 매핑 확정 후 구현');
+  }
+
+  @override
+  Future<List<DateTime>> fetchMemorialDates() async {
+    // TODO(C6): memorial 날짜 응답 스키마 확정 후 구현
+    throw UnimplementedError('TODO(C6): memorial 날짜 매핑 확정 후 구현');
+  }
+
+  @override
+  Future<List<MemorialPhotoPoint>> fetchMemorialPhotoPoints(
+    DateTime date,
+  ) async {
+    // TODO(C6): MemorialPhotoRead(taken_at, latitude, longitude) 확정 후 구현
+    throw UnimplementedError('TODO(C6): memorial 좌표 사진 매핑 확정 후 구현');
   }
 
   Future<Map<String, Object?>> _getJson(String path) async {

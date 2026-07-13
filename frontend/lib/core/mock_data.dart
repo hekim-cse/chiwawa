@@ -1,4 +1,5 @@
 import 'assets/app_images.dart';
+import 'models/memorial_map_models.dart';
 import 'models/travel_models.dart';
 
 const tripInfo = TripInfo(
@@ -162,7 +163,147 @@ const memorialDays = [
       MockImages.mockMemorial02,
     ],
   ),
+  MemorialDay(
+    date: '4월 4일',
+    places: ['도쿄 타워', '긴자', '도쿄역'],
+    photos: 28,
+    photoAssetPaths: [
+      MockImages.mockMemorial01,
+      MockImages.mockMemorial03,
+      MockImages.mockMemorial02,
+    ],
+  ),
 ];
+
+final memorialTripDates = List<DateTime>.unmodifiable([
+  DateTime(2025, 4, 1),
+  DateTime(2025, 4, 2),
+  DateTime(2025, 4, 3),
+  DateTime(2025, 4, 4),
+]);
+
+final memorialPhotoPoints = List<MemorialPhotoPoint>.unmodifiable([
+  MemorialPhotoPoint(
+    id: 'photo-0401-narita-1',
+    takenAt: DateTime(2025, 4, 1, 9, 20),
+    latitude: 35.7719,
+    longitude: 140.3929,
+    placeName: '나리타 공항',
+    assetPath: MockImages.mockMemorial01,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0401-asakusa-1',
+    takenAt: DateTime(2025, 4, 1, 12, 10),
+    latitude: 35.7148,
+    longitude: 139.7967,
+    placeName: '아사쿠사 센소지',
+    assetPath: MockImages.mockMemorial02,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0401-asakusa-2',
+    takenAt: DateTime(2025, 4, 1, 12, 28),
+    latitude: 35.7149,
+    longitude: 139.7968,
+    placeName: '아사쿠사 센소지',
+    assetPath: MockImages.mockMemorial03,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0401-shinjuku-1',
+    takenAt: DateTime(2025, 4, 1, 18, 30),
+    latitude: 35.6938,
+    longitude: 139.7034,
+    placeName: '신주쿠',
+    assetPath: MockImages.mockMemorial01,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0402-ueno-1',
+    takenAt: DateTime(2025, 4, 2, 9, 40),
+    latitude: 35.7156,
+    longitude: 139.7745,
+    placeName: '우에노 공원',
+    assetPath: MockImages.mockMemorial02,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0402-akihabara-1',
+    takenAt: DateTime(2025, 4, 2, 12, 10),
+    latitude: 35.6984,
+    longitude: 139.7730,
+    placeName: '아키하바라',
+    assetPath: MockImages.mockMemorial03,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0402-shibuya-1',
+    takenAt: DateTime(2025, 4, 2, 16, 20),
+    latitude: 35.6595,
+    longitude: 139.7005,
+    placeName: '시부야 스크램블',
+    assetPath: MockImages.mockMemorial01,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0402-shibuya-2',
+    takenAt: DateTime(2025, 4, 2, 16, 33),
+    latitude: 35.6596,
+    longitude: 139.7006,
+    placeName: '시부야 스크램블',
+    assetPath: MockImages.mockMemorial02,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0403-harajuku-1',
+    takenAt: DateTime(2025, 4, 3, 10, 10),
+    latitude: 35.6716,
+    longitude: 139.7026,
+    placeName: '하라주쿠',
+    assetPath: MockImages.mockMemorial03,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0403-omotesando-1',
+    takenAt: DateTime(2025, 4, 3, 13, 5),
+    latitude: 35.6652,
+    longitude: 139.7120,
+    placeName: '오모테산도',
+    assetPath: MockImages.mockMemorial01,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0403-roppongi-1',
+    takenAt: DateTime(2025, 4, 3, 18, 40),
+    latitude: 35.6627,
+    longitude: 139.7314,
+    placeName: '롯폰기',
+    assetPath: MockImages.mockMemorial02,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0403-tower-1',
+    takenAt: DateTime(2025, 4, 3, 20, 10),
+    latitude: 35.6586,
+    longitude: 139.7454,
+    placeName: '도쿄 타워',
+    assetPath: MockImages.mockMemorial03,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0404-ginza-1',
+    takenAt: DateTime(2025, 4, 4, 10, 25),
+    latitude: 35.6719,
+    longitude: 139.7650,
+    placeName: '긴자',
+    assetPath: MockImages.mockMemorial01,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0404-tokyo-station-1',
+    takenAt: DateTime(2025, 4, 4, 13, 0),
+    latitude: 35.6812,
+    longitude: 139.7671,
+    placeName: '도쿄역',
+    assetPath: MockImages.mockMemorial02,
+  ),
+  MemorialPhotoPoint(
+    id: 'photo-0404-marunouchi-1',
+    takenAt: DateTime(2025, 4, 4, 14, 35),
+    latitude: 35.6815,
+    longitude: 139.7639,
+    placeName: '마루노우치',
+    assetPath: MockImages.mockMemorial03,
+  ),
+]);
 
 const recentSearches = [
   PhotoSearchResult(
