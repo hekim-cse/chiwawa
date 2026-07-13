@@ -27,7 +27,7 @@ from chiwawa_backend.schemas.memorial import (
     MemorialTimelineEntry,
 )
 from chiwawa_backend.services.database import connect
-from chiwawa_backend.services.exif import read_exif
+from chiwawa_backend.services.exif import InvalidImageError, read_exif, validate_image
 from chiwawa_backend.services.geocode import reverse_geocode
 
 
@@ -48,6 +48,13 @@ def save_photo(user_id: int, upload: PhotoUpload) -> MemorialPhotoItem:
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail="only image uploads are supported",
         )
+    try:
+        validate_image(upload.data)
+    except InvalidImageError as error:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="uploaded file is not a valid image",
+        ) from error
     exif = read_exif(upload.data)
     taken_at = upload.taken_at or exif.taken_at or _now_utc()
     latitude = upload.latitude if upload.latitude is not None else exif.latitude

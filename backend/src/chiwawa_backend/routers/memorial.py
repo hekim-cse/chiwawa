@@ -1,7 +1,17 @@
 import datetime as dt
-from typing import Annotated
+import io
+from typing import Annotated, Final
 
-from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from fastapi.responses import FileResponse
 
 from chiwawa_backend.dependencies import get_current_user_id, get_state
@@ -25,6 +35,9 @@ from chiwawa_backend.state import AppState
 router = APIRouter(prefix="/api/v1/trips/{trip_id}/memorial", tags=["memorial"])
 StateDep = Annotated[AppState, Depends(get_state)]
 
+MAX_MEMORIAL_PHOTO_SIZE_BYTES: Final = 10 * 1024 * 1024
+UPLOAD_READ_CHUNK_SIZE_BYTES: Final = 1024 * 1024
+
 album_router = APIRouter(prefix="/api/v1/memorial", tags=["memorial"])
 UserIdDep = Annotated[int, Depends(get_current_user_id)]
 
@@ -38,7 +51,17 @@ async def upload_memorial_photo(  # noqa: PLR0913
     longitude: Annotated[float | None, Form(ge=-180, le=180)] = None,
     memo: Annotated[str | None, Form()] = None,
 ) -> MemorialPhotoItem:
-    data = await file.read()
+    buffer = io.BytesIO()
+    total_size = 0
+    while chunk := await file.read(UPLOAD_READ_CHUNK_SIZE_BYTES):
+        total_size += len(chunk)
+        if total_size > MAX_MEMORIAL_PHOTO_SIZE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="photo file is too large",
+            )
+        _ = buffer.write(chunk)
+    data = buffer.getvalue()
     upload = PhotoUpload(
         file_name=file.filename or "photo",
         content_type=file.content_type or "application/octet-stream",

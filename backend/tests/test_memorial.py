@@ -13,6 +13,7 @@ from httpx import ASGITransport, AsyncClient
 from PIL import ExifTags, Image
 
 from chiwawa_backend.main import create_app
+from chiwawa_backend.routers.memorial import MAX_MEMORIAL_PHOTO_SIZE_BYTES
 from chiwawa_backend.services import geocode
 from chiwawa_backend.services.auth import save_or_update_user
 from chiwawa_backend.services.jwt_auth import create_access_token
@@ -229,6 +230,43 @@ async def test_memorial_requires_token_and_isolates_users() -> None:
             files={"file": ("note.txt", b"not an image", "text/plain")},
         )
         assert not_image_response.status_code == HTTPStatus.UNSUPPORTED_MEDIA_TYPE
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("memorial_env")
+async def test_upload_rejects_invalid_image_bytes() -> None:
+    app = create_app()
+    token = _create_user_token("memorial-invalid-image")
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/memorial/photos",
+            headers=_auth_header(token),
+            files={"file": ("fake.jpg", b"not an image", "image/jpeg")},
+        )
+
+    assert response.status_code == HTTPStatus.UNSUPPORTED_MEDIA_TYPE
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("memorial_env")
+async def test_upload_rejects_files_over_size_limit() -> None:
+    app = create_app()
+    token = _create_user_token("memorial-large-image")
+    oversized = b"x" * (MAX_MEMORIAL_PHOTO_SIZE_BYTES + 1)
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/v1/memorial/photos",
+            headers=_auth_header(token),
+            files={"file": ("large.jpg", oversized, "image/jpeg")},
+        )
+
+    assert response.status_code == HTTPStatus.REQUEST_ENTITY_TOO_LARGE
 
 
 def test_reverse_geocode_parses_formatted_address(
