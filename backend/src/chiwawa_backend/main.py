@@ -3,9 +3,12 @@ from collections.abc import Callable
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse
 
-from chiwawa_backend.config import load_env_file
 from chiwawa_backend.dependencies import get_state
-from chiwawa_backend.errors import NotFoundError
+from chiwawa_backend.errors import (
+    ConfigurationError,
+    DomainValidationError,
+    NotFoundError,
+)
 from chiwawa_backend.routers import (
     assistant,
     auth,
@@ -23,7 +26,6 @@ from chiwawa_backend.state import AppState
 
 
 def create_app(state: AppState | None = None) -> FastAPI:
-    load_env_file()
     app_state = state or AppState()
     app = FastAPI(
         title="Chiwawa Backend",
@@ -82,10 +84,24 @@ def _register_exception_handlers(app: FastAPI) -> None:
                     status_code=status.HTTP_404_NOT_FOUND,
                     content=error.model_dump(),
                 )
+            case DomainValidationError() as invalid:
+                error = ErrorResponse(detail=str(invalid))
+                return JSONResponse(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    content=error.model_dump(),
+                )
+            case ConfigurationError() as configuration_error:
+                error = ErrorResponse(detail=str(configuration_error))
+                return JSONResponse(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    content=error.model_dump(),
+                )
             case _:
                 raise exc
 
     app.add_exception_handler(NotFoundError, not_found_handler)
+    app.add_exception_handler(DomainValidationError, not_found_handler)
+    app.add_exception_handler(ConfigurationError, not_found_handler)
 
 
 app = create_app()

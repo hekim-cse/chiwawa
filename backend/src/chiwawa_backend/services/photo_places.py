@@ -10,9 +10,10 @@ from chiwawa_backend.schemas.places import (
 )
 from chiwawa_backend.services.common import require_photo_search, require_trip
 from chiwawa_backend.services.wanted_places import create_wanted_place
-from chiwawa_backend.state import AppState
+from chiwawa_backend.state import AppState, synchronized
 
 
+@synchronized
 def search_photo_places(
     state: AppState,
     trip_id: str,
@@ -62,6 +63,7 @@ def search_photo_places(
     return search
 
 
+@synchronized
 def confirm_photo_place(
     state: AppState,
     trip_id: str,
@@ -75,10 +77,13 @@ def confirm_photo_place(
     )
     if candidate is None:
         raise NotFoundError(entity="photo_candidate", entity_id=payload.candidate_id)
+    existing = state.confirmed_photo_places.get(candidate.id)
+    if existing is not None and existing.wanted_place.id in state.wanted_places:
+        return existing
     wanted_place = create_wanted_place(
-        state=state,
-        trip_id=trip_id,
-        payload=WantedPlaceCreateRequest(
+        state,
+        trip_id,
+        WantedPlaceCreateRequest(
             name=candidate.name,
             city=candidate.city,
             country=candidate.country,
@@ -89,8 +94,10 @@ def confirm_photo_place(
         ),
         source=PlaceSource.PHOTO,
     )
-    return ConfirmedPhotoPlaceRead(
+    confirmation = ConfirmedPhotoPlaceRead(
         search_id=search_id,
         candidate=candidate,
         wanted_place=wanted_place,
     )
+    state.confirmed_photo_places[candidate.id] = confirmation
+    return confirmation

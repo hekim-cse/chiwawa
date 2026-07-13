@@ -21,4 +21,4 @@ test:
 check: format-check lint type test
 
 run:
-	uv run uvicorn chiwawa_backend.main:app --reload --host 0.0.0.0 --port 8000
+	uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.1 --port 8000

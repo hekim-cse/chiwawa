@@ -34,6 +34,7 @@ dev = [
 
 [tool.basedpyright]
 typeCheckingMode = "all"
+stubPath = "typings"
 pythonVersion = "3.13"
 pythonPlatform = "All"
 include = ["src", "tests"]
@@ -74,6 +75,8 @@ fixable = ["ALL"]
 unfixable = []
 
 [tool.ruff.lint.per-file-ignores]
+"src/chiwawa_backend/routers/auth.py" = ["TC002"]
+"src/chiwawa_backend/schemas/auth.py" = ["TC003"]
 "tests/**/*.py" = [
     "S101",
     "ARG",

@@ -5,6 +5,8 @@ from pydantic import Field, model_validator
 
 from chiwawa_backend.schemas.base import ApiModel, TravelStyle
 
+MAX_TRIP_DAYS = 31
+
 
 class TripCreateRequest(ApiModel):
     city: str = Field(min_length=1)
@@ -20,6 +22,9 @@ class TripCreateRequest(ApiModel):
     def require_ordered_dates(self) -> Self:
         if self.end_date < self.start_date:
             msg = "end_date must be greater than or equal to start_date"
+            raise ValueError(msg)
+        if (self.end_date - self.start_date).days >= MAX_TRIP_DAYS:
+            msg = f"trip duration must not exceed {MAX_TRIP_DAYS} days"
             raise ValueError(msg)
         return self
 
