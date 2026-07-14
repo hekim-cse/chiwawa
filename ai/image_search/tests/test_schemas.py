@@ -154,6 +154,18 @@ class TestResolvedPlace:
         assert place.country is None
         assert place.review_count is None
 
+    # Google 장소 유형(primaryType)을 담을 수 있고, 없으면 None 이다
+    def test_holds_optional_primary_type(self):
+        with_type = ResolvedPlace(
+            place_id="p1", name="카페", latitude=0, longitude=0, primary_type="cafe"
+        )
+        without_type = ResolvedPlace(
+            place_id="p2", name="어딘가", latitude=0, longitude=0
+        )
+
+        assert with_type.primary_type == "cafe"
+        assert without_type.primary_type is None
+
     # 리뷰 수는 음수가 될 수 없다
     def test_rejects_negative_review_count(self):
         with pytest.raises(ValidationError):

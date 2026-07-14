@@ -90,6 +90,7 @@ class ResolvedPlace(BaseModel):
     country: str | None = None
     rating: float | None = Field(default=None, ge=0, le=5)
     review_count: int | None = Field(default=None, ge=0)  # 평점 신뢰도 판단용 리뷰 수
+    primary_type: str | None = None  # Google 장소 유형 (예: cafe) — 카테고리 역매핑용
 
 
 # Gemini 비전 식별 원신호
