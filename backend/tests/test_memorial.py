@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import io
 import sqlite3
 import time
@@ -390,3 +391,35 @@ async def test_upload_keeps_event_loop_responsive_during_slow_geocoding(
     assert response is not None
     assert response.status_code == HTTPStatus.CREATED
     assert heartbeats >= 8
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("memorial_env")
+async def test_upload_fallback_taken_at_uses_server_local_timezone() -> None:
+    # Given: EXIF도 폼 값도 없는 사진을 KST 서버 환경에서 업로드하는 상황.
+    try:
+        with pytest.MonkeyPatch.context() as tz_patch:
+            tz_patch.setenv("TZ", "Asia/Seoul")
+            time.tzset()
+            app = create_app()
+            token = _create_user_token("memorial-tz-user")
+
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                # When: 촬영 시각 정보가 전혀 없는 사진을 업로드한다.
+                response = await client.post(
+                    "/api/v1/memorial/photos",
+                    headers=_auth_header(token),
+                    files={"file": ("plain.png", _plain_png(), "image/png")},
+                )
+
+            # Then: 폴백 taken_at은 UTC가 아니라 서버 현지 시간대여야 한다.
+            # (UTC로 저장하면 KST 자정~오전 9시 업로드 사진이 전날로 분류된다.)
+            assert response.status_code == HTTPStatus.CREATED
+            photo = _json_dict(response)
+            taken_at = dt.datetime.fromisoformat(cast("str", photo["taken_at"]))
+            assert taken_at.utcoffset() == dt.timedelta(hours=9)
+    finally:
+        time.tzset()
