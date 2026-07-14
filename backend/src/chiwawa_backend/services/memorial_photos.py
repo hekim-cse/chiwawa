@@ -17,7 +17,7 @@ from typing import cast
 
 from fastapi import HTTPException, status
 
-from chiwawa_backend.errors import NotFoundError
+from chiwawa_backend.errors import ConfigurationError, NotFoundError
 from chiwawa_backend.schemas.memorial import (
     MemorialCalendarDay,
     MemorialCalendarResponse,
@@ -61,35 +61,39 @@ def save_photo(user_id: int, upload: PhotoUpload) -> MemorialPhotoItem:
     longitude = upload.longitude if upload.longitude is not None else exif.longitude
     address = _resolve_address(latitude, longitude)
     stored = _store_file(user_id, upload.file_name, upload.data)
-    with contextlib.closing(connect()) as connection, connection:
-        try:
-            cursor = connection.execute(
-                """
-                INSERT INTO memorial_photos (
-                    user_id, file_name, stored_path, content_type,
-                    taken_at, latitude, longitude, address, memo, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    user_id,
-                    upload.file_name,
-                    str(stored),
-                    upload.content_type,
-                    taken_at.isoformat(),
-                    latitude,
-                    longitude,
-                    address,
-                    upload.memo,
-                    _now_utc().isoformat(),
-                ),
-            )
-        except sqlite3.IntegrityError as error:
+    try:
+        with contextlib.closing(connect()) as connection, connection:
+            try:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO memorial_photos (
+                        user_id, file_name, stored_path, content_type,
+                        taken_at, latitude, longitude, address, memo, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        user_id,
+                        upload.file_name,
+                        str(stored),
+                        upload.content_type,
+                        taken_at.isoformat(),
+                        latitude,
+                        longitude,
+                        address,
+                        upload.memo,
+                        _now_utc().isoformat(),
+                    ),
+                )
+            except sqlite3.IntegrityError as error:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="unknown user",
+                ) from error
+            photo_id = cursor.lastrowid
+    except (ConfigurationError, HTTPException, OSError, sqlite3.Error):
+        with contextlib.suppress(OSError):
             stored.unlink(missing_ok=True)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="unknown user",
-            ) from error
-        photo_id = cursor.lastrowid
+        raise
     if photo_id is None:  # pragma: no cover
         message = "failed to persist memorial photo"
         raise RuntimeError(message)

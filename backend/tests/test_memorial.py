@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import io
+import sqlite3
 from http import HTTPStatus
 from typing import TYPE_CHECKING, cast
 
@@ -15,9 +16,10 @@ from PIL import ExifTags, Image
 from chiwawa_backend.main import create_app
 from chiwawa_backend.routers.memorial import MAX_MEMORIAL_PHOTO_SIZE_BYTES
 from chiwawa_backend.schemas.auth import GoogleUserProfile
-from chiwawa_backend.services import geocode
+from chiwawa_backend.services import geocode, memorial_photos
 from chiwawa_backend.services.auth import save_or_update_user
 from chiwawa_backend.services.jwt_auth import create_access_token
+from chiwawa_backend.services.memorial_photos import PhotoUpload
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -77,6 +79,36 @@ def _plain_png() -> bytes:
     buffer = io.BytesIO()
     Image.new("RGB", (4, 4), "blue").save(buffer, "PNG")
     return buffer.getvalue()
+
+
+def test_photo_file_is_removed_when_database_connection_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("MEMORIAL_PHOTO_DIR", str(tmp_path / "photos"))
+
+    def fail_connect() -> sqlite3.Connection:
+        message = "database unavailable"
+        raise sqlite3.OperationalError(message)
+
+    monkeypatch.setattr(memorial_photos, "connect", fail_connect)
+
+    with pytest.raises(sqlite3.OperationalError):
+        _ = memorial_photos.save_photo(
+            7,
+            PhotoUpload(
+                file_name="photo.png",
+                content_type="image/png",
+                data=_plain_png(),
+                taken_at=None,
+                latitude=None,
+                longitude=None,
+                memo=None,
+            ),
+        )
+
+    photo_dir = tmp_path / "photos" / "7"
+    assert not photo_dir.exists() or not any(photo_dir.iterdir())
 
 
 @pytest.mark.anyio
