@@ -5,9 +5,11 @@ from __future__ import annotations
 
 import io
 import sqlite3
+import time
 from http import HTTPStatus
 from typing import TYPE_CHECKING, cast
 
+import anyio
 import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -338,3 +340,53 @@ def test_reverse_geocode_without_key_returns_none(
 
     monkeypatch.setattr("chiwawa_backend.services.geocode.httpx.get", fail_get)
     assert geocode.reverse_geocode(OSAKA_LATITUDE, OSAKA_LONGITUDE) is None
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("memorial_env")
+async def test_upload_keeps_event_loop_responsive_during_slow_geocoding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: 역지오코딩 API가 1초 동안 응답하지 않는 상황.
+    def _slow_reverse_geocode(latitude: float, longitude: float) -> str | None:
+        _ = latitude, longitude
+        time.sleep(1.0)
+        return None
+
+    monkeypatch.setattr(memorial_photos, "reverse_geocode", _slow_reverse_geocode)
+    app = create_app()
+    token = _create_user_token("memorial-loop-user")
+    heartbeats = 0
+    upload_done = anyio.Event()
+    response: httpx.Response | None = None
+
+    async def _count_heartbeats() -> None:
+        nonlocal heartbeats
+        while not upload_done.is_set():
+            await anyio.sleep(0.05)
+            heartbeats += 1
+
+    async with (
+        AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client,
+        anyio.create_task_group() as task_group,
+    ):
+        # When: 업로드가 진행되는 동안 이벤트 루프가 계속 돌 수 있는지 관찰한다.
+        _ = task_group.start_soon(_count_heartbeats)
+        response = await client.post(
+            "/api/v1/memorial/photos",
+            headers=_auth_header(token),
+            files={"file": ("plain.png", _plain_png(), "image/png")},
+            data={
+                "latitude": str(OSAKA_LATITUDE),
+                "longitude": str(OSAKA_LONGITUDE),
+            },
+        )
+        upload_done.set()
+
+    # Then: 업로드는 성공하고, 그동안 다른 코루틴도 계속 실행됐어야 한다.
+    assert response is not None
+    assert response.status_code == HTTPStatus.CREATED
+    assert heartbeats >= 8
