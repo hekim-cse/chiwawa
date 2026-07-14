@@ -184,6 +184,6 @@ SDK) 담당이고, 백엔드는 위경도·순서·주소 라벨을 제공합니
 - 사진 서비스: `src/chiwawa_backend/services/memorial_photos.py`
 - EXIF 추출: `src/chiwawa_backend/services/exif.py`
 - 역지오코딩: `src/chiwawa_backend/services/geocode.py`
-- 테이블 스키마: `sql/002_memorial_photos.sql`
+- 테이블 스키마: `src/chiwawa_backend/sql/002_memorial_photos.sql`
   (`memorial_photos`, `user_id → google_users.id ON DELETE CASCADE`)
 - 사진 파일: `data/memorial_photos/{user_id}/{uuid}.{ext}` (Git 제외)
