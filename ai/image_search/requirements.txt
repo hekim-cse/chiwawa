@@ -1,0 +1,5 @@
+httpx
+python-dotenv
+pydantic
+pytest
+google-genai
