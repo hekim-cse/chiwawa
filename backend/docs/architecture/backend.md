@@ -13,7 +13,7 @@
 | 스키마 | `src/chiwawa_backend/schemas/` | frozen/extra-forbid Pydantic v2 경계 모델 |
 | 서비스 | `src/chiwawa_backend/services/` | 여행, 장소, 일정, 추천, 인증, 기록 로직 |
 | 프로토타입 상태 | `src/chiwawa_backend/state.py` | UUID ID와 인메모리 도메인 저장소 |
-| 인증 스키마 | `src/chiwawa_backend/sql/001_google_users.sql` | wheel에 포함되는 Google 사용자 SQLite 스키마 |
+| SQLite 마이그레이션 | `src/chiwawa_backend/sql/*.sql` | wheel에 포함되고 파일명 순서대로 적용되는 사용자·사진 스키마 |
 | 런타임 인증 DB | `data/google_auth.db` | 자동 생성되고 Git에서 제외되는 로컬 파일 |
 
 ## 요청 처리 흐름
@@ -63,7 +63,8 @@ JWT 작업 시점에 검사하므로 비인증 개발 API와 문서는 독립적
   호출합니다. 별도 앱 HTTP 클라이언트 흐름은 PKCE/state 계약 조정 전까지
   지원하지 않습니다.
 - JWT 공개 기본 키는 없으며 최소 32자의 명시적 `JWT_SECRET`이 필요합니다.
-- 현재 보호 경로는 `/api/v1/auth/me`뿐입니다.
+- 현재 보호 경로는 `/api/v1/auth/me`와 회원 단위 Memorial API
+  (`/api/v1/memorial/*`)입니다.
 - 외부 또는 공유 환경으로 옮기기 전에 여행 리소스의 사용자 소유권,
   인증 의존성, 영속 DB, 마이그레이션을 추가해야 합니다.
 
