@@ -28,11 +28,13 @@
 - 여행·장소·일정·추천·기록은 `AppState` 메모리에 저장되어 서버 재시작 시
   초기화됩니다.
 - ID는 프로세스 내 숫자 카운터가 아닌 UUID를 사용합니다.
-- Google 사용자만 SQLite `data/google_auth.db`에 저장됩니다. 이 런타임 DB는
-  Git에 포함하지 않으며 패키지 내부 SQL 스키마로 자동 초기화됩니다.
+- Google 사용자와 회원 단위 Memorial 사진 메타데이터는 SQLite
+  `data/google_auth.db`에 저장됩니다. 이 런타임 DB는 Git에 포함하지 않으며
+  wheel에 포함된 패키지 SQL 마이그레이션으로 자동 초기화됩니다.
 - OAuth `state`는 서버 메모리에서 1회 검증되고 같은 브라우저의 HttpOnly
   쿠키와 함께 결합됩니다.
-- 현재 Bearer 인증이 필수인 경로는 `GET /api/v1/auth/me`뿐입니다.
+- 현재 Bearer 인증이 필수인 경로는 `GET /api/v1/auth/me`와 회원 단위
+  Memorial API(`/api/v1/memorial/*`)입니다.
 - 여행 관련 API는 프론트엔드 연동용 프로토타입 계약을 유지하기 위해 현재
   공개 상태입니다. 공유 개발 서버나 외부 배포 전에는 사용자 소유권과
   인증 의존성을 추가해야 합니다.

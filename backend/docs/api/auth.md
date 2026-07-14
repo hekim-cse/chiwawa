@@ -3,7 +3,8 @@
 ## 현재 범위
 
 Google OAuth callback으로 로컬 사용자 레코드를 만들고 8시간 유효한 HS256
-JWT를 발급합니다. 현재 JWT가 필수인 API는 `GET /api/v1/auth/me`뿐입니다.
+JWT를 발급합니다. 현재 JWT가 필수인 API는 `GET /api/v1/auth/me`와 회원 단위
+Memorial API(`/api/v1/memorial/*`)입니다.
 여행 관련 API는 프론트엔드 연동을 위한 개발 프로토타입 계약 때문에 아직
 공개되어 있습니다.
 
