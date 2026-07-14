@@ -56,7 +56,7 @@ def save_photo(user_id: int, upload: PhotoUpload) -> MemorialPhotoItem:
             detail="uploaded file is not a valid image",
         ) from error
     exif = read_exif(upload.data)
-    taken_at = upload.taken_at or exif.taken_at or _now_utc()
+    taken_at = upload.taken_at or exif.taken_at or _now_local()
     latitude = upload.latitude if upload.latitude is not None else exif.latitude
     longitude = upload.longitude if upload.longitude is not None else exif.longitude
     address = _resolve_address(latitude, longitude)
@@ -208,6 +208,12 @@ def _resolve_address(latitude: float | None, longitude: float | None) -> str | N
 
 def _now_utc() -> dt.datetime:
     return dt.datetime.now(dt.UTC).replace(microsecond=0)
+
+
+def _now_local() -> dt.datetime:
+    # taken_at은 캘린더·타임라인이 현지 날짜 기준으로 묶으므로
+    # UTC가 아니라 서버 현지 시간대로 기록해야 날짜가 밀리지 않는다.
+    return dt.datetime.now(dt.UTC).astimezone().replace(microsecond=0)
 
 
 def _photo_dir() -> Path:
