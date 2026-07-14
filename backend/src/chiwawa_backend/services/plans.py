@@ -143,9 +143,18 @@ def build_replan_from_schedule(
     current_item_id: str | None,
 ) -> PlanDraftRead:
     trip = require_trip(state, trip_id)
-    if current_item_id is not None:
-        _ = require_schedule_item(state, trip_id, current_item_id)
+    current_item = (
+        require_schedule_item(state, trip_id, current_item_id)
+        if current_item_id is not None
+        else None
+    )
     schedule = list_schedule(state, trip_id)
+    # 지연은 기준 항목이 속한 날짜 안의 문제이므로 다른 날짜의 일정은 밀지 않는다.
+    anchor_date = (
+        current_item.date
+        if current_item is not None
+        else next((item.date for item in schedule.items), None)
+    )
     shift_suffix = current_item_id is None
     stops_by_date: dict[date, list[PlanStopRead]] = {}
     total_minutes = 0
@@ -153,7 +162,7 @@ def build_replan_from_schedule(
     for item in schedule.items:
         if item.id == current_item_id:
             shift_suffix = True
-        offset = delay_minutes if shift_suffix else 0
+        offset = delay_minutes if shift_suffix and item.date == anchor_date else 0
         try:
             shifted_start = shift_datetime(item.date, item.start_time, offset)
             shifted_end = shift_datetime(item.date, item.end_time, offset)

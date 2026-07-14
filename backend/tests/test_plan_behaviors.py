@@ -39,19 +39,20 @@ async def _create_trip(
     return TripRead.model_validate_json(response.text)
 
 
-async def _create_schedule_item(
+async def _create_schedule_item(  # noqa: PLR0913
     client: AsyncClient,
     trip_id: str,
     *,
     name: str,
     start_time: str,
     end_time: str,
+    date: str = "2026-07-10",
 ) -> ScheduleItemRead:
     response = await client.post(
         f"/api/v1/trips/{trip_id}/schedule-items",
         json={
             "name": name,
-            "date": "2026-07-10",
+            "date": date,
             "start_time": start_time,
             "end_time": end_time,
         },
@@ -186,3 +187,82 @@ async def test_replan_starts_at_current_schedule_item() -> None:
     assert stops[0].name == first.name
     assert stops[0].start_time.isoformat() == "09:00:00"
     assert stops[1].start_time.isoformat() == "11:30:00"
+
+
+@pytest.mark.anyio
+async def test_replan_delay_does_not_shift_items_on_other_days() -> None:
+    # Given: 오늘 일정과 다음날 일정이 함께 있는 여행.
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        trip = await _create_trip(client)
+        today_item = await _create_schedule_item(
+            client,
+            trip.id,
+            name="Today lunch",
+            start_time="10:00:00",
+            end_time="11:00:00",
+        )
+        _ = await _create_schedule_item(
+            client,
+            trip.id,
+            name="Tomorrow museum",
+            date="2026-07-11",
+            start_time="14:00:00",
+            end_time="15:00:00",
+        )
+
+        # When: 오늘 항목부터 90분 지연으로 replan한다.
+        response = await client.post(
+            f"/api/v1/trips/{trip.id}/assistant/replan",
+            json={"current_item_id": today_item.id, "delay_minutes": 90},
+        )
+
+    # Then: 오늘 항목만 밀리고 다음날 항목은 그대로여야 한다.
+    assert response.status_code == HTTPStatus.CREATED
+    plan = ReplanResponse.model_validate_json(response.text).plan
+    stops = {stop.name: stop for day in plan.days for stop in day.stops}
+    assert stops["Today lunch"].start_time.isoformat() == "11:30:00"
+    assert stops["Tomorrow museum"].start_time.isoformat() == "14:00:00"
+    assert stops["Tomorrow museum"].date.isoformat() == "2026-07-11"
+
+
+@pytest.mark.anyio
+async def test_replan_today_delay_succeeds_despite_late_item_tomorrow() -> None:
+    # Given: 다음날 밤 늦은 일정이 있는 여행.
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        trip = await _create_trip(client)
+        today_item = await _create_schedule_item(
+            client,
+            trip.id,
+            name="Today lunch",
+            start_time="10:00:00",
+            end_time="11:00:00",
+        )
+        _ = await _create_schedule_item(
+            client,
+            trip.id,
+            name="Tomorrow night show",
+            date="2026-07-11",
+            start_time="23:00:00",
+            end_time="23:30:00",
+        )
+
+        # When: 오늘 항목을 90분 미룬다 (다음날 일정과 무관해야 한다).
+        response = await client.post(
+            f"/api/v1/trips/{trip.id}/assistant/replan",
+            json={"current_item_id": today_item.id, "delay_minutes": 90},
+        )
+
+    # Then: 다음날 밤 일정 때문에 오늘 지연이 거부되면 안 된다.
+    assert response.status_code == HTTPStatus.CREATED
+    plan = ReplanResponse.model_validate_json(response.text).plan
+    stops = {stop.name: stop for day in plan.days for stop in day.stops}
+    assert stops["Today lunch"].start_time.isoformat() == "11:30:00"
+    assert stops["Tomorrow night show"].start_time.isoformat() == "23:00:00"
