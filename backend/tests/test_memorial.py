@@ -15,12 +15,14 @@ import httpx
 import pytest
 from httpx import ASGITransport, AsyncClient
 from PIL import ExifTags, Image
+from PIL.TiffImagePlugin import IFDRational
 
 from chiwawa_backend.main import create_app
 from chiwawa_backend.routers.memorial import MAX_MEMORIAL_PHOTO_SIZE_BYTES
 from chiwawa_backend.schemas.auth import GoogleUserProfile
 from chiwawa_backend.services import geocode, memorial_photos
 from chiwawa_backend.services.auth import save_or_update_user
+from chiwawa_backend.services.exif import read_exif
 from chiwawa_backend.services.jwt_auth import create_access_token
 from chiwawa_backend.services.memorial_photos import PhotoUpload
 
@@ -423,3 +425,31 @@ async def test_upload_fallback_taken_at_uses_server_local_timezone() -> None:
             assert taken_at.utcoffset() == dt.timedelta(hours=9)
     finally:
         time.tzset()
+
+
+def test_exif_zero_denominator_gps_yields_no_coordinate() -> None:
+    # Given: 위도 DMS의 초(seconds) 분모가 0인 손상된 EXIF 사진.
+    # Pillow의 IFDRational(x, 0)은 float() 시 예외 대신 NaN을 반환한다.
+    image = Image.new("RGB", (4, 4), "red")
+    exif = Image.Exif()
+    gps = exif.get_ifd(ExifTags.IFD.GPSInfo)
+    gps[ExifTags.GPS.GPSLatitudeRef] = "N"
+    gps[ExifTags.GPS.GPSLatitude] = (
+        IFDRational(34, 1),
+        IFDRational(40, 1),
+        IFDRational(7, 0),
+    )
+    gps[ExifTags.GPS.GPSLongitudeRef] = "E"
+    gps[ExifTags.GPS.GPSLongitude] = (
+        IFDRational(135, 1),
+        IFDRational(30, 1),
+        IFDRational(11, 1),
+    )
+    buffer = io.BytesIO()
+    image.save(buffer, "JPEG", exif=exif)
+
+    # When: EXIF를 읽는다.
+    data = read_exif(buffer.getvalue())
+
+    # Then: NaN이 좌표로 새어나가지 않고 좌표 없음으로 처리돼야 한다.
+    assert data.latitude is None

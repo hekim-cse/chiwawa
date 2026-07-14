@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import io
+import math
 from dataclasses import dataclass
 from typing import SupportsFloat, cast
 
@@ -118,4 +119,5 @@ def _to_float(value: object) -> float | None:
         result = float(value)
     except (ValueError, ZeroDivisionError):
         return None
-    return result
+    # Pillow의 IFDRational(x, 0)은 예외 대신 NaN을 반환하므로 여기서 걸러낸다.
+    return result if math.isfinite(result) else None
