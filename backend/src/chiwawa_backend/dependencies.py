@@ -22,8 +22,8 @@ def get_current_user_id(
     ],
 ) -> int:
     claims = get_current_user_from_credentials(credentials)
-    subject: object = claims.get("sub")
-    if not isinstance(subject, str) or not subject.isdigit():
+    subject = claims.sub
+    if not subject.isdigit():
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid token subject",

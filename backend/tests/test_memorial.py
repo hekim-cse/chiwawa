@@ -14,6 +14,7 @@ from PIL import ExifTags, Image
 
 from chiwawa_backend.main import create_app
 from chiwawa_backend.routers.memorial import MAX_MEMORIAL_PHOTO_SIZE_BYTES
+from chiwawa_backend.schemas.auth import GoogleUserProfile
 from chiwawa_backend.services import geocode
 from chiwawa_backend.services.auth import save_or_update_user
 from chiwawa_backend.services.jwt_auth import create_access_token
@@ -30,15 +31,19 @@ OSAKA_LONGITUDE = 135.503111
 def memorial_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("GOOGLE_AUTH_DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("MEMORIAL_PHOTO_DIR", str(tmp_path / "photos"))
+    monkeypatch.setenv("JWT_SECRET", "test-only-secret-at-least-32-characters")
     monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
 
 
 def _create_user_token(google_sub: str) -> str:
     user = save_or_update_user(
-        {"sub": google_sub, "email": f"{google_sub}@test.dev", "name": google_sub}
+        GoogleUserProfile(
+            sub=google_sub,
+            email=f"{google_sub}@test.dev",
+            name=google_sub,
+        ),
     )
-    user_id = cast("object", user["id"])
-    return create_access_token(subject=str(user_id))
+    return create_access_token(subject=user.id)
 
 
 def _auth_header(token: str) -> dict[str, str]:
