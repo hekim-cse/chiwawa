@@ -12,6 +12,7 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 
 from chiwawa_backend.dependencies import get_current_user_id, get_state
@@ -71,7 +72,7 @@ async def upload_memorial_photo(  # noqa: PLR0913
         longitude=longitude,
         memo=memo,
     )
-    return memorial_photos.save_photo(user_id, upload)
+    return await run_in_threadpool(memorial_photos.save_photo, user_id, upload)
 
 
 @album_router.get("/calendar")
