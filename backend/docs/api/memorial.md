@@ -2,17 +2,34 @@
 
 ## 현재 범위
 
-여행 추억(Memorial) 사진을 회원 단위로 저장하고 캘린더와 날짜별 타임라인으로
-조회하는 API입니다. 사진을 업로드하면 서버가 EXIF의 촬영
-시각(`DateTimeOriginal`)과 GPS 위치를 추출해 저장하고, 위경도가 확정되면
-Google Geocoding API로 주소 라벨을 조회해 함께 저장합니다.
+모바일 앱이 원본 사진을 휴대폰에 저장하고, 백엔드는 여행별 사진 메타데이터만
+저장하는 API입니다. 사진 원본과 파일 경로는 받지 않으며 S3도 사용하지
+않습니다.
 
 모든 엔드포인트는 JWT Bearer 인증이 필요하며 자신의 사진만 조회·수정·삭제할
 수 있습니다. 지도 타일 렌더링과 발자국 애니메이션은 프론트엔드(Google Maps
 SDK) 담당이고, 백엔드는 위경도·순서·주소 라벨을 제공합니다.
 
-기존 여행 단위 인메모리 프로토타입(`/api/v1/trips/{trip_id}/memorial/*`)은
-당분간 유지하지만, 이 문서의 회원 단위 API가 정식 Memorial API입니다.
+기존 회원 단위 파일 앨범(`/api/v1/memorial/*`)은 레거시 호환용입니다. 새 앱은
+여행 단위 메타데이터 API를 사용합니다.
+
+## 앱 사진 메타데이터 등록
+
+`POST /api/v1/trips/{trip_id}/memorial/photos` (`application/json`)
+
+```json
+{
+  "device_photo_id": "device-photo-001",
+  "file_name": "IMG_0001.jpg",
+  "taken_at": "2026-07-10T20:30:00+09:00",
+  "latitude": 35.6595,
+  "longitude": 139.7005,
+  "memo": "Shibuya at night"
+}
+```
+
+응답은 `storage: "device"`를 포함합니다. 같은 여행에서 같은
+`device_photo_id`를 재전송하면 기존 메타데이터를 반환합니다.
 
 ## 흐름
 

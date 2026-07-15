@@ -27,9 +27,9 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 - 존재하지 않는 리소스: `404 {"detail": "..."}`
 - Google 인증 API는 환경 변수 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
   `GOOGLE_REDIRECT_URI`, `JWT_SECRET` 설정에 의존합니다.
-- Bearer 토큰이 필수인 경로는 `/api/v1/auth/me`와 회원 단위 Memorial
-  API(`/api/v1/memorial/*`)입니다. 나머지 여행 API는 개발 프로토타입 단계에서
-  공개되어 있습니다.
+- Bearer 토큰이 필수인 경로는 `/api/v1/auth/me`와 운영 여행·Memorial API입니다.
+  새 앱의 Memorial 원본은 휴대폰 로컬 저장소가 소유하고 백엔드는 메타데이터만
+  저장합니다.
 - 기본 실행은 `127.0.0.1`에만 바인딩합니다. 공유 개발 서버나 외부 인터페이스에
   노출하기 전에는 여행 API 인증과 사용자 소유권을 먼저 적용해야 합니다.
 - 여행, 장소, 일정, 추천, 기록은 서버 메모리에 저장되므로 재시작 시
@@ -73,7 +73,7 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 | travel | POST | 201 | 빈 시간 추천 일정 추가 | `/api/v1/trips/{trip_id}/travel/free-time-recommendations/{recommendation_id}/add` | - | `AddRecommendationResponse` |
 | assistant | POST | 201 | 현재 위치 기반 코스 추천 | `/api/v1/trips/{trip_id}/assistant/nearby` | `NearbyRecommendationRequest` | `NearbyRecommendationResponse` |
 | assistant | POST | 201 | 일정 변경/지연 재추천 | `/api/v1/trips/{trip_id}/assistant/replan` | `ReplanRequest` | `ReplanResponse` |
-| memorial | POST | 201 | 여행 사진 메타데이터 등록 | `/api/v1/trips/{trip_id}/memorial/photos` | `MemorialPhotoUploadRequest` | `MemorialPhotoRead` |
+| memorial | POST | 201 | 휴대폰 로컬 사진 메타데이터 등록 | `/api/v1/trips/{trip_id}/memorial/photos` | `MemorialPhotoUploadRequest` | `MemorialPhotoRead` |
 | memorial | GET | 200 | 여행 사진 메타데이터 조회 | `/api/v1/trips/{trip_id}/memorial/photos` | - | `MemorialPhotoListResponse` |
 | memorial | POST | 201 | 여행 기록 생성 | `/api/v1/trips/{trip_id}/memorial/generate` | `MemorialGenerateRequest` | `MemorialRecordRead` |
 | memorial | GET | 200 | 여행 기록 조회 | `/api/v1/trips/{trip_id}/memorial` | - | `MemorialRecordRead` |
@@ -97,8 +97,8 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 7. `POST /api/v1/trips/{trip_id}/route-optimizations`로 방문 동선을 최적화합니다.
 8. 여행 중에는 `/travel`과 `/assistant` API로 빈 시간 추천, 주변 추천, 재추천을 사용합니다.
 9. 여행 후에는 `/memorial/photos`와 `/memorial/generate`로 기록을 생성합니다.
-10. 회원 단위 추억 앨범은 `/api/v1/memorial`로 사진을 업로드하고
-    캘린더·타임라인으로 조회합니다.
+10. 모바일 앱이 원본을 보관하고 `/api/v1/trips/{trip_id}/memorial/photos`에
+    `device_photo_id`와 촬영 메타데이터만 등록합니다.
 
 ## 현재 검증 규칙
 

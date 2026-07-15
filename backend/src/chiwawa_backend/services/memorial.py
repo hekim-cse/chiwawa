@@ -20,9 +20,22 @@ def upload_photo(
     payload: MemorialPhotoUploadRequest,
 ) -> MemorialPhotoRead:
     _ = require_trip(state, trip_id)
+    if payload.device_photo_id is not None:
+        existing = next(
+            (
+                photo
+                for photo in state.photos.values()
+                if photo.trip_id == trip_id
+                and photo.device_photo_id == payload.device_photo_id
+            ),
+            None,
+        )
+        if existing is not None:
+            return existing
     photo = MemorialPhotoRead(
         id=state.next_id("photo"),
         trip_id=trip_id,
+        device_photo_id=payload.device_photo_id,
         file_name=payload.file_name,
         taken_at=payload.taken_at,
         latitude=payload.latitude,
