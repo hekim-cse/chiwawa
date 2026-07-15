@@ -131,3 +131,9 @@ class ClusteringEvaluationResultDTO(BaseModel):
     unassigned_poi_count: int = Field(ge=0)
 
     day_clusters: List[DayClusterEvaluationDTO]
+
+
+# Clustering Evaluation 실행에 필요한 입력 Scenario DTO
+class ClusteringEvaluationScenarioDTO(BaseModel):
+    scenario_id: str
+    request: TripPlanningRequestDTO
