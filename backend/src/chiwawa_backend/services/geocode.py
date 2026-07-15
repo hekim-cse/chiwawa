@@ -12,6 +12,9 @@ from typing import cast
 import httpx
 
 GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
+type JsonValue = (
+    str | int | float | bool | None | list[JsonValue] | dict[str, JsonValue]
+)
 
 
 def reverse_geocode(latitude: float, longitude: float) -> str | None:
@@ -29,20 +32,20 @@ def reverse_geocode(latitude: float, longitude: float) -> str | None:
             timeout=5.0,
         )
         _ = response.raise_for_status()
-        payload = cast("object", response.json())
-    except httpx.HTTPError:
+        payload = cast("JsonValue", response.json())
+    except (httpx.HTTPError, ValueError):
         return None
     return _first_formatted_address(payload)
 
 
-def _first_formatted_address(payload: object) -> str | None:
+def _first_formatted_address(payload: JsonValue) -> str | None:
     if not isinstance(payload, dict):
         return None
-    results = cast("dict[str, object]", payload).get("results")
+    results = payload.get("results")
     if not isinstance(results, list) or not results:
         return None
-    first = cast("list[object]", results)[0]
+    first = results[0]
     if not isinstance(first, dict):
         return None
-    address = cast("dict[str, object]", first).get("formatted_address")
+    address = first.get("formatted_address")
     return address if isinstance(address, str) else None

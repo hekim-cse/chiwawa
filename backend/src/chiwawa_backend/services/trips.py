@@ -9,6 +9,7 @@ from chiwawa_backend.schemas.trips import (
     TripUpdateRequest,
 )
 from chiwawa_backend.services.common import require_trip
+from chiwawa_backend.services.patch_values import required_patch_value
 from chiwawa_backend.state import AppState, synchronized
 
 TRIP_DATE_ORDER_ERROR = "end_date must not be before start_date"
@@ -17,7 +18,11 @@ TRIP_DURATION_ERROR = f"trip duration must not exceed {MAX_TRIP_DAYS} days"
 
 
 @synchronized
-def create_trip(state: AppState, payload: TripCreateRequest) -> TripRead:
+def create_trip(
+    state: AppState,
+    payload: TripCreateRequest,
+    actor_id: int = 0,
+) -> TripRead:
     trip_id = state.next_id("trip")
     title = payload.title or f"{payload.city} travel"
     trip = TripRead(
@@ -32,12 +37,24 @@ def create_trip(state: AppState, payload: TripCreateRequest) -> TripRead:
         travel_style=payload.travel_style,
     )
     state.trips[trip.id] = trip
+    state.trip_owners[trip.id] = actor_id
     return trip
 
 
 @synchronized
-def list_trips(state: AppState) -> TripListResponse:
-    return TripListResponse(items=list(state.trips.values()))
+def list_trips(
+    state: AppState,
+    actor_id: int = 0,
+    *,
+    include_unowned: bool = True,
+) -> TripListResponse:
+    items = [
+        trip
+        for trip_id, trip in state.trips.items()
+        if state.trip_owners.get(trip_id) == actor_id
+        or (trip_id not in state.trip_owners and include_unowned)
+    ]
+    return TripListResponse(items=items)
 
 
 @synchronized
@@ -52,10 +69,18 @@ def update_trip(
     payload: TripUpdateRequest,
 ) -> TripRead:
     trip = require_trip(state, trip_id)
-    start_date = (
-        payload.start_date if payload.start_date is not None else trip.start_date
+    start_date = required_patch_value(
+        payload,
+        "start_date",
+        payload.start_date,
+        trip.start_date,
     )
-    end_date = payload.end_date if payload.end_date is not None else trip.end_date
+    end_date = required_patch_value(
+        payload,
+        "end_date",
+        payload.end_date,
+        trip.end_date,
+    )
     if end_date < start_date:
         raise DomainValidationError(TRIP_DATE_ORDER_ERROR)
     if (end_date - start_date).days >= MAX_TRIP_DAYS:
@@ -64,20 +89,34 @@ def update_trip(
         raise DomainValidationError(TRIP_RESOURCE_RANGE_ERROR)
     updated = TripRead(
         id=trip.id,
-        title=payload.title if payload.title is not None else trip.title,
-        city=payload.city if payload.city is not None else trip.city,
-        country=payload.country if payload.country is not None else trip.country,
+        title=required_patch_value(payload, "title", payload.title, trip.title),
+        city=required_patch_value(payload, "city", payload.city, trip.city),
+        country=required_patch_value(
+            payload,
+            "country",
+            payload.country,
+            trip.country,
+        ),
         start_date=start_date,
         end_date=end_date,
-        travelers=payload.travelers
-        if payload.travelers is not None
-        else trip.travelers,
-        interests=payload.interests
-        if payload.interests is not None
-        else trip.interests,
-        travel_style=payload.travel_style
-        if payload.travel_style is not None
-        else trip.travel_style,
+        travelers=required_patch_value(
+            payload,
+            "travelers",
+            payload.travelers,
+            trip.travelers,
+        ),
+        interests=required_patch_value(
+            payload,
+            "interests",
+            payload.interests,
+            trip.interests,
+        ),
+        travel_style=required_patch_value(
+            payload,
+            "travel_style",
+            payload.travel_style,
+            trip.travel_style,
+        ),
     )
     state.trips[trip_id] = updated
     return updated
@@ -91,6 +130,7 @@ def delete_trip(state: AppState, trip_id: str) -> None:
         item.id for item in state.recommendations.values() if item.trip_id == trip_id
     }
     del state.trips[trip_id]
+    _ = state.trip_owners.pop(trip_id, None)
     for collection in (
         state.photo_searches,
         state.wanted_places,

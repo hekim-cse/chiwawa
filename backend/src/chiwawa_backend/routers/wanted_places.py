@@ -1,8 +1,7 @@
-from typing import Annotated
-
 from fastapi import APIRouter, Depends, Response, status
 
-from chiwawa_backend.dependencies import get_state
+from chiwawa_backend.dependencies import StateDep, require_trip_access
+from chiwawa_backend.routers.responses import error_responses
 from chiwawa_backend.schemas.places import (
     WantedPlaceCreateRequest,
     WantedPlaceListResponse,
@@ -10,10 +9,13 @@ from chiwawa_backend.schemas.places import (
     WantedPlaceUpdateRequest,
 )
 from chiwawa_backend.services import wanted_places as wanted_place_service
-from chiwawa_backend.state import AppState
 
-router = APIRouter(prefix="/api/v1/trips/{trip_id}/wanted-places", tags=["places"])
-StateDep = Annotated[AppState, Depends(get_state)]
+router = APIRouter(
+    prefix="/api/v1/trips/{trip_id}/wanted-places",
+    tags=["places"],
+    dependencies=[Depends(require_trip_access)],
+    responses=error_responses(401, 404, 422, 500),
+)
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)

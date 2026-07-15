@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from secrets import compare_digest, token_urlsafe
 from typing import Annotated
@@ -11,42 +12,111 @@ from fastapi.responses import RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
 
-from chiwawa_backend.config import get_settings
-from chiwawa_backend.dependencies import get_state
+from chiwawa_backend.config import Settings
+from chiwawa_backend.dependencies import get_app_settings, get_oauth_state_store
+from chiwawa_backend.routers.responses import error_responses
 from chiwawa_backend.schemas.auth import (
     CurrentUserRead,
     GoogleAuthResponse,
     GoogleTokenResponse,
     GoogleUserProfile,
 )
-from chiwawa_backend.schemas.base import ErrorResponse
 from chiwawa_backend.services.auth import save_or_update_user
 from chiwawa_backend.services.jwt_auth import (
     create_access_token,
     get_current_user_from_credentials,
     security,
 )
-from chiwawa_backend.state import AppState
+from chiwawa_backend.services.oauth_state_store import (
+    OAuthStateCapacityError,
+    OAuthStateCollisionError,
+    OAuthStateStore,
+)
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
-StateDep = Annotated[AppState, Depends(get_state)]
+OAuthStateDep = Annotated[OAuthStateStore, Depends(get_oauth_state_store)]
+SettingsDep = Annotated[Settings, Depends(get_app_settings)]
 OAUTH_STATE_COOKIE = "chiwawa_oauth_state"
 OAUTH_COOKIE_PATH = "/api/v1/auth/google"
+MAX_OAUTH_STATE_ISSUE_ATTEMPTS = 3
+
+
+@dataclass(frozen=True, slots=True)
+class OAuthCallbackParams:
+    code: str
+    state_value: str
+
+
+def _oauth_callback_params(
+    code: Annotated[str, Query(min_length=1, max_length=4096)],
+    state_value: Annotated[
+        str,
+        Query(
+            alias="state",
+            min_length=40,
+            max_length=128,
+            pattern=r"^[A-Za-z0-9_-]+$",
+        ),
+    ],
+    state_cookie: Annotated[
+        str,
+        Cookie(
+            alias=OAUTH_STATE_COOKIE,
+            min_length=40,
+            max_length=128,
+            pattern=r"^[A-Za-z0-9_-]+$",
+        ),
+    ],
+) -> OAuthCallbackParams:
+    if not compare_digest(
+        state_value.encode(),
+        state_cookie.encode(),
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="invalid OAuth state",
+        )
+    return OAuthCallbackParams(code=code, state_value=state_value)
+
+
+def _issue_oauth_state(
+    oauth_states: OAuthStateStore,
+    expires_at: datetime,
+) -> str:
+    for _attempt in range(MAX_OAUTH_STATE_ISSUE_ATTEMPTS):
+        oauth_state = token_urlsafe(32)
+        try:
+            oauth_states.issue(oauth_state, expires_at)
+        except OAuthStateCollisionError:
+            continue
+        return oauth_state
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="OAuth state generation unavailable",
+    )
 
 
 @router.get(
     "/google/login",
     status_code=status.HTTP_302_FOUND,
     response_class=RedirectResponse,
+    responses=error_responses(429, 500, 503),
 )
-def google_login(app_state: StateDep) -> RedirectResponse:
-    settings = get_settings()
+def google_login(
+    settings: SettingsDep,
+    oauth_states: OAuthStateDep,
+) -> RedirectResponse:
     oauth = settings.require_google_oauth()
-    oauth_state = token_urlsafe(32)
     expires_at = datetime.now(UTC) + timedelta(
         seconds=settings.google_oauth_state_ttl_seconds,
     )
-    app_state.issue_oauth_state(oauth_state, expires_at)
+    try:
+        oauth_state = _issue_oauth_state(oauth_states, expires_at)
+    except OAuthStateCapacityError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="OAuth login capacity reached",
+        ) from exc
     params = {
         "client_id": oauth.client_id,
         "redirect_uri": oauth.redirect_uri,
@@ -74,53 +144,23 @@ def google_login(app_state: StateDep) -> RedirectResponse:
 @router.get(
     "/google/callback",
     response_model=GoogleAuthResponse,
-    responses={
-        status.HTTP_400_BAD_REQUEST: {"model": ErrorResponse},
-        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": ErrorResponse},
-        status.HTTP_502_BAD_GATEWAY: {"model": ErrorResponse},
-    },
+    responses=error_responses(400, 422, 500, 502),
 )
 def google_callback(
     response: Response,
-    app_state: StateDep,
-    code: Annotated[str, Query(min_length=1, max_length=4096)],
-    state_value: Annotated[
-        str,
-        Query(
-            alias="state",
-            min_length=40,
-            max_length=128,
-            pattern=r"^[A-Za-z0-9_-]+$",
-        ),
-    ],
-    state_cookie: Annotated[
-        str,
-        Cookie(
-            alias=OAUTH_STATE_COOKIE,
-            min_length=40,
-            max_length=128,
-            pattern=r"^[A-Za-z0-9_-]+$",
-        ),
-    ],
+    oauth_states: OAuthStateDep,
+    settings: SettingsDep,
+    callback: Annotated[OAuthCallbackParams, Depends(_oauth_callback_params)],
 ) -> GoogleAuthResponse:
-    if not compare_digest(
-        state_value.encode(),
-        state_cookie.encode(),
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="invalid OAuth state",
-        )
-    if not app_state.consume_oauth_state(state_value, datetime.now(UTC)):
+    if not oauth_states.consume(callback.state_value, datetime.now(UTC)):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid OAuth state",
         )
 
-    settings = get_settings()
     oauth = settings.require_google_oauth()
     token = _exchange_code(
-        code,
+        callback.code,
         oauth.client_id,
         oauth.client_secret,
         oauth.redirect_uri,
@@ -130,6 +170,7 @@ def google_callback(
     access_token = create_access_token(
         subject=user.id,
         payload={"email": user.email, "name": user.name},
+        settings=settings,
     )
     response.delete_cookie(key=OAUTH_STATE_COOKIE, path=OAUTH_COOKIE_PATH)
     _set_no_store_headers(response)
@@ -139,15 +180,16 @@ def google_callback(
 @router.get(
     "/me",
     response_model=CurrentUserRead,
-    responses={status.HTTP_401_UNAUTHORIZED: {"model": ErrorResponse}},
+    responses=error_responses(401, 500),
 )
 def get_me(
+    settings: SettingsDep,
     credentials: Annotated[
         HTTPAuthorizationCredentials | None,
         Depends(security),
     ],
 ) -> CurrentUserRead:
-    return get_current_user_from_credentials(credentials)
+    return get_current_user_from_credentials(credentials, settings)
 
 
 def _exchange_code(

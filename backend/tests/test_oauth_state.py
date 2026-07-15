@@ -1,11 +1,11 @@
-from datetime import UTC, datetime, timedelta
+from dataclasses import fields
 
 from chiwawa_backend.state import AppState
 
 
-def test_oauth_state_is_invalid_at_exact_expiration() -> None:
-    state = AppState()
-    expires_at = datetime.now(UTC) + timedelta(minutes=1)
-    state.issue_oauth_state("x" * 43, expires_at)
+def test_app_state_excludes_oauth_runtime_storage() -> None:
+    # Given: AppState is the durable travel aggregate.
+    field_names = {item.name for item in fields(AppState)}
 
-    assert state.consume_oauth_state("x" * 43, expires_at) is False
+    # When/Then: OAuth's separately persisted runtime state is not part of it.
+    assert "oauth_states" not in field_names

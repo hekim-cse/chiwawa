@@ -18,6 +18,22 @@ def require_trip(state: AppState, trip_id: str) -> TripRead:
         raise NotFoundError(entity="trip", entity_id=trip_id) from error
 
 
+def require_trip_access(
+    state: AppState,
+    trip_id: str,
+    actor_id: int,
+    *,
+    allow_unowned: bool,
+) -> TripRead:
+    trip = state.trips.get(trip_id)
+    owner_id = state.trip_owners.get(trip_id)
+    is_owner = owner_id == actor_id
+    is_compatible_seed = owner_id is None and allow_unowned
+    if trip is not None and (is_owner or is_compatible_seed):
+        return trip
+    raise NotFoundError(entity="trip", entity_id="resource")
+
+
 def require_photo_search(
     state: AppState,
     trip_id: str,

@@ -9,6 +9,8 @@ from chiwawa_backend.schemas.memorial import (
     MemorialUpdateRequest,
 )
 from chiwawa_backend.services.common import require_memorial, require_trip
+from chiwawa_backend.services.coordinates import require_coordinate_pair
+from chiwawa_backend.services.patch_values import required_patch_value
 from chiwawa_backend.services.schedule import list_schedule
 from chiwawa_backend.state import AppState, synchronized
 
@@ -20,9 +22,23 @@ def upload_photo(
     payload: MemorialPhotoUploadRequest,
 ) -> MemorialPhotoRead:
     _ = require_trip(state, trip_id)
+    require_coordinate_pair(payload.latitude, payload.longitude)
+    if payload.device_photo_id is not None:
+        existing = next(
+            (
+                photo
+                for photo in state.photos.values()
+                if photo.trip_id == trip_id
+                and photo.device_photo_id == payload.device_photo_id
+            ),
+            None,
+        )
+        if existing is not None:
+            return existing
     photo = MemorialPhotoRead(
         id=state.next_id("photo"),
         trip_id=trip_id,
+        device_photo_id=payload.device_photo_id,
         file_name=payload.file_name,
         taken_at=payload.taken_at,
         latitude=payload.latitude,
@@ -84,8 +100,18 @@ def update_memorial(
     updated = MemorialRecordRead(
         id=memorial.id,
         trip_id=memorial.trip_id,
-        title=payload.title or memorial.title,
-        summary=payload.summary or memorial.summary,
+        title=required_patch_value(
+            payload,
+            "title",
+            payload.title,
+            memorial.title,
+        ),
+        summary=required_patch_value(
+            payload,
+            "summary",
+            payload.summary,
+            memorial.summary,
+        ),
         timeline=memorial.timeline,
         photo_count=memorial.photo_count,
     )

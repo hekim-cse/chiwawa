@@ -5,7 +5,7 @@ description = "FastAPI backend for the Chiwawa travel planner service"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "fastapi>=0.116.0",
+    "fastapi>=0.139.0",
     "httpx>=0.28.0",
     "PyJWT>=2.10.0",
     "pydantic>=2.11.0",

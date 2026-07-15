@@ -1,11 +1,25 @@
 from datetime import date
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from chiwawa_backend.schemas.base import ApiModel, TravelStyle
+from chiwawa_backend.schemas.patch_validation import reject_explicit_null
 
 MAX_TRIP_DAYS = 31
+TRIP_REQUIRED_PATCH_FIELDS = frozenset(
+    {
+        "city",
+        "country",
+        "start_date",
+        "end_date",
+        "travelers",
+        "interests",
+        "travel_style",
+        "title",
+    },
+)
 
 
 class TripCreateRequest(ApiModel):
@@ -30,14 +44,19 @@ class TripCreateRequest(ApiModel):
 
 
 class TripUpdateRequest(ApiModel):
-    city: str | None = Field(default=None, min_length=1)
-    country: str | None = Field(default=None, min_length=1)
-    start_date: date | None = None
-    end_date: date | None = None
-    travelers: int | None = Field(default=None, ge=1)
-    interests: list[str] | None = None
-    travel_style: TravelStyle | None = None
-    title: str | None = Field(default=None, min_length=1)
+    city: Annotated[str, Field(min_length=1)] | SkipJsonSchema[None] = None
+    country: Annotated[str, Field(min_length=1)] | SkipJsonSchema[None] = None
+    start_date: date | SkipJsonSchema[None] = None
+    end_date: date | SkipJsonSchema[None] = None
+    travelers: Annotated[int, Field(ge=1)] | SkipJsonSchema[None] = None
+    interests: list[str] | SkipJsonSchema[None] = None
+    travel_style: TravelStyle | SkipJsonSchema[None] = None
+    title: Annotated[str, Field(min_length=1)] | SkipJsonSchema[None] = None
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self) -> Self:
+        reject_explicit_null(self, TRIP_REQUIRED_PATCH_FIELDS)
+        return self
 
 
 class TripRead(ApiModel):

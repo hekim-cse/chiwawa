@@ -1,16 +1,28 @@
 import datetime as dt
+from typing import Annotated, Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from chiwawa_backend.schemas.base import ApiModel
+from chiwawa_backend.schemas.patch_validation import (
+    reject_explicit_null,
+    require_coordinate_pair,
+)
 
 
 class MemorialPhotoUploadRequest(ApiModel):
+    device_photo_id: str | None = Field(default=None, min_length=1, max_length=255)
     file_name: str = Field(min_length=1)
     taken_at: dt.datetime | None = None
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     memo: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def require_paired_coordinates(self) -> Self:
+        require_coordinate_pair(self, self.latitude, self.longitude)
+        return self
 
 
 class MemorialPhotoRead(ApiModel):
@@ -21,6 +33,8 @@ class MemorialPhotoRead(ApiModel):
     latitude: float | None
     longitude: float | None
     memo: str | None
+    device_photo_id: str | None = None
+    storage: Literal["device"] = "device"
 
 
 class MemorialPhotoListResponse(ApiModel):
@@ -42,8 +56,13 @@ class MemorialRecordRead(ApiModel):
 
 
 class MemorialUpdateRequest(ApiModel):
-    title: str | None = Field(default=None, min_length=1)
-    summary: str | None = Field(default=None, min_length=1)
+    title: Annotated[str, Field(min_length=1)] | SkipJsonSchema[None] = None
+    summary: Annotated[str, Field(min_length=1)] | SkipJsonSchema[None] = None
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self) -> Self:
+        reject_explicit_null(self, frozenset({"title", "summary"}))
+        return self
 
 
 class MemorialPhotoItem(ApiModel):
@@ -85,7 +104,13 @@ class MemorialDayResponse(ApiModel):
 
 
 class MemorialPhotoPatchRequest(ApiModel):
-    taken_at: dt.datetime | None = None
+    taken_at: dt.datetime | SkipJsonSchema[None] = None
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     memo: str | None = Field(default=None, min_length=1)
+
+    @model_validator(mode="after")
+    def validate_patch(self) -> Self:
+        reject_explicit_null(self, frozenset({"taken_at"}))
+        require_coordinate_pair(self, self.latitude, self.longitude)
+        return self

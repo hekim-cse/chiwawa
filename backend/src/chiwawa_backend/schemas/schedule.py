@@ -1,9 +1,15 @@
 import datetime as dt
-from typing import Self
+from typing import Annotated, Self
 
 from pydantic import Field, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from chiwawa_backend.schemas.base import ApiModel, PlaceSource
+from chiwawa_backend.schemas.patch_validation import reject_explicit_null
+
+SCHEDULE_REQUIRED_PATCH_FIELDS = frozenset(
+    {"name", "date", "start_time", "end_time", "source"},
+)
 
 
 class ScheduleItemCreateRequest(ApiModel):
@@ -27,13 +33,18 @@ class ScheduleItemCreateRequest(ApiModel):
 
 
 class ScheduleItemUpdateRequest(ApiModel):
-    name: str | None = Field(default=None, min_length=1)
-    date: dt.date | None = None
-    start_time: dt.time | None = None
-    end_time: dt.time | None = None
+    name: Annotated[str, Field(min_length=1)] | SkipJsonSchema[None] = None
+    date: dt.date | SkipJsonSchema[None] = None
+    start_time: dt.time | SkipJsonSchema[None] = None
+    end_time: dt.time | SkipJsonSchema[None] = None
     place_id: str | None = Field(default=None, min_length=1)
     notes: str | None = Field(default=None, min_length=1)
-    source: PlaceSource | None = None
+    source: PlaceSource | SkipJsonSchema[None] = None
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self) -> Self:
+        reject_explicit_null(self, SCHEDULE_REQUIRED_PATCH_FIELDS)
+        return self
 
 
 class ScheduleItemRead(ApiModel):

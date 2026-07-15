@@ -18,22 +18,31 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 | ReDoc | `http://localhost:8000/redoc` |
 | OpenAPI JSON | `http://localhost:8000/openapi.json` |
 | Health check | `http://localhost:8000/health` |
+| Readiness check | `http://localhost:8000/ready` |
 
 ## 공통 규칙
 
 - API prefix: `/api/v1`
 - 요청/응답 본문: JSON
-- 요청 또는 도메인 검증 실패: `422 Unprocessable Content`
-- 존재하지 않는 리소스: `404 {"detail": "..."}`
+- 공통 오류 본문: `{"detail": "..."}`
+- 잘못되거나 모순된 body framing은 400, request body limit 초과는 413입니다.
+- 요청 또는 도메인 검증 실패는 422, 없는 리소스와 다른 사용자의 리소스는
+  404입니다.
+- 예상하지 못한 내부 예외도 JSON ErrorResponse 500으로 정규화합니다.
 - Google 인증 API는 환경 변수 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
   `GOOGLE_REDIRECT_URI`, `JWT_SECRET` 설정에 의존합니다.
-- Bearer 토큰이 필수인 경로는 `/api/v1/auth/me`와 회원 단위 Memorial
-  API(`/api/v1/memorial/*`)입니다. 나머지 여행 API는 개발 프로토타입 단계에서
-  공개되어 있습니다.
-- 기본 실행은 `127.0.0.1`에만 바인딩합니다. 공유 개발 서버나 외부 인터페이스에
-  노출하기 전에는 여행 API 인증과 사용자 소유권을 먼저 적용해야 합니다.
-- 여행, 장소, 일정, 추천, 기록은 서버 메모리에 저장되므로 재시작 시
-  초기화됩니다.
+- OpenAPI의 모든 여행·회원 Memorial operation은 Bearer를 선언합니다. 운영에서는
+  이를 강제하고 여행 owner가 아니면 404입니다. 개발 여행 API만 호환용 actor
+  `0`을 허용합니다.
+- 운영 여행 상태와 OAuth state는 SQLite에 저장되어 여러 worker와 재시작 사이에
+  유지됩니다. 개발 여행 상태는 프로세스 메모리입니다.
+- 사진 원본은 모바일 앱 로컬 저장소에만 보관하며 S3나 백엔드 파일 저장소를
+  사용하지 않습니다. 백엔드는 여행별 사진 메타데이터만 SQLite에 저장합니다.
+- 회원 단위 multipart 사진 앨범 API는 레거시 호환용이며 새 앱 흐름에서는
+  사용하지 않습니다.
+- `/health`는 liveness, `/ready`는 운영 설정·DB migration·접속을 검사합니다.
+  실패는 503입니다.
+- 운영은 로컬 SQLite를 공유하는 단일 호스트 배포를 지원합니다.
 - 사진 검색, AI 일정 생성, 동선 최적화, 주변 추천, 빈 시간 추천은 외부
   서비스가 아닌 모의 휴리스틱입니다. 생성 ID와 시각은 요청마다 달라질 수 있습니다.
 - 인증 흐름 상세는 [auth.md](./auth.md)를 봅니다.
@@ -45,6 +54,7 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 | Tag | Method | Status | 설명 | Path | Request | Response |
 | --- | --- | --- | --- | --- | --- | --- |
 | health | GET | 200 | 서버 상태 확인 | `/health` | - | `HealthResponse` |
+| health | GET | 200 | 운영 의존성 준비 확인 | `/ready` | - | `HealthResponse` |
 | auth | GET | 302 | Google OAuth 로그인 URL로 이동 | `/api/v1/auth/google/login` | - | Redirect |
 | auth | GET | 200 | 일회성 state 검증, Google callback 처리, JWT 발급 | `/api/v1/auth/google/callback` | query: `code`, `state`; state cookie | `GoogleAuthResponse` |
 | auth | GET | 200 | Bearer 토큰 기준 현재 사용자 확인 | `/api/v1/auth/me` | Authorization header | `CurrentUserRead` |
@@ -73,18 +83,18 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 | travel | POST | 201 | 빈 시간 추천 일정 추가 | `/api/v1/trips/{trip_id}/travel/free-time-recommendations/{recommendation_id}/add` | - | `AddRecommendationResponse` |
 | assistant | POST | 201 | 현재 위치 기반 코스 추천 | `/api/v1/trips/{trip_id}/assistant/nearby` | `NearbyRecommendationRequest` | `NearbyRecommendationResponse` |
 | assistant | POST | 201 | 일정 변경/지연 재추천 | `/api/v1/trips/{trip_id}/assistant/replan` | `ReplanRequest` | `ReplanResponse` |
-| memorial | POST | 201 | 여행 사진 메타데이터 등록 | `/api/v1/trips/{trip_id}/memorial/photos` | `MemorialPhotoUploadRequest` | `MemorialPhotoRead` |
+| memorial | POST | 201 | 휴대폰 로컬 사진 메타데이터 등록 | `/api/v1/trips/{trip_id}/memorial/photos` | `MemorialPhotoUploadRequest` | `MemorialPhotoRead` |
 | memorial | GET | 200 | 여행 사진 메타데이터 조회 | `/api/v1/trips/{trip_id}/memorial/photos` | - | `MemorialPhotoListResponse` |
 | memorial | POST | 201 | 여행 기록 생성 | `/api/v1/trips/{trip_id}/memorial/generate` | `MemorialGenerateRequest` | `MemorialRecordRead` |
 | memorial | GET | 200 | 여행 기록 조회 | `/api/v1/trips/{trip_id}/memorial` | - | `MemorialRecordRead` |
 | memorial | PATCH | 200 | 여행 기록 수정 | `/api/v1/trips/{trip_id}/memorial` | `MemorialUpdateRequest` | `MemorialRecordRead` |
-| memorial | POST | 201 | 회원 사진 업로드, EXIF 시각·위치 추출 | `/api/v1/memorial/photos` | Authorization header; multipart form | `MemorialPhotoItem` |
-| memorial | GET | 200 | 사진이 있는 날짜 캘린더 조회 | `/api/v1/memorial/calendar` | Authorization header; query: `year`, `month` | `MemorialCalendarResponse` |
-| memorial | GET | 200 | 날짜별 사진 타임라인 조회 | `/api/v1/memorial/days/{day}` | Authorization header | `MemorialDayResponse` |
-| memorial | GET | 200 | 사진 메타데이터 단건 조회 | `/api/v1/memorial/photos/{photo_id}` | Authorization header | `MemorialPhotoItem` |
-| memorial | GET | 200 | 사진 원본 파일 조회 | `/api/v1/memorial/photos/{photo_id}/file` | Authorization header | 이미지 바이너리 |
-| memorial | PATCH | 200 | 사진 정보 수정 | `/api/v1/memorial/photos/{photo_id}` | Authorization header; `MemorialPhotoPatchRequest` | `MemorialPhotoItem` |
-| memorial | DELETE | 204 | 사진 삭제 | `/api/v1/memorial/photos/{photo_id}` | Authorization header | - |
+| memorial (legacy) | POST | 201 | 레거시 회원 사진 업로드 | `/api/v1/memorial/photos` | Authorization header; multipart form | `MemorialPhotoItem` |
+| memorial (legacy) | GET | 200 | 레거시 사진 캘린더 조회 | `/api/v1/memorial/calendar` | Authorization header; query: `year`, `month` | `MemorialCalendarResponse` |
+| memorial (legacy) | GET | 200 | 레거시 날짜별 사진 타임라인 조회 | `/api/v1/memorial/days/{day}` | Authorization header | `MemorialDayResponse` |
+| memorial (legacy) | GET | 200 | 레거시 사진 메타데이터 조회 | `/api/v1/memorial/photos/{photo_id}` | Authorization header | `MemorialPhotoItem` |
+| memorial (legacy) | GET | 200 | 레거시 사진 원본 조회 | `/api/v1/memorial/photos/{photo_id}/file` | Authorization header | 이미지 바이너리 |
+| memorial (legacy) | PATCH | 200 | 레거시 사진 정보 수정 | `/api/v1/memorial/photos/{photo_id}` | Authorization header; `MemorialPhotoPatchRequest` | `MemorialPhotoItem` |
+| memorial (legacy) | DELETE | 204 | 레거시 사진 삭제 | `/api/v1/memorial/photos/{photo_id}` | Authorization header | - |
 
 ## 핵심 사용 흐름
 
@@ -96,9 +106,10 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 6. `POST /api/v1/trips/{trip_id}/plans/{plan_id}/confirm`으로 일정을 확정합니다.
 7. `POST /api/v1/trips/{trip_id}/route-optimizations`로 방문 동선을 최적화합니다.
 8. 여행 중에는 `/travel`과 `/assistant` API로 빈 시간 추천, 주변 추천, 재추천을 사용합니다.
-9. 여행 후에는 `/memorial/photos`와 `/memorial/generate`로 기록을 생성합니다.
-10. 회원 단위 추억 앨범은 `/api/v1/memorial`로 사진을 업로드하고
-    캘린더·타임라인으로 조회합니다.
+9. 여행 후 모바일 앱이 원본을 보관하고 `/api/v1/trips/{trip_id}/memorial/photos`에
+   `device_photo_id`와 촬영 메타데이터만 등록합니다.
+10. `/api/v1/trips/{trip_id}/memorial`의 타임라인·요약으로 여행 기록을 조회합니다.
+    `/api/v1/memorial`은 새 앱 흐름에서 사용하지 않는 레거시 API입니다.
 
 ## 현재 검증 규칙
 
@@ -108,6 +119,12 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 - 일정·추천·계획 시각은 timezone offset 없는 일본 현지 시각이며, 추천과 계획
   시간창은 최소 1분입니다.
 - 일정과 빈 시간 추천 날짜는 여행 기간 안에 있어야 합니다.
+- PATCH는 생략과 명시적 null을 구분합니다. nullable 필드 null은 값을 지우고
+  required 필드 null은 422입니다.
+- 위도·경도는 함께 숫자이거나 함께 null이어야 합니다.
+- schedule의 `place_id`는 같은 여행 wanted place만 참조할 수 있습니다.
+- 참조된 wanted place를 삭제하면 schedule·plan의 선택적 참조를 nullify해
+  dangling ID를 남기지 않습니다.
 - 여행 날짜를 수정할 때 기존 일정·추천·계획이 새 범위 밖에 남으면 422로
   거부합니다.
 - 일정 초안은 요청한 시작·종료 시각 안에서 겹치지 않게 순차 배치됩니다.

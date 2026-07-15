@@ -7,7 +7,15 @@ from chiwawa_backend.schemas.schedule import (
     ScheduleItemUpdateRequest,
     ScheduleResponse,
 )
-from chiwawa_backend.services.common import require_schedule_item, require_trip
+from chiwawa_backend.services.common import (
+    require_schedule_item,
+    require_trip,
+    require_wanted_place,
+)
+from chiwawa_backend.services.patch_values import (
+    nullable_patch_value,
+    required_patch_value,
+)
 from chiwawa_backend.state import AppState, synchronized
 
 SCHEDULE_DATE_ERROR = "schedule date must be within trip dates"
@@ -56,11 +64,24 @@ def update_schedule_item(
 ) -> ScheduleItemRead:
     item = require_schedule_item(state, trip_id, item_id)
     trip = require_trip(state, trip_id)
-    date_value = payload.date if payload.date is not None else item.date
-    start_time = (
-        payload.start_time if payload.start_time is not None else item.start_time
+    date_value = required_patch_value(
+        payload,
+        "date",
+        payload.date,
+        item.date,
     )
-    end_time = payload.end_time if payload.end_time is not None else item.end_time
+    start_time = required_patch_value(
+        payload,
+        "start_time",
+        payload.start_time,
+        item.start_time,
+    )
+    end_time = required_patch_value(
+        payload,
+        "end_time",
+        payload.end_time,
+        item.end_time,
+    )
     _validate_schedule_values(
         trip.start_date,
         trip.end_date,
@@ -68,16 +89,34 @@ def update_schedule_item(
         start_time,
         end_time,
     )
+    place_id = nullable_patch_value(
+        payload,
+        "place_id",
+        payload.place_id,
+        item.place_id,
+    )
+    if place_id is not None:
+        _ = require_wanted_place(state, trip_id, place_id)
     updated = ScheduleItemRead(
         id=item.id,
         trip_id=item.trip_id,
-        name=payload.name or item.name,
+        name=required_patch_value(payload, "name", payload.name, item.name),
         date=date_value,
         start_time=start_time,
         end_time=end_time,
-        place_id=payload.place_id if payload.place_id is not None else item.place_id,
-        notes=payload.notes if payload.notes is not None else item.notes,
-        source=payload.source if payload.source is not None else item.source,
+        place_id=place_id,
+        notes=nullable_patch_value(
+            payload,
+            "notes",
+            payload.notes,
+            item.notes,
+        ),
+        source=required_patch_value(
+            payload,
+            "source",
+            payload.source,
+            item.source,
+        ),
     )
     state.schedule_items[item.id] = updated
     return updated
@@ -114,6 +153,8 @@ def validate_schedule_item(
         payload.start_time,
         payload.end_time,
     )
+    if payload.place_id is not None:
+        _ = require_wanted_place(state, trip_id, payload.place_id)
 
 
 def _validate_schedule_values(

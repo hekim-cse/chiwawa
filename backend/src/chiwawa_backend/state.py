@@ -1,6 +1,5 @@
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from functools import wraps
 from threading import RLock
 from typing import Concatenate
@@ -17,12 +16,13 @@ from chiwawa_backend.schemas.schedule import ScheduleItemRead
 from chiwawa_backend.schemas.travel import FreeTimeRecommendationRead
 from chiwawa_backend.schemas.trips import TripRead
 
-MAX_OAUTH_STATES = 10_000
 
-
-@dataclass(slots=True)
+@dataclass(slots=True)  # noqa: RUF100  # noqa: MUTABLE_OK
 class AppState:
+    """Mutable request-local aggregate updated by synchronous domain services."""
+
     trips: dict[str, TripRead] = field(default_factory=dict)
+    trip_owners: dict[str, int] = field(default_factory=dict)
     photo_searches: dict[str, PhotoPlaceSearchResponse] = field(default_factory=dict)
     wanted_places: dict[str, WantedPlaceRead] = field(default_factory=dict)
     plan_jobs: dict[str, PlanJobRead] = field(default_factory=dict)
@@ -36,34 +36,10 @@ class AppState:
         default_factory=dict,
     )
     added_recommendations: dict[str, str] = field(default_factory=dict)
-    oauth_states: dict[str, datetime] = field(default_factory=dict)
     lock: RLock = field(default_factory=RLock, repr=False)
 
     def next_id(self, prefix: str) -> str:
         return f"{prefix}_{uuid4().hex}"
-
-    def issue_oauth_state(self, value: str, expires_at: datetime) -> None:
-        with self.lock:
-            self._purge_oauth_states(datetime.now(UTC))
-            while len(self.oauth_states) >= MAX_OAUTH_STATES:
-                oldest = next(iter(self.oauth_states))
-                del self.oauth_states[oldest]
-            self.oauth_states[value] = expires_at
-
-    def consume_oauth_state(self, value: str, now: datetime) -> bool:
-        with self.lock:
-            self._purge_oauth_states(now)
-            expires_at = self.oauth_states.pop(value, None)
-            return expires_at is not None and expires_at > now
-
-    def _purge_oauth_states(self, now: datetime) -> None:
-        expired = [
-            value
-            for value, expires_at in self.oauth_states.items()
-            if expires_at <= now
-        ]
-        for value in expired:
-            del self.oauth_states[value]
 
 
 def synchronized[**P, R](

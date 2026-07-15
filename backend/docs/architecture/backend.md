@@ -1,80 +1,99 @@
 # 백엔드 구조
 
-현재 백엔드는 FastAPI 기반 개발 프로토타입입니다. HTTP 계약, Pydantic 경계,
-서비스 로직, 저장 상태를 기능별 모듈로 분리합니다.
+## 배포 경계
+
+현재 운영 구조는 **단일 호스트·다중 Uvicorn worker**를 대상으로 합니다.
+SQLite DB와 Memorial 사진 디렉터리를 같은 호스트의 영속 디스크에 두며 S3나
+공유 object storage는 사용하지 않습니다. 다중 호스트나 NFS가 필요해지면
+정규화된 외부 DB와 별도 파일 저장 adapter로 교체해야 합니다.
+
+개발 모드는 빠른 테스트를 위해 여행 aggregate를 메모리에 유지합니다. 운영
+모드는 요청마다 SQLite snapshot을 읽고 쓰므로 worker와 재시작 사이에 상태가
+유지됩니다.
 
 ## 모듈 구조
 
-| 영역 | 경로 | 역할 |
+| 영역 | 경로 | 책임 |
 | --- | --- | --- |
-| 앱 엔트리 | `src/chiwawa_backend/main.py` | 앱 생성, 라우터·예외 핸들러 등록, 문서 진입점 |
-| 설정 | `src/chiwawa_backend/config.py` | `.env`와 환경 변수를 읽는 타입 설정, 필수 인증 설정 검사 |
-| 라우터 | `src/chiwawa_backend/routers/` | HTTP 경로와 요청·응답 모델 연결 |
-| 스키마 | `src/chiwawa_backend/schemas/` | frozen/extra-forbid Pydantic v2 경계 모델 |
-| 서비스 | `src/chiwawa_backend/services/` | 여행, 장소, 일정, 추천, 인증, 기록 로직 |
-| 프로토타입 상태 | `src/chiwawa_backend/state.py` | UUID ID와 인메모리 도메인 저장소 |
-| SQLite 마이그레이션 | `src/chiwawa_backend/sql/*.sql` | wheel에 포함되고 파일명 순서대로 적용되는 사용자·사진 스키마 |
-| 런타임 인증 DB | `data/google_auth.db` | 자동 생성되고 Git에서 제외되는 로컬 파일 |
+| 앱 조립 | `src/chiwawa_backend/main.py` | 설정 검증, middleware, DI, router, lifespan |
+| 설정 | `src/chiwawa_backend/config.py` | 타입 환경 변수와 운영 readiness 검증 |
+| HTTP | `routers/`, `exception_handlers.py` | 경로·응답 모델·공통 오류 매핑 |
+| 계약 | `schemas/` | frozen, extra-forbid Pydantic v2 DTO |
+| 도메인 | `services/` | 여행·장소·일정·인증·사진 규칙 |
+| 여행 상태 | `state.py`, `services/state_store.py` | AppState snapshot과 SQLite 트랜잭션 |
+| 로컬 사진 | `services/local_photo_*.py` | 경로 격리, 권한, staging delete, 복구 |
+| 마이그레이션 | `src/chiwawa_backend/sql/*.sql` | wheel에 포함되는 유일한 schema 원본 |
 
-## 요청 처리 흐름
+## 요청 흐름
 
 ```text
 HTTP request
-  -> router
-  -> Pydantic request validation
-  -> service domain validation
-  -> AppState or SQLite auth storage
-  -> Pydantic response model
-  -> HTTP response
+  -> security headers
+  -> upload JWT pre-auth + SQLite request concurrency slot
+  -> Content-Length/chunked body limit
+  -> FastAPI request validation
+  -> Bearer actor + trip ownership
+  -> request-scoped AppState transaction or member-photo repository
+  -> response model / centralized error mapping
 ```
 
-스키마 수준 오류와 날짜·시간 같은 도메인 불변식 오류는 422, 없는 리소스는
-404로 변환합니다. 인증 설정은 앱 시작 시 강제하지 않고 Google 로그인 또는
-JWT 작업 시점에 검사하므로 비인증 개발 API와 문서는 독립적으로 실행됩니다.
+업로드 pre-auth와 요청 슬롯은 인증 실패 또는 여러 worker의 동시성 초과 요청의
+multipart body를 읽기 전에 401/429를 반환합니다. body limiter는 잘못된 framing,
+JSON/multipart 크기 초과, downstream 응답 이후의 추가 send를 fail closed로
+처리합니다.
 
-## 상태와 동시성
+## 여행 상태와 동시성
 
-- 여행 도메인의 `AppState`는 앱 인스턴스마다 생성되며 재시작 시 초기화됩니다.
-- ID는 UUID 기반이라 동시 요청의 읽기-수정-쓰기 카운터 충돌이 없습니다.
-- AppState를 읽고 쓰는 서비스 연산은 동일한 재진입 잠금을 사용해 컬렉션 순회와
-  변경이 충돌하지 않습니다.
-- 계획 확정은 모든 stop을 먼저 검증한 뒤 한 번만 일정으로 투영되어 실패 시
-  부분 저장이 없고 반복 요청이 멱등적입니다.
-- Google 사용자 SQLite 연결은 요청 단위로 열고 트랜잭션 후 명시적으로 닫습니다.
-- SQLite 스키마는 `importlib.resources`로 읽으므로 설치된 wheel에서도 동작합니다.
+운영에서는 `SQLiteStateStore.transaction()`이 `BEGIN IMMEDIATE` 후 singleton
+snapshot을 `AppState`로 복원하고, 요청이 성공하면 versioned JSON으로 commit합니다.
+요청이 예외로 종료되면 전체 변경이 rollback됩니다. 이 방식은 기존 서비스 API를
+유지하면서 여러 worker의 lost update를 막지만 모든 여행 write를 직렬화하는
+과도기 구조입니다.
 
-## 프로토타입 구현 경계
+OAuth state는 외부 Google 호출 동안 여행 write lock을 잡지 않도록 별도
+`oauth_states` 테이블에서 짧은 원자 transaction으로 발급·1회 소비합니다.
+SQLite 연결은 WAL, foreign keys, busy timeout을 설정하며 migration version이
+패키지의 최신 SQL과 일치해야 readiness를 통과합니다.
 
-| 기능 | 현재 동작 | 실제 연동 시 교체 지점 |
-| --- | --- | --- |
-| 사진 장소 검색 | 여행 도시 기반 고정 후보 생성 | 사진 인식·장소 검색 provider |
-| AI 일정 | 우선순위, pace, 시간창 기반 순차 휴리스틱 | AI planner adapter |
-| 동선 최적화 | 우선순위 정렬과 추정 이동시간 | 지도 route provider |
-| 주변 추천 | 위치 요청을 받는 결정적 추천 | 장소·지도 nearby provider |
-| 빈 시간 추천 | 지역명과 시간창 기반 고정 산책 추천 | 장소·영업시간 recommendation provider |
+## 인증과 소유권
 
-현재 서비스 이름과 API 계약은 제품 흐름 검증용이며 외부 API 호출이나 실제 AI
-추론을 보장하지 않습니다.
+- 운영의 모든 `/api/v1/trips...` operation은 Bearer JWT가 필요합니다.
+- 여행 생성 시 JWT `sub`의 사용자 ID를 owner로 저장합니다.
+- 목록은 owner의 여행만 반환하고 item/nested 경로는 owner가 아니면 404입니다.
+- 회원 Memorial도 동일 user ID로 DB row와 로컬 파일 접근을 격리합니다.
+- 개발 여행 API는 호환용 actor `0`을 허용하지만 운영 보안 계약으로 간주하지
+  않습니다.
 
-## 인증 경계
+## 로컬 사진 저장
 
-- Google 로그인 state를 서버 메모리에 짧게 등록해 한 번만 소비합니다. 같은
-  브라우저의 HttpOnly 쿠키와 query state를 비교한 뒤 외부 token API를
-  호출합니다. 별도 앱 HTTP 클라이언트 흐름은 PKCE/state 계약 조정 전까지
-  지원하지 않습니다.
-- JWT 공개 기본 키는 없으며 최소 32자의 명시적 `JWT_SECRET`이 필요합니다.
-- 현재 보호 경로는 `/api/v1/auth/me`와 회원 단위 Memorial API
-  (`/api/v1/memorial/*`)입니다.
-- 외부 또는 공유 환경으로 옮기기 전에 여행 리소스의 사용자 소유권,
-  인증 의존성, 영속 DB, 마이그레이션을 추가해야 합니다.
+사진 원본은 `MEMORIAL_PHOTO_DIR/{user_id}/{uuid}.{ext}`에 저장하고 DB에는 이
+상대 경로만 기록합니다. 경로 탈출, symlink, 비정규 파일, 사용자 디렉터리 불일치,
+덮어쓰기를 거부합니다. 디렉터리 `0700`, 파일 `0600`을 생성·복구 시 강제합니다.
+사진 root는 DB와 겹치지 않는 전용 디렉터리만 허용하고 알 수 없는 기존 항목이
+있으면 권한 변경이나 복구 삭제 전에 거부합니다.
 
-현재 여행 도메인은 최대 31일과 `Asia/Tokyo` 현지 시각을 기준으로 합니다.
-다른 국가·시간대를 지원할 때는 trip timezone 필드를 계약에 추가해야 합니다.
+본문 전 요청 슬롯과 파일 크기 확인 후 upload lease를 SQLite에서 원자적으로
+관리합니다. 파일 수·총 byte, 시간당 시도, 사용자/전역 동시성, 예약 byte를 포함한
+디스크 watermark를 검사합니다. 삭제는 `.trash` hard-link staging과 DB
+transaction을 결합하며, 시작 시 orphan, 만료 lease, 중단된 delete를 조정합니다.
 
-## 확장 기준
+## 데이터 불변식
 
-- 라우터는 HTTP 계약에 집중하고 비즈니스 규칙은 서비스에 둡니다.
-- 외부 공급자 연동은 서비스 아래 adapter 경계로 추가합니다.
-- `AppState`를 repository/ORM 계층으로 교체할 때 라우터 모델은 유지합니다.
-- 라우트나 DTO 변경 시 `docs/api/reference.md`, 관련 상세 문서, OpenAPI 테스트를
-  함께 갱신합니다.
+- PATCH는 Pydantic `model_fields_set`을 기준으로 생략과 `null`을 구분합니다.
+- 위도와 경도는 항상 함께 존재하거나 함께 `null`이어야 합니다.
+- schedule의 `place_id`는 같은 여행의 wanted place만 참조합니다.
+- wanted place 삭제 시 schedule·plan의 선택적 참조를 원자적으로 nullify합니다.
+- 사진 시각은 UTC instant로 안정 정렬하고 사용자 계약상 `Asia/Tokyo`로
+  정규화합니다. naive EXIF와 서버 fallback도 호스트 시간대와 무관합니다.
+- AI planning DTO는 day index/date/time 관계와 POI 선호 day 참조를 검증합니다.
+
+## 가용성과 오류
+
+`/health`는 프로세스 liveness만, `/ready`는 운영 설정, DB 접근·migration,
+사진 root의 전용 `.health` probe, disk watermark를 검사합니다. 공통 오류는
+`{"detail": "..."}`로 정규화하며 인증 401, 없음 404, body/quota 413, media 415,
+validation 422, rate/concurrency 429, upstream 502, dependency 503, storage 507을
+OpenAPI와 런타임에 동일하게 노출합니다.
+
+운영 백업은 SQLite 파일과 사진 root를 같은 시점에 보존해야 합니다. readiness는
+백업, 복제, 다중 호스트 일관성을 대신하지 않습니다.

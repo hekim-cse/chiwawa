@@ -6,6 +6,14 @@ from chiwawa_backend.schemas.places import (
     WantedPlaceUpdateRequest,
 )
 from chiwawa_backend.services.common import require_trip, require_wanted_place
+from chiwawa_backend.services.coordinates import (
+    require_coordinate_pair,
+    require_coordinate_patch,
+)
+from chiwawa_backend.services.patch_values import (
+    nullable_patch_value,
+    required_patch_value,
+)
 from chiwawa_backend.state import AppState, synchronized
 
 
@@ -17,6 +25,7 @@ def create_wanted_place(
     source: PlaceSource = PlaceSource.MANUAL,
 ) -> WantedPlaceRead:
     trip = require_trip(state, trip_id)
+    require_coordinate_pair(payload.latitude, payload.longitude)
     place = WantedPlaceRead(
         id=state.next_id("place"),
         trip_id=trip_id,
@@ -50,20 +59,49 @@ def update_wanted_place(
     payload: WantedPlaceUpdateRequest,
 ) -> WantedPlaceRead:
     place = require_wanted_place(state, trip_id, place_id)
+    require_coordinate_patch(
+        payload.model_fields_set,
+        payload.latitude,
+        payload.longitude,
+    )
     updated = WantedPlaceRead(
         id=place.id,
         trip_id=place.trip_id,
-        name=payload.name or place.name,
-        city=payload.city or place.city,
-        country=payload.country or place.country,
-        latitude=payload.latitude if payload.latitude is not None else place.latitude,
-        longitude=payload.longitude
-        if payload.longitude is not None
-        else place.longitude,
-        priority=payload.priority or place.priority,
-        notes=payload.notes if payload.notes is not None else place.notes,
+        name=required_patch_value(payload, "name", payload.name, place.name),
+        city=required_patch_value(payload, "city", payload.city, place.city),
+        country=required_patch_value(
+            payload,
+            "country",
+            payload.country,
+            place.country,
+        ),
+        latitude=nullable_patch_value(
+            payload,
+            "latitude",
+            payload.latitude,
+            place.latitude,
+        ),
+        longitude=nullable_patch_value(
+            payload,
+            "longitude",
+            payload.longitude,
+            place.longitude,
+        ),
+        priority=required_patch_value(
+            payload,
+            "priority",
+            payload.priority,
+            place.priority,
+        ),
+        notes=nullable_patch_value(
+            payload,
+            "notes",
+            payload.notes,
+            place.notes,
+        ),
         source=place.source,
     )
+    require_coordinate_pair(updated.latitude, updated.longitude)
     state.wanted_places[place.id] = updated
     return updated
 
@@ -72,3 +110,40 @@ def update_wanted_place(
 def delete_wanted_place(state: AppState, trip_id: str, place_id: str) -> None:
     _ = require_wanted_place(state, trip_id, place_id)
     del state.wanted_places[place_id]
+    _clear_schedule_references(state, place_id)
+    _clear_plan_references(state, place_id)
+    for candidate_id in [
+        key
+        for key, confirmation in state.confirmed_photo_places.items()
+        if confirmation.wanted_place.id == place_id
+    ]:
+        del state.confirmed_photo_places[candidate_id]
+
+
+def _clear_schedule_references(state: AppState, place_id: str) -> None:
+    for item_id, item in state.schedule_items.items():
+        if item.place_id == place_id:
+            state.schedule_items[item_id] = item.model_copy(
+                update={"place_id": None},
+            )
+
+
+def _clear_plan_references(
+    state: AppState,
+    place_id: str,
+) -> None:
+    for plan_id, plan in state.plans.items():
+        days = [
+            day.model_copy(
+                update={
+                    "stops": [
+                        stop.model_copy(update={"place_id": None})
+                        if stop.place_id == place_id
+                        else stop
+                        for stop in day.stops
+                    ],
+                },
+            )
+            for day in plan.days
+        ]
+        state.plans[plan_id] = plan.model_copy(update={"days": days})

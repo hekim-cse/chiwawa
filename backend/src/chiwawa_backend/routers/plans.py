@@ -1,8 +1,7 @@
-from typing import Annotated
-
 from fastapi import APIRouter, Depends, status
 
-from chiwawa_backend.dependencies import get_state
+from chiwawa_backend.dependencies import StateDep, require_trip_access
+from chiwawa_backend.routers.responses import error_responses
 from chiwawa_backend.schemas.plans import (
     AIPlanCreateRequest,
     PlanConfirmResponse,
@@ -12,10 +11,13 @@ from chiwawa_backend.schemas.plans import (
     RouteOptimizationResponse,
 )
 from chiwawa_backend.services import plans as plan_service
-from chiwawa_backend.state import AppState
 
-router = APIRouter(prefix="/api/v1/trips/{trip_id}", tags=["plans"])
-StateDep = Annotated[AppState, Depends(get_state)]
+router = APIRouter(
+    prefix="/api/v1/trips/{trip_id}",
+    tags=["plans"],
+    dependencies=[Depends(require_trip_access)],
+    responses=error_responses(401, 404, 422, 500),
+)
 
 
 @router.post(
