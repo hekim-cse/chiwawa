@@ -1,4 +1,5 @@
 import datetime as dt
+from typing import Literal
 
 from pydantic import Field
 
@@ -6,6 +7,7 @@ from chiwawa_backend.schemas.base import ApiModel
 
 
 class MemorialPhotoUploadRequest(ApiModel):
+    device_photo_id: str | None = Field(default=None, min_length=1, max_length=255)
     file_name: str = Field(min_length=1)
     taken_at: dt.datetime | None = None
     latitude: float | None = Field(default=None, ge=-90, le=90)
@@ -21,6 +23,8 @@ class MemorialPhotoRead(ApiModel):
     latitude: float | None
     longitude: float | None
     memo: str | None
+    device_photo_id: str | None = None
+    storage: Literal["device"] = "device"
 
 
 class MemorialPhotoListResponse(ApiModel):
