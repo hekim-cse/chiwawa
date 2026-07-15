@@ -5,3 +5,4 @@ __pycache__/
 .DS_Store
 ai/route_planner/.env
 .db
+artifacts/

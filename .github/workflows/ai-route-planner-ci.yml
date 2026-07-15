@@ -1,0 +1,78 @@
+name: AI Route Planner CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - "ai/route_planner/**"
+      - ".github/workflows/ai-route-planner-ci.yml"
+
+  push:
+    branches:
+      - develop
+      - main
+    paths:
+      - "ai/route_planner/**"
+      - ".github/workflows/ai-route-planner-ci.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-route-planner-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-and-evaluate:
+    name: Route Planner 테스트 및 평가
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: 저장소 Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 3.11 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ai/route_planner/requirements.txt
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            -r ai/route_planner/requirements.txt
+
+      - name: Route Planner 전체 테스트
+        run: |
+          python -m pytest \
+            ai/route_planner/tests
+
+      - name: Route Evaluation 실행
+        run: |
+          mkdir -p artifacts
+
+          python -m ai.route_planner.scripts.run_route_evaluation \
+            --fixture-path \
+            ai/route_planner/tests/fixtures/route_evaluation_scenario.json \
+            --output-path \
+            artifacts/route_evaluation_result.json
+
+      - name: Route Evaluation 결과 확인
+        run: |
+          python -m json.tool \
+            artifacts/route_evaluation_result.json
+
+      - name: Route Evaluation 결과 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-evaluation-result
+          path: artifacts/route_evaluation_result.json
+          if-no-files-found: error
+          retention-days: 14
