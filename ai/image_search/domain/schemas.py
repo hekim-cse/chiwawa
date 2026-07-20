@@ -54,6 +54,7 @@ class VisionIdentification(BaseModel):
     vibe_keywords: list[str] = Field(default_factory=list)
     reason: str  # 추정 근거
     confidence: float = Field(ge=0, le=1)  # LLM 자기 확신도 (0~1)
+    visible_text: list[str] = Field(default_factory=list)  # 사진 속 간판/글자 (장소 특정 단서)
 
 
 # Google Places 로 확정한 실제 장소 정보 (좌표는 항상 여기서 나온다)
