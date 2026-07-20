@@ -1,4 +1,4 @@
-# 고정 Scenario JSON을 읽어 RouteEvaluator 결과를 JSON으로 출력하는 Script
+# 고정 Scenario JSON으로 정확 경로 최적화 평가 결과를 출력하는 Script
 import argparse
 import json
 from pathlib import Path
@@ -136,7 +136,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "고정 Matrix Scenario를 기반으로 "
-            "경로 최적화 단계별 평가를 실행합니다."
+            "입력 순서와 정확 경로 최적화 결과를 비교합니다."
         )
     )
 

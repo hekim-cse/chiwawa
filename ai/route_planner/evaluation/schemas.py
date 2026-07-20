@@ -10,58 +10,46 @@ from ai.route_planner.domain.trip_schemas import (
 )
 
 
-# 평가할 경로 최적화 단계
+# 평가할 정확 경로 최적화 단계
 class RouteEvaluationStage(str, Enum):
     BASELINE = "BASELINE"
-    CHEAPEST_INSERTION = "CHEAPEST_INSERTION"
-    RELOCATE = "RELOCATE"
-    TWO_OPT = "TWO_OPT"
-    FINAL_LOCAL_SEARCH = "FINAL_LOCAL_SEARCH"
+    EXACT_DYNAMIC_PROGRAMMING = (
+        "EXACT_DYNAMIC_PROGRAMMING"
+    )
 
 
-# 하나의 최적화 단계에 대한 평가 결과
+# 하나의 경로 평가 단계 결과
 class RouteStageEvaluationDTO(BaseModel):
     stage: RouteEvaluationStage
     ordered_place_ids: List[str]
 
-    # Matrix 누락으로 전체 비용을 계산할 수 없으면 None
+    # Matrix 누락 또는 완전 경로 부재 시 None
     total_travel_minutes: Optional[int] = Field(
         default=None,
         ge=0,
     )
 
-    # 바로 이전 단계와 비교한 개선 결과
-    improvement_minutes_from_previous: Optional[int] = None
-    improvement_ratio_from_previous: Optional[float] = None
-
-    # 입력 순서 Baseline과 비교한 전체 개선 결과
-    improvement_minutes_from_baseline: Optional[int] = None
-    improvement_ratio_from_baseline: Optional[float] = None
-
-    # 해당 단계 실행 시간
     runtime_ms: float = Field(ge=0)
 
-    # 최종 경로 비용 계산에 필요한 Matrix 누락 구간
+    # 경로 비용 계산 또는 완전 경로 생성에 필요한 누락 구간
     missing_segments: List[str] = Field(
         default_factory=list,
     )
 
 
-# 하나의 평가 Scenario에 대한 전체 결과
+# Baseline과 정확 동적 계획법 결과 비교
 class RouteEvaluationResultDTO(BaseModel):
     scenario_id: str
     travel_mode: TravelMode
 
     baseline: RouteStageEvaluationDTO
-    cheapest_insertion: RouteStageEvaluationDTO
-    relocate: RouteStageEvaluationDTO
-    two_opt: RouteStageEvaluationDTO
-    final_local_search: RouteStageEvaluationDTO
+    exact_dynamic_programming: RouteStageEvaluationDTO
 
-    # Cheapest Insertion 과정에서 경로에 넣지 못한 POI
-    uninserted_place_ids: List[str] = Field(
-        default_factory=list,
-    )
+    improvement_minutes: Optional[int] = None
+    improvement_ratio: Optional[float] = None
+
+    evaluated_state_count: int = Field(ge=0)
+    complete_route_found: bool
 
 
 # JSON에서 이동 시간 행렬 한 구간을 표현하는 DTO
