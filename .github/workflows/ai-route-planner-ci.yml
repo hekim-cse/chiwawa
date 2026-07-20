@@ -97,3 +97,68 @@ jobs:
           path: artifacts/day_assignment_evaluation_result.json
           if-no-files-found: error
           retention-days: 14
+
+      - name: Route Planner E2E Benchmark 실행
+        run: |
+          python -m ai.route_planner.scripts.run_e2e_benchmark \
+            --fixture-path \
+            ai/route_planner/tests/fixtures/e2e_benchmark_scenario.json \
+            --output-path \
+            artifacts/e2e_benchmark_result.json
+
+      - name: Route Planner E2E Benchmark 결과 확인
+        run: |
+          python -m json.tool \
+            artifacts/e2e_benchmark_result.json
+
+      - name: Route Planner E2E Benchmark 결과 검증
+        run: |
+          python - <<'PYTHON'
+          import json
+          from pathlib import Path
+
+          result_path = Path(
+              "artifacts/"
+              "e2e_benchmark_result.json"
+          )
+
+          payload = json.loads(
+              result_path.read_text(
+                  encoding="utf-8"
+              )
+          )
+
+          if not payload["deterministic"]:
+              raise SystemExit(
+                  "E2E Benchmark 반복 결과가 "
+                  "결정적이지 않습니다."
+              )
+
+          if not all(
+              run["complete_assignment"]
+              for run in payload["runs"]
+          ):
+              raise SystemExit(
+                  "E2E Benchmark에서 "
+                  "완전 배정에 실패했습니다."
+              )
+
+          if any(
+              run[
+                  "provider_missing_element_count"
+              ] != 0
+              for run in payload["runs"]
+          ):
+              raise SystemExit(
+                  "E2E Benchmark Fixture에서 "
+                  "누락 Matrix 구간이 발견되었습니다."
+              )
+          PYTHON
+
+      - name: Route Planner E2E Benchmark 결과 업로드
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-planner-e2e-benchmark-result
+          path: artifacts/e2e_benchmark_result.json
+          if-no-files-found: error
+          retention-days: 14
