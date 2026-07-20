@@ -427,6 +427,65 @@ async def test_upload_fallback_taken_at_uses_server_local_timezone() -> None:
         time.tzset()
 
 
+def test_exif_out_of_range_gps_coordinate_is_dropped() -> None:
+    # Given: 위도 도(degrees) 값이 500인 손상된 GPS EXIF 사진.
+    # 폼 좌표에는 ±90/±180 검증이 걸리므로 EXIF 좌표도 우회하면 안 된다.
+    jpeg = _jpeg_with_exif(
+        "2026:07:01 12:05:00",
+        latitude_dms=(500.0, 0.0, 0.0),
+        longitude_dms=(135.0, 30.0, 11.2),
+    )
+
+    # When: EXIF를 읽는다.
+    data = read_exif(jpeg)
+
+    # Then: 범위를 벗어난 위도는 버리고, 유효한 경도는 그대로 유지한다.
+    assert data.latitude is None
+    assert data.longitude == pytest.approx(OSAKA_LONGITUDE, abs=1e-4)
+
+    # 경계값인 위도 90도·경도 180도는 유효한 좌표로 남아야 한다.
+    boundary = read_exif(
+        _jpeg_with_exif(
+            "2026:07:01 12:05:00",
+            latitude_dms=(90.0, 0.0, 0.0),
+            longitude_dms=(180.0, 0.0, 0.0),
+        ),
+    )
+    assert boundary.latitude == pytest.approx(90.0)
+    assert boundary.longitude == pytest.approx(180.0)
+
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("memorial_env")
+async def test_upload_drops_out_of_range_exif_gps() -> None:
+    # Given: GPS IFD에 범위를 벗어난 rational이 담긴 사진을
+    # 폼 좌표 없이 업로드하는 상황.
+    app = create_app()
+    token = _create_user_token("memorial-bad-gps")
+    bad_gps_jpeg = _jpeg_with_exif(
+        "2026:07:03 12:00:00",
+        latitude_dms=(500.0, 0.0, 0.0),
+        longitude_dms=(200.0, 0.0, 0.0),
+    )
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        # When: 사진을 업로드한다.
+        response = await client.post(
+            "/api/v1/memorial/photos",
+            headers=_auth_header(token),
+            files={"file": ("bad-gps.jpg", bad_gps_jpeg, "image/jpeg")},
+        )
+
+    # Then: latitude 500 같은 불가능한 좌표가 저장·반환되지 않아야 한다.
+    assert response.status_code == HTTPStatus.CREATED
+    photo = _json_dict(response)
+    assert photo["latitude"] is None
+    assert photo["longitude"] is None
+    assert photo["address"] is None
+
+
 def test_exif_zero_denominator_gps_yields_no_coordinate() -> None:
     # Given: 위도 DMS의 초(seconds) 분모가 0인 손상된 EXIF 사진.
     # Pillow의 IFDRational(x, 0)은 float() 시 예외 대신 NaN을 반환한다.
