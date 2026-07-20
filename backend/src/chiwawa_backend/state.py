@@ -32,6 +32,8 @@ class AppState:
     photos: dict[str, MemorialPhotoRead] = field(default_factory=dict)
     memorials: dict[str, MemorialRecordRead] = field(default_factory=dict)
     confirmed_plans: set[str] = field(default_factory=set)
+    confirmed_plan_items: dict[str, list[str]] = field(default_factory=dict)
+    replan_source_items: dict[str, list[str]] = field(default_factory=dict)
     confirmed_photo_places: dict[str, ConfirmedPhotoPlaceRead] = field(
         default_factory=dict,
     )

@@ -1,3 +1,6 @@
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
 from chiwawa_backend.errors import NotFoundError
 from chiwawa_backend.schemas.memorial import MemorialRecordRead
 from chiwawa_backend.schemas.places import (
@@ -9,6 +12,12 @@ from chiwawa_backend.schemas.schedule import ScheduleItemRead
 from chiwawa_backend.schemas.travel import FreeTimeRecommendationRead
 from chiwawa_backend.schemas.trips import TripRead
 from chiwawa_backend.state import AppState
+
+SERVICE_TIMEZONE = ZoneInfo("Asia/Tokyo")
+
+
+def local_today() -> date:
+    return datetime.now(SERVICE_TIMEZONE).date()
 
 
 def require_trip(state: AppState, trip_id: str) -> TripRead:
