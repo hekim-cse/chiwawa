@@ -1,4 +1,4 @@
-# 고정 Scenario JSON으로 정확 경로 최적화 평가 결과를 출력하는 Script
+# 고정 Matrix로 정확 일자 배정 DayPlan을 생성하고 정확 경로 최적화 평가를 실행하는 CLI 스크립트
 import argparse
 import json
 from pathlib import Path
@@ -33,12 +33,13 @@ def load_route_evaluation_scenario(
     ) as file:
         payload = json.load(file)
 
-    return RouteEvaluationScenarioDTO.model_validate(
-        payload
+    return (
+        RouteEvaluationScenarioDTO
+        .model_validate(payload)
     )
 
 
-# JSON 구간 목록을 Solver가 사용하는 tuple key Matrix로 변환
+# JSON 구간 목록을 tuple key Matrix로 변환
 def build_travel_time_matrix(
     scenario: RouteEvaluationScenarioDTO,
 ) -> TravelTimeMatrix:
@@ -62,7 +63,31 @@ def build_travel_time_matrix(
     return matrix
 
 
-# Day Assignment 결과에서 평가 대상으로 지정된 day 조회
+# Route Evaluation Scenario가 단일 날짜 Matrix 계약을 만족하는지 검증
+def validate_single_day_scenario(
+    scenario: RouteEvaluationScenarioDTO,
+) -> None:
+    if len(scenario.request.days) != 1:
+        raise ValueError(
+            "Route Evaluation Scenario는 "
+            "정확 일자 배정에 필요한 Matrix를 "
+            "하나만 제공하므로 request.days가 "
+            "정확히 한 개여야 합니다."
+        )
+
+    request_day = scenario.request.days[0]
+
+    if request_day.day_index != scenario.day_index:
+        raise ValueError(
+            "Route Evaluation day_index와 "
+            "request의 유일한 day_index가 "
+            "일치해야 합니다: "
+            f"scenario={scenario.day_index}, "
+            f"request={request_day.day_index}"
+        )
+
+
+# Day Assignment 결과에서 평가 대상으로 지정된 날짜 조회
 def find_day_plan(
     day_plans: list[DayPlanDTO],
     day_index: int,
@@ -77,23 +102,13 @@ def find_day_plan(
     )
 
 
-# Scenario DTO를 기반으로 경로 평가 실행
+# Scenario Matrix로 정확 일자 배정 후 경로 평가 실행
 def run_route_evaluation(
     scenario: RouteEvaluationScenarioDTO,
     evaluator: RouteEvaluator | None = None,
 ) -> RouteEvaluationResultDTO:
-    evaluator = evaluator or RouteEvaluator()
-
-    trip_response = (
-        DayAssignmentSolver()
-        .assign_pois_to_days(
-            scenario.request
-        )
-    )
-
-    day_plan = find_day_plan(
-        day_plans=trip_response.day_plans,
-        day_index=scenario.day_index,
+    validate_single_day_scenario(
+        scenario
     )
 
     travel_time_matrix = (
@@ -102,7 +117,29 @@ def run_route_evaluation(
         )
     )
 
-    return evaluator.evaluate(
+    trip_response = (
+        DayAssignmentSolver()
+        .assign_pois_to_days(
+            request=scenario.request,
+            travel_time_matrices_by_day={
+                scenario.day_index: (
+                    travel_time_matrix
+                ),
+            },
+        )
+    )
+
+    day_plan = find_day_plan(
+        day_plans=trip_response.day_plans,
+        day_index=scenario.day_index,
+    )
+
+    route_evaluator = (
+        evaluator
+        or RouteEvaluator()
+    )
+
+    return route_evaluator.evaluate(
         scenario_id=scenario.scenario_id,
         day_plan=day_plan,
         travel_mode=scenario.travel_mode,
@@ -122,7 +159,9 @@ def save_route_evaluation_result(
 
     output_path.write_text(
         json.dumps(
-            result.model_dump(mode="json"),
+            result.model_dump(
+                mode="json"
+            ),
             ensure_ascii=False,
             indent=2,
         )
@@ -136,14 +175,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
             "고정 Matrix Scenario를 기반으로 "
-            "입력 순서와 정확 경로 최적화 결과를 비교합니다."
+            "정확 일자 배정 DayPlan을 생성하고 "
+            "입력 순서와 정확 경로 결과를 비교합니다."
         )
     )
 
     parser.add_argument(
         "--fixture-path",
         required=True,
-        help="Route Evaluation Scenario JSON 경로입니다.",
+        help=(
+            "Route Evaluation Scenario "
+            "JSON 경로입니다."
+        ),
     )
 
     parser.add_argument(
@@ -157,8 +200,10 @@ def main() -> None:
     args = parser.parse_args()
 
     try:
-        scenario = load_route_evaluation_scenario(
-            Path(args.fixture_path)
+        scenario = (
+            load_route_evaluation_scenario(
+                Path(args.fixture_path)
+            )
         )
         result = run_route_evaluation(
             scenario
@@ -174,7 +219,9 @@ def main() -> None:
         raise SystemExit(1)
 
     if args.output_path:
-        output_path = Path(args.output_path)
+        output_path = Path(
+            args.output_path
+        )
 
         save_route_evaluation_result(
             result=result,
@@ -182,13 +229,17 @@ def main() -> None:
         )
 
         print("[Route Evaluation 성공]")
-        print(f"결과 저장 경로: {output_path}")
+        print(
+            f"결과 저장 경로: {output_path}"
+        )
         return
 
     print("[Route Evaluation 성공]")
     print(
         json.dumps(
-            result.model_dump(mode="json"),
+            result.model_dump(
+                mode="json"
+            ),
             ensure_ascii=False,
             indent=2,
         )

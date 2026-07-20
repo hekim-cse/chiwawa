@@ -1,7 +1,9 @@
-# TripPlanningRequestDTO를 기반으로 POI를 day별로 자동 분배하는 Solver
-import math
+# 정확 일자 배정 결과를 여행 일정 도메인 DTO로 변환하는 Day Assignment 어댑터
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from datetime import datetime
+from typing import Mapping, Optional, Tuple
 
 from ai.route_planner.domain.trip_schemas import (
     DayConstraintDTO,
@@ -12,376 +14,153 @@ from ai.route_planner.domain.trip_schemas import (
     TripPlanningStatus,
     UnassignedPoiDTO,
 )
+from ai.route_planner.solvers.exact_day_assignment_solver import (
+    ExactDayAssignmentResult,
+    ExactDayAssignmentSolver,
+    TravelTimeMatricesByDay,
+)
 
 
-# 위도/경도 좌표 타입
-Coordinate = Tuple[float, float]
-
-
-# K-means 클러스터링 결과 타입
-# key는 day 번호가 아닌 클러스터 번호
-ClusterMap = Dict[int, List[PoiDTO]]
-
-
-# Day Assignment Solver 설정값
+# Day Assignment 응답 조립과 경고 정책 설정
 @dataclass(frozen=True)
 class DayAssignmentSolverConfig:
-    # K-means 반복 최대 횟수
-    max_kmeans_iterations: int = 20
-
-    # 하루 일정에서 체류 시간만으로도 사용 가능 시간을 초과할 때 경고를 표시할지 여부
     warn_when_stay_time_exceeds_available_time: bool = True
 
 
-# POI를 여행 day별로 분배하는 Solver
+# 정확 일자 배정 엔진을 호출하고 여행 일정 응답 DTO를 생성하는 어댑터
 class DayAssignmentSolver:
-    # DayAssignmentSolver 생성자
-    # config: K-means 반복 횟수와 경고 정책 등을 담은 설정값
-    def __init__(self, config: Optional[DayAssignmentSolverConfig] = None):
-        self.config = config or DayAssignmentSolverConfig()
+    def __init__(
+        self,
+        exact_day_assignment_solver: Optional[
+            ExactDayAssignmentSolver
+        ] = None,
+        config: Optional[
+            DayAssignmentSolverConfig
+        ] = None,
+    ) -> None:
+        self._exact_day_assignment_solver = (
+            exact_day_assignment_solver
+            or ExactDayAssignmentSolver()
+        )
+        self._config = (
+            config
+            or DayAssignmentSolverConfig()
+        )
 
-    # TripPlanningRequestDTO를 받아 day별 POI 배정 결과를 반환하는 함수
-    # request: 백엔드에서 전달받은 여행 일정 최적화 요청 DTO
-    # 반환: day별 POI 배정 결과를 담은 TripPlanningResponseDTO
+    # 요청과 날짜별 Matrix를 받아 정확 일자 배정 응답 생성
     def assign_pois_to_days(
         self,
         request: TripPlanningRequestDTO,
+        travel_time_matrices_by_day: (
+            TravelTimeMatricesByDay
+        ),
     ) -> TripPlanningResponseDTO:
-        assigned_by_day: Dict[int, List[PoiDTO]] = {
-            day.day_index: []
-            for day in request.days
-        }
-        unassigned_pois: List[UnassignedPoiDTO] = []
-        warnings: List[str] = []
-
-        remaining_pois = self._assign_preferred_day_pois(
-            pois=request.pois,
-            days=request.days,
-            assigned_by_day=assigned_by_day,
-            unassigned_pois=unassigned_pois,
+        exact_result = (
+            self._exact_day_assignment_solver.solve(
+                days=request.days,
+                pois=request.pois,
+                travel_time_matrices_by_day=(
+                    travel_time_matrices_by_day
+                ),
+            )
         )
 
-        self._assign_remaining_pois_by_clustering(
-            pois=remaining_pois,
-            days=request.days,
-            assigned_by_day=assigned_by_day,
-            unassigned_pois=unassigned_pois,
+        poi_by_id = self._build_poi_by_id(
+            request.pois
         )
 
-        day_plans = self._build_day_plans(
-            days=request.days,
-            assigned_by_day=assigned_by_day,
-            warnings=warnings,
+        day_plans, warnings = (
+            self._build_day_plans(
+                days=request.days,
+                poi_by_id=poi_by_id,
+                exact_result=exact_result,
+            )
         )
 
-        status = self._resolve_status(
-            day_plans=day_plans,
-            unassigned_pois=unassigned_pois,
+        unassigned_pois = (
+            self._build_unassigned_pois(
+                poi_by_id=poi_by_id,
+                unassigned_poi_ids=(
+                    exact_result
+                    .unassigned_poi_ids
+                ),
+            )
         )
 
         return TripPlanningResponseDTO(
             trip_id=request.trip_id,
-            status=status,
+            status=self._resolve_status(
+                unassigned_pois=(
+                    unassigned_pois
+                ),
+            ),
             day_plans=day_plans,
             unassigned_pois=unassigned_pois,
             warnings=warnings,
         )
 
-    # preferred_day_index가 지정된 POI를 우선 배정하는 함수
-    # preferred_day_index가 없는 POI는 remaining_pois로 반환
-    def _assign_preferred_day_pois(
+    # POI 식별자별 DTO 조회 Map 생성
+    def _build_poi_by_id(
         self,
-        pois: List[PoiDTO],
-        days: List[DayConstraintDTO],
-        assigned_by_day: Dict[int, List[PoiDTO]],
-        unassigned_pois: List[UnassignedPoiDTO],
-    ) -> List[PoiDTO]:
-        day_by_index = {
-            day.day_index: day
-            for day in days
-        }
-        remaining_pois: List[PoiDTO] = []
-
-        for poi in pois:
-            if poi.preferred_day_index is None:
-                remaining_pois.append(poi)
-                continue
-
-            target_day = day_by_index[poi.preferred_day_index]
-
-            if not self._has_day_capacity(
-                day=target_day,
-                assigned_pois=assigned_by_day[target_day.day_index],
-            ):
-                unassigned_pois.append(
-                    UnassignedPoiDTO(
-                        poi=poi,
-                        reason=(
-                            f"preferred_day_index={poi.preferred_day_index}의 "
-                            "max_place_count를 초과하여 배정할 수 없습니다."
-                        ),
-                    )
-                )
-                continue
-
-            assigned_by_day[target_day.day_index].append(poi)
-
-        return remaining_pois
-
-    # preferred_day_index가 없는 POI를 K-means 클러스터링 기반으로 day에 배정하는 함수
-    def _assign_remaining_pois_by_clustering(
-        self,
-        pois: List[PoiDTO],
-        days: List[DayConstraintDTO],
-        assigned_by_day: Dict[int, List[PoiDTO]],
-        unassigned_pois: List[UnassignedPoiDTO],
-    ) -> None:
-        if not pois:
-            return
-
-        cluster_count = min(len(days), len(pois))
-        clusters = self._cluster_pois_by_kmeans(
-            pois=pois,
-            cluster_count=cluster_count,
-        )
-
-        for cluster_pois in clusters.values():
-            target_day = self._find_best_day_for_cluster(
-                cluster_pois=cluster_pois,
-                days=days,
-                assigned_by_day=assigned_by_day,
-            )
-
-            for poi in cluster_pois:
-                if target_day is None:
-                    unassigned_pois.append(
-                        UnassignedPoiDTO(
-                            poi=poi,
-                            reason="배정 가능한 day가 없어 미배정 처리되었습니다.",
-                        )
-                    )
-                    continue
-
-                if not self._has_day_capacity(
-                    day=target_day,
-                    assigned_pois=assigned_by_day[target_day.day_index],
-                ):
-                    unassigned_pois.append(
-                        UnassignedPoiDTO(
-                            poi=poi,
-                            reason=(
-                                f"Day {target_day.day_index}의 max_place_count를 "
-                                "초과하여 배정할 수 없습니다."
-                            ),
-                        )
-                    )
-                    continue
-
-                assigned_by_day[target_day.day_index].append(poi)
-
-    # 좌표 기반 K-means로 POI를 클러스터링하는 함수
-    # K-means는 day별 초기 장소 묶음을 만들기 위한 용도로만 사용
-    def _cluster_pois_by_kmeans(
-        self,
-        pois: List[PoiDTO],
-        cluster_count: int,
-    ) -> ClusterMap:
-        if cluster_count <= 0:
-            return {}
-
-        if cluster_count == 1:
-            return {0: pois}
-
-        centroids = self._initialize_centroids(
-            pois=pois,
-            cluster_count=cluster_count,
-        )
-
-        clusters: ClusterMap = {}
-
-        for _ in range(self.config.max_kmeans_iterations):
-            clusters = self._assign_pois_to_nearest_centroid(
-                pois=pois,
-                centroids=centroids,
-            )
-            next_centroids = self._recalculate_centroids(
-                clusters=clusters,
-                previous_centroids=centroids,
-            )
-
-            if next_centroids == centroids:
-                break
-
-            centroids = next_centroids
-
-        return clusters
-
-    # 초기 중심점을 결정하는 함수
-    # 랜덤을 사용하지 않고 POI 순서를 기반으로 결정해 테스트 결과가 매번 동일하도록 구성
-    def _initialize_centroids(
-        self,
-        pois: List[PoiDTO],
-        cluster_count: int,
-    ) -> List[Coordinate]:
-        sorted_pois = sorted(pois, key=lambda poi: poi.poi_id)
-
-        if cluster_count == 1:
-            selected_pois = [sorted_pois[0]]
-        else:
-            selected_pois = [
-                sorted_pois[
-                    round(index * (len(sorted_pois) - 1) / (cluster_count - 1))
-                ]
-                for index in range(cluster_count)
-            ]
-
-        return [
-            (poi.lat, poi.lng)
-            for poi in selected_pois
-        ]
-
-    # 각 POI를 가장 가까운 중심점에 배정하는 함수
-    def _assign_pois_to_nearest_centroid(
-        self,
-        pois: List[PoiDTO],
-        centroids: List[Coordinate],
-    ) -> ClusterMap:
-        clusters: ClusterMap = {
-            cluster_index: []
-            for cluster_index in range(len(centroids))
+        pois: list[PoiDTO],
+    ) -> Mapping[str, PoiDTO]:
+        poi_by_id = {
+            poi.poi_id: poi
+            for poi in pois
         }
 
-        for poi in pois:
-            nearest_cluster_index = min(
-                range(len(centroids)),
-                key=lambda cluster_index: self._haversine_minutes_proxy(
-                    origin=(poi.lat, poi.lng),
-                    destination=centroids[cluster_index],
-                ),
+        if len(poi_by_id) != len(pois):
+            raise ValueError(
+                "poi_id는 중복될 수 없습니다."
             )
-            clusters[nearest_cluster_index].append(poi)
 
-        return clusters
+        return poi_by_id
 
-    # 클러스터에 배정된 POI들의 평균 좌표로 중심점을 다시 계산하는 함수
-    def _recalculate_centroids(
-        self,
-        clusters: ClusterMap,
-        previous_centroids: List[Coordinate],
-    ) -> List[Coordinate]:
-        next_centroids: List[Coordinate] = []
-
-        for cluster_index, cluster_pois in clusters.items():
-            if not cluster_pois:
-                next_centroids.append(previous_centroids[cluster_index])
-                continue
-
-            average_lat = sum(poi.lat for poi in cluster_pois) / len(cluster_pois)
-            average_lng = sum(poi.lng for poi in cluster_pois) / len(cluster_pois)
-
-            next_centroids.append((average_lat, average_lng))
-
-        return next_centroids
-
-    # 하나의 클러스터를 어떤 day에 배정할지 결정하는 함수
-    # 클러스터 중심점과 day 출발지/도착지의 평균 접근 거리가 가장 짧은 day를 선택
-    def _find_best_day_for_cluster(
-        self,
-        cluster_pois: List[PoiDTO],
-        days: List[DayConstraintDTO],
-        assigned_by_day: Dict[int, List[PoiDTO]],
-    ) -> Optional[DayConstraintDTO]:
-        if not cluster_pois:
-            return None
-
-        cluster_center = self._calculate_cluster_center(cluster_pois)
-
-        candidate_days = [
-            day
-            for day in days
-            if self._has_day_capacity(
-                day=day,
-                assigned_pois=assigned_by_day[day.day_index],
-            )
-        ]
-
-        if not candidate_days:
-            return None
-
-        return min(
-            candidate_days,
-            key=lambda day: self._calculate_day_access_score(
-                cluster_center=cluster_center,
-                day=day,
-            ),
-        )
-
-    # 클러스터 중심점을 계산하는 함수
-    def _calculate_cluster_center(
-        self,
-        pois: List[PoiDTO],
-    ) -> Coordinate:
-        average_lat = sum(poi.lat for poi in pois) / len(pois)
-        average_lng = sum(poi.lng for poi in pois) / len(pois)
-
-        return average_lat, average_lng
-
-    # 클러스터 중심점과 day 출발지/도착지의 접근성 점수를 계산하는 함수
-    # 값이 낮을수록 해당 day 조건에 더 가까운 클러스터로 판단
-    def _calculate_day_access_score(
-        self,
-        cluster_center: Coordinate,
-        day: DayConstraintDTO,
-    ) -> float:
-        start_distance = self._haversine_minutes_proxy(
-            origin=cluster_center,
-            destination=(day.start_place.lat, day.start_place.lng),
-        )
-        end_distance = self._haversine_minutes_proxy(
-            origin=cluster_center,
-            destination=(day.end_place.lat, day.end_place.lng),
-        )
-
-        return start_distance + end_distance
-
-    # day의 max_place_count를 초과하지 않는지 확인하는 함수
-    def _has_day_capacity(
-        self,
-        day: DayConstraintDTO,
-        assigned_pois: List[PoiDTO],
-    ) -> bool:
-        if day.max_place_count is None:
-            return True
-
-        return len(assigned_pois) < day.max_place_count
-
-    # DayPlanDTO 목록을 생성하는 함수
+    # 정확 배정 결과를 날짜별 DayPlanDTO로 변환
     def _build_day_plans(
         self,
-        days: List[DayConstraintDTO],
-        assigned_by_day: Dict[int, List[PoiDTO]],
-        warnings: List[str],
-    ) -> List[DayPlanDTO]:
-        day_plans: List[DayPlanDTO] = []
+        days: list[DayConstraintDTO],
+        poi_by_id: Mapping[str, PoiDTO],
+        exact_result: ExactDayAssignmentResult,
+    ) -> Tuple[list[DayPlanDTO], list[str]]:
+        day_plans: list[DayPlanDTO] = []
+        warnings: list[str] = []
 
-        for day in days:
-            assigned_pois = assigned_by_day[day.day_index]
-            estimated_total_stay_minutes = sum(
-                poi.estimated_stay_minutes
-                for poi in assigned_pois
+        for day in sorted(
+            days,
+            key=lambda item: item.day_index,
+        ):
+            assigned_poi_ids = (
+                exact_result
+                .assigned_poi_ids_by_day
+                .get(
+                    day.day_index,
+                    (),
+                )
             )
 
-            available_minutes = self._calculate_available_minutes(day)
-
-            if (
-                self.config.warn_when_stay_time_exceeds_available_time
-                and available_minutes is not None
-                and estimated_total_stay_minutes > available_minutes
-            ):
-                warnings.append(
-                    f"Day {day.day_index}의 예상 체류 시간 합이 사용 가능 시간을 초과합니다. "
-                    f"stay={estimated_total_stay_minutes}분, available={available_minutes}분"
+            assigned_pois = [
+                self._get_poi_or_raise(
+                    poi_by_id=poi_by_id,
+                    poi_id=poi_id,
                 )
+                for poi_id in assigned_poi_ids
+            ]
+
+            estimated_total_stay_minutes = (
+                sum(
+                    poi.estimated_stay_minutes
+                    for poi in assigned_pois
+                )
+            )
+
+            self._append_stay_time_warning(
+                day=day,
+                estimated_total_stay_minutes=(
+                    estimated_total_stay_minutes
+                ),
+                warnings=warnings,
+            )
 
             day_plans.append(
                 DayPlanDTO(
@@ -390,99 +169,194 @@ class DayAssignmentSolver:
                     start_place=day.start_place,
                     end_place=day.end_place,
                     assigned_pois=assigned_pois,
-                    estimated_total_stay_minutes=estimated_total_stay_minutes,
-                    assignment_reason=self._build_assignment_reason(
-                        day=day,
-                        assigned_pois=assigned_pois,
+                    estimated_total_stay_minutes=(
+                        estimated_total_stay_minutes
+                    ),
+                    assignment_reason=(
+                        "정확 일자 배정 최적화 결과"
                     ),
                 )
             )
 
-        return day_plans
-
-    # day별 배정 사유 문구를 생성하는 함수
-    def _build_assignment_reason(
-        self,
-        day: DayConstraintDTO,
-        assigned_pois: List[PoiDTO],
-    ) -> str:
-        if not assigned_pois:
-            return f"Day {day.day_index}에 배정된 POI가 없습니다."
-
-        return (
-            f"Day {day.day_index}의 출발지/도착지 접근성과 "
-            "장소 클러스터링 결과를 기준으로 배정했습니다."
+        self._validate_assignment_result(
+            day_plans=day_plans,
+            exact_result=exact_result,
         )
 
-    # 응답 상태를 결정하는 함수
-    def _resolve_status(
+        return day_plans, warnings
+
+    # 미배정 POI DTO 목록 생성
+    def _build_unassigned_pois(
         self,
-        day_plans: List[DayPlanDTO],
-        unassigned_pois: List[UnassignedPoiDTO],
-    ) -> TripPlanningStatus:
-        if not day_plans:
-            return TripPlanningStatus.FAILED
+        poi_by_id: Mapping[str, PoiDTO],
+        unassigned_poi_ids: Tuple[str, ...],
+    ) -> list[UnassignedPoiDTO]:
+        return [
+            UnassignedPoiDTO(
+                poi=self._get_poi_or_raise(
+                    poi_by_id=poi_by_id,
+                    poi_id=poi_id,
+                ),
+                reason=(
+                    "날짜별 수용량 또는 완전 경로 "
+                    "제약으로 정확 배정되지 못함"
+                ),
+            )
+            for poi_id in unassigned_poi_ids
+        ]
 
-        if unassigned_pois:
-            return TripPlanningStatus.PARTIAL_SUCCESS
+    # POI 식별자에 해당하는 DTO 조회
+    def _get_poi_or_raise(
+        self,
+        poi_by_id: Mapping[str, PoiDTO],
+        poi_id: str,
+    ) -> PoiDTO:
+        poi = poi_by_id.get(poi_id)
 
-        return TripPlanningStatus.SUCCESS
+        if poi is None:
+            raise ValueError(
+                "정확 일자 배정 결과에 "
+                "알 수 없는 poi_id가 포함되었습니다: "
+                f"{poi_id}"
+            )
 
-    # HH:MM 문자열을 분 단위로 변환하는 함수
-    # 형식이 맞지 않으면 None을 반환해 경고 검증에서 제외
-    def _parse_time_to_minutes(self, raw_time: str) -> Optional[int]:
-        try:
-            hour_text, minute_text = raw_time.split(":")
-            hour = int(hour_text)
-            minute = int(minute_text)
-        except ValueError:
-            return None
+        return poi
 
-        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
-            return None
+    # 체류시간이 날짜 사용 가능 시간을 초과하는 경우 경고 추가
+    def _append_stay_time_warning(
+        self,
+        day: DayConstraintDTO,
+        estimated_total_stay_minutes: int,
+        warnings: list[str],
+    ) -> None:
+        if not (
+            self._config
+            .warn_when_stay_time_exceeds_available_time
+        ):
+            return
 
-        return hour * 60 + minute
+        available_minutes = (
+            self._calculate_available_minutes(
+                day
+            )
+        )
 
-    # day의 사용 가능 시간을 분 단위로 계산하는 함수
+        if (
+            estimated_total_stay_minutes
+            <= available_minutes
+        ):
+            return
+
+        warnings.append(
+            f"day_index={day.day_index}의 "
+            "예상 체류시간이 사용 가능 시간을 "
+            "초과했습니다: "
+            f"stay={estimated_total_stay_minutes}, "
+            f"available={available_minutes}"
+        )
+
+    # 날짜 시작시간과 종료시간 사이의 사용 가능 분 계산
     def _calculate_available_minutes(
         self,
         day: DayConstraintDTO,
-    ) -> Optional[int]:
-        start_minutes = self._parse_time_to_minutes(day.start_time)
-        end_minutes = self._parse_time_to_minutes(day.end_time)
-
-        if start_minutes is None or end_minutes is None:
-            return None
-
-        if end_minutes < start_minutes:
-            return None
-
-        return end_minutes - start_minutes
-
-    # 두 좌표 간 거리를 계산하는 함수
-    # 실제 이동 시간은 아니며, day clustering과 접근성 점수 계산용 거리 proxy로만 사용
-    def _haversine_minutes_proxy(
-        self,
-        origin: Coordinate,
-        destination: Coordinate,
-    ) -> float:
-        earth_radius_km = 6371.0
-
-        origin_lat, origin_lng = origin
-        destination_lat, destination_lng = destination
-
-        lat_delta = math.radians(destination_lat - origin_lat)
-        lng_delta = math.radians(destination_lng - origin_lng)
-
-        origin_lat_rad = math.radians(origin_lat)
-        destination_lat_rad = math.radians(destination_lat)
-
-        a = (
-            math.sin(lat_delta / 2) ** 2
-            + math.cos(origin_lat_rad)
-            * math.cos(destination_lat_rad)
-            * math.sin(lng_delta / 2) ** 2
+    ) -> int:
+        start_time = datetime.strptime(
+            day.start_time,
+            "%H:%M",
         )
-        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+        end_time = datetime.strptime(
+            day.end_time,
+            "%H:%M",
+        )
 
-        return earth_radius_km * c
+        available_minutes = int(
+            (
+                end_time - start_time
+            ).total_seconds()
+            // 60
+        )
+
+        if available_minutes < 0:
+            raise ValueError(
+                "end_time은 start_time보다 "
+                "빠를 수 없습니다: "
+                f"day_index={day.day_index}"
+            )
+
+        return available_minutes
+
+    # 정확 배정 결과와 생성된 DayPlanDTO의 무결성 검증
+    def _validate_assignment_result(
+        self,
+        day_plans: list[DayPlanDTO],
+        exact_result: ExactDayAssignmentResult,
+    ) -> None:
+        assigned_poi_ids = [
+            poi.poi_id
+            for day_plan in day_plans
+            for poi in day_plan.assigned_pois
+        ]
+
+        if len(
+            assigned_poi_ids
+        ) != len(
+            set(assigned_poi_ids)
+        ):
+            raise ValueError(
+                "POI가 여러 날짜에 중복 배정되었습니다."
+            )
+
+        expected_assigned_poi_ids = {
+            poi_id
+            for poi_ids in (
+                exact_result
+                .assigned_poi_ids_by_day
+                .values()
+            )
+            for poi_id in poi_ids
+        }
+
+        if set(
+            assigned_poi_ids
+        ) != expected_assigned_poi_ids:
+            raise ValueError(
+                "정확 일자 배정 결과와 "
+                "DayPlanDTO의 POI 집합이 다릅니다."
+            )
+
+        assigned_and_unassigned = (
+            set(assigned_poi_ids)
+            | set(
+                exact_result
+                .unassigned_poi_ids
+            )
+        )
+
+        if len(
+            assigned_and_unassigned
+        ) != (
+            len(assigned_poi_ids)
+            + len(
+                exact_result
+                .unassigned_poi_ids
+            )
+        ):
+            raise ValueError(
+                "동일한 POI가 배정 및 미배정 "
+                "결과에 동시에 포함되었습니다."
+            )
+
+    # 미배정 POI 존재 여부에 따라 응답 상태 결정
+    def _resolve_status(
+        self,
+        unassigned_pois: list[
+            UnassignedPoiDTO
+        ],
+    ) -> TripPlanningStatus:
+        if unassigned_pois:
+            return (
+                TripPlanningStatus
+                .PARTIAL_SUCCESS
+            )
+
+        return TripPlanningStatus.SUCCESS

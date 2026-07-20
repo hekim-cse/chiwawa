@@ -82,8 +82,40 @@ def make_request_payload():
 
 # 테스트용 DayPlanDTO 생성 함수
 def make_day_plan() -> DayPlanDTO:
-    request = TripPlanningRequestDTO.model_validate(make_request_payload())
-    response = DayAssignmentSolver().assign_pois_to_days(request)
+    request = TripPlanningRequestDTO.model_validate(
+        make_request_payload()
+    )
+
+    travel_time_matrices_by_day = {}
+
+    for day in request.days:
+        place_ids = [
+            day.start_place.place_id,
+            *[
+                poi.place_id
+                for poi in request.pois
+            ],
+            day.end_place.place_id,
+        ]
+
+        travel_time_matrices_by_day[
+            day.day_index
+        ] = {
+            (origin, destination): 10
+            for origin in place_ids
+            for destination in place_ids
+            if origin != destination
+        }
+
+    response = (
+        DayAssignmentSolver()
+        .assign_pois_to_days(
+            request=request,
+            travel_time_matrices_by_day=(
+                travel_time_matrices_by_day
+            ),
+        )
+    )
 
     return response.day_plans[0]
 
