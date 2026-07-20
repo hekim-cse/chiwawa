@@ -58,6 +58,21 @@ class TestVisionIdentification:
                 confidence=-0.1,
             )
 
+    # 사진 속 간판/글자(visible_text)를 담을 수 있고, 기본값은 빈 리스트다
+    def test_holds_visible_text_and_defaults_empty(self):
+        with_text = VisionIdentification(
+            category=PlaceCategory.CAFE,
+            reason="간판 인식",
+            confidence=0.7,
+            visible_text=["스타벅스", "OPEN"],
+        )
+        without_text = VisionIdentification(
+            category=PlaceCategory.CAFE, reason="분위기만", confidence=0.5
+        )
+
+        assert with_text.visible_text == ["스타벅스", "OPEN"]
+        assert without_text.visible_text == []
+
 
 class TestResolvedPlace:
     # 도시/국가/리뷰 수를 담을 수 있다 (백엔드 계약 매핑용, Places addressComponents 기반)
