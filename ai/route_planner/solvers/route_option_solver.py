@@ -1,8 +1,11 @@
-# DayPlanDTO를 기반으로 day 내부 방문 순서를 생성하는 Route Option Solver
+# 정확 경로 최적화 결과를 RouteOptionDTO로 변환하는 도메인 어댑터
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, List, Mapping, Tuple
 
-from ai.route_planner.domain.schemas import TravelMode, TravelTimeMatrix
+from ai.route_planner.domain.schemas import (
+    TravelMode,
+    TravelTimeMatrix,
+)
 from ai.route_planner.domain.trip_schemas import (
     DayPlanDTO,
     PoiDTO,
@@ -11,373 +14,92 @@ from ai.route_planner.domain.trip_schemas import (
     RouteStopDTO,
     RouteStopType,
 )
+from ai.route_planner.solvers.exact_route_solver import (
+    ExactRouteResult,
+    ExactRouteSolver,
+)
 
 
-# Route Option Solver 설정값
+# 정확 경로 계산과 DTO 변환에 필요한 불변 컨텍스트
 @dataclass(frozen=True)
-class RouteOptionSolverConfig:
-    # Local Search 반복 최대 횟수
-    max_local_search_iterations: int = 50
+class RouteOptionContext:
+    start_place_id: str
+    end_place_id: str
+    poi_place_ids: Tuple[str, ...]
+    stops_by_place_id: Mapping[str, RouteStopDTO]
 
 
-# 방문 순서 계산 중 내부에서 사용하는 정류장 정보
-# Solver 내부에서는 출발지, POI, 도착지를 모두 같은 형태로 다루는 게 편하기 때문
-@dataclass(frozen=True)
-class RouteNode:
-    stop_type: RouteStopType
-    place_id: str
-    name: str
-    lat: float
-    lng: float
-
-
-# day별 POI 방문 순서를 생성하는 Solver
+# 정확 경로 Solver와 여행 도메인 DTO 사이를 연결하는 어댑터
 class RouteOptionSolver:
-    # config: Local Search 반복 횟수 등 Solver 동작 설정
-    def __init__(self, config: Optional[RouteOptionSolverConfig] = None):
-        self.config = config or RouteOptionSolverConfig()
+    def __init__(
+        self,
+        exact_route_solver: ExactRouteSolver | None = None,
+    ):
+        self.exact_route_solver = (
+            exact_route_solver
+            or ExactRouteSolver()
+        )
 
-    # DayPlanDTO와 이동 시간 행렬을 기반으로 하나의 경로 옵션을 생성하는 함수
+    # DayPlanDTO와 이동시간 Matrix로 정확한 RouteOptionDTO 생성
     def solve_route_option(
         self,
-        day_plan: DayPlanDTO,   # Day Assignment Solver에서 생성된 day별 POI 배정 결과
+        day_plan: DayPlanDTO,
         travel_mode: TravelMode,
         travel_time_matrix: TravelTimeMatrix,
-    ) -> RouteOptionDTO:    # RouteOptionDTO: 최종 방문 순서와 이동 구간을 담은 DTO
-        start_node = self._build_start_node(day_plan)
-        end_node = self._build_end_node(day_plan)
-        poi_nodes = [
-            self._build_poi_node(poi)
-            for poi in day_plan.assigned_pois
-        ]
-
-        missing_segments: Set[str] = set()
-        warnings: List[str] = []
-
-        if not poi_nodes:
-            route_nodes = [start_node, end_node]
-            total_minutes = self._calculate_route_total_minutes(
-                route_nodes=route_nodes,
-                travel_time_matrix=travel_time_matrix,
-                missing_segments=missing_segments,
-            )
-
-            if total_minutes is None:
-                warnings.append("출발지에서 도착지까지의 이동 시간 정보가 없어 경로 시간을 계산할 수 없습니다.")
-                total_minutes = 0
-
-            return self._build_route_option(
-                day_index=day_plan.day_index,
-                travel_mode=travel_mode,
-                route_nodes=route_nodes,
-                total_travel_minutes=total_minutes,
-                travel_time_matrix=travel_time_matrix,
-                missing_segments=missing_segments,
-                warnings=warnings,
-            )
-        
-        # POI가 있는 경우 Cheapest Insertion + Local Search를 통해 경로를 생성
-        route_nodes, uninserted_nodes = self._build_initial_route_by_cheapest_insertion(
-            start_node=start_node,
-            end_node=end_node,
-            poi_nodes=poi_nodes,
-            travel_time_matrix=travel_time_matrix,
-            missing_segments=missing_segments,
-        )
-
-        # 이동 시간 행렬이 부족해서 어떤 POI를 어디에도 넣을 수 없으면 uninserted_nodes에 남게 됨
-        if uninserted_nodes:
-            warnings.append(
-                "일부 POI는 필요한 이동 시간 구간이 부족해 경로에 포함하지 못했습니다: "
-                + ", ".join(node.place_id for node in uninserted_nodes)
-            )
-
-        # Local Search를 통해 경로를 개선
-        route_nodes = self._improve_route_by_local_search(
-            route_nodes=route_nodes,
-            travel_time_matrix=travel_time_matrix,
-            missing_segments=missing_segments,
-        )
-
-        # 최종 경로의 총 이동 시간을 계산
-        total_minutes = self._calculate_route_total_minutes(
-            route_nodes=route_nodes,
-            travel_time_matrix=travel_time_matrix,
-            missing_segments=missing_segments,
-        )
-
-        if total_minutes is None:
-            warnings.append("최종 경로의 일부 이동 시간 정보가 없어 총 이동 시간을 계산할 수 없습니다.")
-            total_minutes = 0
-
-        return self._build_route_option(
-            day_index=day_plan.day_index,
-            travel_mode=travel_mode,
-            route_nodes=route_nodes,
-            total_travel_minutes=total_minutes,
-            travel_time_matrix=travel_time_matrix,
-            missing_segments=missing_segments,
-            warnings=warnings,
-        )
-
-    # Cheapest Insertion 방식으로 초기 경로를 생성하는 함수
-    # start → end 경로에 POI를 하나씩 가장 비용 증가가 적은 위치에 삽입
-    def _build_initial_route_by_cheapest_insertion(
-        self,
-        start_node: RouteNode,
-        end_node: RouteNode,
-        poi_nodes: List[RouteNode],
-        travel_time_matrix: TravelTimeMatrix,
-        missing_segments: Set[str],
-    ) -> Tuple[List[RouteNode], List[RouteNode]]:
-        route_nodes = [start_node, end_node]
-        remaining_nodes = list(poi_nodes)
-        uninserted_nodes: List[RouteNode] = []
-
-        while remaining_nodes:
-            best_candidate_route: Optional[List[RouteNode]] = None
-            best_candidate_node: Optional[RouteNode] = None
-            best_candidate_total: Optional[int] = None
-
-            for node in remaining_nodes:
-                for insert_index in range(1, len(route_nodes)):
-                    candidate_route = (
-                        route_nodes[:insert_index]
-                        + [node]
-                        + route_nodes[insert_index:]
-                    )
-                    candidate_total = self._calculate_route_total_minutes(
-                        route_nodes=candidate_route,
-                        travel_time_matrix=travel_time_matrix,
-                        missing_segments=missing_segments,
-                    )
-
-                    if candidate_total is None:
-                        continue
-                    
-                    # 현재까지 가장 비용 증가가 적은 후보 경로를 갱신
-                    if (
-                        best_candidate_total is None
-                        or candidate_total < best_candidate_total
-                    ):
-                        best_candidate_total = candidate_total
-                        best_candidate_node = node
-                        best_candidate_route = candidate_route
-        
-            if best_candidate_route is None or best_candidate_node is None:
-                uninserted_nodes.extend(remaining_nodes)
-                break
-
-            route_nodes = best_candidate_route
-            remaining_nodes.remove(best_candidate_node)
-
-        return route_nodes, uninserted_nodes
-
-    # Relocate와 2-opt를 반복 적용해 경로를 개선하는 함수
-    def _improve_route_by_local_search(
-        self,
-        route_nodes: List[RouteNode],
-        travel_time_matrix: TravelTimeMatrix,
-        missing_segments: Set[str],
-    ) -> List[RouteNode]:
-        current_route = route_nodes
-
-        for _ in range(self.config.max_local_search_iterations):
-            relocated_route = self._improve_route_by_relocate(
-                route_nodes=current_route,
-                travel_time_matrix=travel_time_matrix,
-                missing_segments=missing_segments,
-            )
-
-            two_opt_route = self._improve_route_by_two_opt(
-                route_nodes=relocated_route,
-                travel_time_matrix=travel_time_matrix,
-                missing_segments=missing_segments,
-            )
-
-            if two_opt_route == current_route:
-                break
-
-            current_route = two_opt_route
-
-        return current_route
-
-    # POI 하나의 위치를 다른 위치로 옮겨 경로가 짧아지는지 확인하는 함수
-    def _improve_route_by_relocate(
-        self,
-        route_nodes: List[RouteNode],
-        travel_time_matrix: TravelTimeMatrix,
-        missing_segments: Set[str],
-    ) -> List[RouteNode]:
-        best_route = route_nodes
-        best_total = self._calculate_route_total_minutes(
-            route_nodes=best_route,
-            travel_time_matrix=travel_time_matrix,
-            missing_segments=missing_segments,
-        )
-
-        if best_total is None:
-            return route_nodes
-
-        for source_index in range(1, len(route_nodes) - 1):
-            node = route_nodes[source_index]
-            route_without_node = (
-                route_nodes[:source_index]
-                + route_nodes[source_index + 1:]
-            )
-
-            for insert_index in range(1, len(route_without_node)):
-                candidate_route = (
-                    route_without_node[:insert_index]
-                    + [node]
-                    + route_without_node[insert_index:]
-                )
-                candidate_total = self._calculate_route_total_minutes(
-                    route_nodes=candidate_route,
-                    travel_time_matrix=travel_time_matrix,
-                    missing_segments=missing_segments,
-                )
-
-                if candidate_total is None:
-                    continue
-
-                if candidate_total < best_total:
-                    best_total = candidate_total
-                    best_route = candidate_route
-
-        return best_route
-
-    # 경로의 중간 구간을 뒤집어 경로가 짧아지는지 확인하는 함수
-    def _improve_route_by_two_opt(
-        self,
-        route_nodes: List[RouteNode],
-        travel_time_matrix: TravelTimeMatrix,
-        missing_segments: Set[str],
-    ) -> List[RouteNode]:
-        best_route = route_nodes
-        best_total = self._calculate_route_total_minutes(
-            route_nodes=best_route,
-            travel_time_matrix=travel_time_matrix,
-            missing_segments=missing_segments,
-        )
-
-        if best_total is None:
-            return route_nodes
-
-        for start_index in range(1, len(route_nodes) - 2):
-            for end_index in range(start_index + 1, len(route_nodes) - 1):
-                candidate_route = (
-                    route_nodes[:start_index]
-                    + list(reversed(route_nodes[start_index:end_index + 1]))
-                    + route_nodes[end_index + 1:]
-                )
-                candidate_total = self._calculate_route_total_minutes(
-                    route_nodes=candidate_route,
-                    travel_time_matrix=travel_time_matrix,
-                    missing_segments=missing_segments,
-                )
-
-                if candidate_total is None:
-                    continue
-
-                if candidate_total < best_total:
-                    best_total = candidate_total
-                    best_route = candidate_route
-
-        return best_route
-
-    # 경로 전체 이동 시간을 계산하는 함수
-    # 이동 시간 행렬에 없는 구간이 있으면 None을 반환하고 missing_segments에 기록
-    def _calculate_route_total_minutes(
-        self,
-        route_nodes: List[RouteNode],
-        travel_time_matrix: TravelTimeMatrix,
-        missing_segments: Set[str],
-    ) -> Optional[int]:
-        total_minutes = 0
-
-        for origin_node, destination_node in zip(route_nodes, route_nodes[1:]):
-            travel_minutes = self._get_travel_minutes(
-                origin_place_id=origin_node.place_id,
-                destination_place_id=destination_node.place_id,
-                travel_time_matrix=travel_time_matrix,
-                missing_segments=missing_segments,
-            )
-
-            if travel_minutes is None:
-                return None
-
-            total_minutes += travel_minutes
-
-        return total_minutes
-
-    # 이동 시간 행렬에서 두 장소 간 이동 시간을 조회하는 함수
-    def _get_travel_minutes(
-        self,
-        origin_place_id: str,
-        destination_place_id: str,
-        travel_time_matrix: TravelTimeMatrix,
-        missing_segments: Set[str],
-    ) -> Optional[int]:
-        key = (origin_place_id, destination_place_id)
-
-        if key not in travel_time_matrix:
-            missing_segments.add(f"{origin_place_id} -> {destination_place_id}")
-            return None
-
-        return travel_time_matrix[key]
-
-    # RouteOptionDTO를 생성하는 함수
-    def _build_route_option(
-        self,
-        day_index: int,
-        travel_mode: TravelMode,
-        route_nodes: List[RouteNode],
-        total_travel_minutes: int,
-        travel_time_matrix: TravelTimeMatrix,
-        missing_segments: Set[str],
-        warnings: List[str],
     ) -> RouteOptionDTO:
-        route_legs: List[RouteLegDTO] = []
+        context = self._build_context(day_plan)
 
-        for origin_node, destination_node in zip(route_nodes, route_nodes[1:]):
-            travel_minutes = travel_time_matrix.get(
-                (origin_node.place_id, destination_node.place_id)
-            )
+        exact_result = self.exact_route_solver.solve(
+            start_place_id=context.start_place_id,
+            poi_place_ids=context.poi_place_ids,
+            end_place_id=context.end_place_id,
+            travel_time_matrix=travel_time_matrix,
+        )
 
-            if travel_minutes is None:
-                continue
+        self._validate_exact_result(
+            context=context,
+            exact_result=exact_result,
+        )
 
-            route_legs.append(
-                RouteLegDTO(
-                    origin_place_id=origin_node.place_id,
-                    destination_place_id=destination_node.place_id,
-                    travel_minutes=travel_minutes,
-                )
-            )
+        ordered_stops = self._build_ordered_stops(
+            ordered_place_ids=(
+                exact_result.ordered_place_ids
+            ),
+            stops_by_place_id=(
+                context.stops_by_place_id
+            ),
+        )
+
+        route_legs = self._build_route_legs(
+            ordered_place_ids=(
+                exact_result.ordered_place_ids
+            ),
+            travel_time_matrix=travel_time_matrix,
+        )
+
+        self._validate_route_legs(
+            exact_result=exact_result,
+            route_legs=route_legs,
+        )
 
         return RouteOptionDTO(
-            day_index=day_index,
+            day_index=day_plan.day_index,
             travel_mode=travel_mode,
-            total_travel_minutes=total_travel_minutes,
-            ordered_stops=[
-                RouteStopDTO(
-                    stop_type=node.stop_type,
-                    place_id=node.place_id,
-                    name=node.name,
-                    lat=node.lat,
-                    lng=node.lng,
-                )
-                for node in route_nodes
-            ],
+            total_travel_minutes=(
+                exact_result.total_travel_minutes
+            ),
+            ordered_stops=ordered_stops,
             route_legs=route_legs,
-            missing_segments=sorted(missing_segments),
-            warnings=warnings,
+            missing_segments=[],
+            warnings=[],
         )
 
-    # DayPlanDTO의 출발지를 RouteNode로 변환하는 함수
-    def _build_start_node(self, day_plan: DayPlanDTO) -> RouteNode:
-        return RouteNode(
+    # DayPlanDTO를 정확 경로 계산용 불변 컨텍스트로 변환
+    def _build_context(
+        self,
+        day_plan: DayPlanDTO,
+    ) -> RouteOptionContext:
+        start_stop = RouteStopDTO(
             stop_type=RouteStopType.START,
             place_id=day_plan.start_place.place_id,
             name=day_plan.start_place.name,
@@ -385,9 +107,7 @@ class RouteOptionSolver:
             lng=day_plan.start_place.lng,
         )
 
-    # DayPlanDTO의 도착지를 RouteNode로 변환하는 함수
-    def _build_end_node(self, day_plan: DayPlanDTO) -> RouteNode:
-        return RouteNode(
+        end_stop = RouteStopDTO(
             stop_type=RouteStopType.END,
             place_id=day_plan.end_place.place_id,
             name=day_plan.end_place.name,
@@ -395,12 +115,239 @@ class RouteOptionSolver:
             lng=day_plan.end_place.lng,
         )
 
-    # PoiDTO를 RouteNode로 변환하는 함수
-    def _build_poi_node(self, poi: PoiDTO) -> RouteNode:
-        return RouteNode(
+        poi_stops = [
+            self._build_poi_stop(poi)
+            for poi in day_plan.assigned_pois
+        ]
+
+        all_stops = [
+            start_stop,
+            *poi_stops,
+            end_stop,
+        ]
+
+        place_ids = [
+            stop.place_id
+            for stop in all_stops
+        ]
+
+        duplicate_place_ids = sorted(
+            {
+                place_id
+                for place_id in place_ids
+                if place_ids.count(place_id) > 1
+            }
+        )
+
+        if duplicate_place_ids:
+            raise ValueError(
+                "DayPlanDTO의 place_id는 중복될 수 없습니다: "
+                + ", ".join(duplicate_place_ids)
+            )
+
+        return RouteOptionContext(
+            start_place_id=start_stop.place_id,
+            end_place_id=end_stop.place_id,
+            poi_place_ids=tuple(
+                stop.place_id
+                for stop in poi_stops
+            ),
+            stops_by_place_id={
+                stop.place_id: stop
+                for stop in all_stops
+            },
+        )
+
+    # POI를 RouteStopDTO로 변환
+    def _build_poi_stop(
+        self,
+        poi: PoiDTO,
+    ) -> RouteStopDTO:
+        return RouteStopDTO(
             stop_type=RouteStopType.POI,
             place_id=poi.place_id,
             name=poi.name,
             lat=poi.lat,
             lng=poi.lng,
         )
+
+    # 정확 경로 결과의 장소 집합과 순서 불변조건 검증
+    def _validate_exact_result(
+        self,
+        context: RouteOptionContext,
+        exact_result: ExactRouteResult,
+    ) -> None:
+        ordered_place_ids = (
+            exact_result.ordered_place_ids
+        )
+
+        if len(ordered_place_ids) < 2:
+            raise ValueError(
+                "정확 경로 결과에는 START와 END가 필요합니다."
+            )
+
+        if (
+            ordered_place_ids[0]
+            != context.start_place_id
+        ):
+            raise ValueError(
+                "정확 경로 결과의 첫 장소가 START가 아닙니다."
+            )
+
+        if (
+            ordered_place_ids[-1]
+            != context.end_place_id
+        ):
+            raise ValueError(
+                "정확 경로 결과의 마지막 장소가 END가 아닙니다."
+            )
+
+        ordered_poi_ids = ordered_place_ids[1:-1]
+
+        if len(ordered_poi_ids) != len(
+            set(ordered_poi_ids)
+        ):
+            raise ValueError(
+                "정확 경로 결과에 중복 POI가 있습니다."
+            )
+
+        expected_poi_ids = set(
+            context.poi_place_ids
+        )
+        actual_poi_ids = set(
+            ordered_poi_ids
+        )
+
+        missing_poi_ids = sorted(
+            expected_poi_ids - actual_poi_ids
+        )
+        unknown_poi_ids = sorted(
+            actual_poi_ids - expected_poi_ids
+        )
+
+        if missing_poi_ids:
+            raise ValueError(
+                "정확 경로 결과에 누락된 POI가 있습니다: "
+                + ", ".join(missing_poi_ids)
+            )
+
+        if unknown_poi_ids:
+            raise ValueError(
+                "정확 경로 결과에 알 수 없는 POI가 있습니다: "
+                + ", ".join(unknown_poi_ids)
+            )
+
+        expected_place_ids = {
+            context.start_place_id,
+            *context.poi_place_ids,
+            context.end_place_id,
+        }
+
+        if set(ordered_place_ids) != expected_place_ids:
+            raise ValueError(
+                "정확 경로 결과의 장소 집합이 입력과 다릅니다."
+            )
+
+    # 정확 경로 순서를 RouteStopDTO 목록으로 변환
+    def _build_ordered_stops(
+        self,
+        ordered_place_ids: Tuple[str, ...],
+        stops_by_place_id: Mapping[
+            str,
+            RouteStopDTO,
+        ],
+    ) -> List[RouteStopDTO]:
+        ordered_stops: List[RouteStopDTO] = []
+
+        for place_id in ordered_place_ids:
+            stop = stops_by_place_id.get(
+                place_id
+            )
+
+            if stop is None:
+                raise ValueError(
+                    "RouteStopDTO를 찾을 수 없습니다: "
+                    f"{place_id}"
+                )
+
+            ordered_stops.append(stop)
+
+        return ordered_stops
+
+    # 정확 경로의 모든 인접 구간을 RouteLegDTO로 변환
+    def _build_route_legs(
+        self,
+        ordered_place_ids: Tuple[str, ...],
+        travel_time_matrix: TravelTimeMatrix,
+    ) -> List[RouteLegDTO]:
+        route_legs: List[RouteLegDTO] = []
+
+        for origin_place_id, destination_place_id in zip(
+            ordered_place_ids,
+            ordered_place_ids[1:],
+        ):
+            travel_minutes = (
+                travel_time_matrix.get(
+                    (
+                        origin_place_id,
+                        destination_place_id,
+                    )
+                )
+            )
+
+            if travel_minutes is None:
+                raise ValueError(
+                    "정확 경로 결과의 이동 구간이 "
+                    "Matrix에 없습니다: "
+                    f"{origin_place_id} -> "
+                    f"{destination_place_id}"
+                )
+
+            route_legs.append(
+                RouteLegDTO(
+                    origin_place_id=(
+                        origin_place_id
+                    ),
+                    destination_place_id=(
+                        destination_place_id
+                    ),
+                    travel_minutes=travel_minutes,
+                )
+            )
+
+        return route_legs
+
+    # 경로 구간 합계와 정확 Solver 결과의 비용 교차 검증
+    def _validate_route_legs(
+        self,
+        exact_result: ExactRouteResult,
+        route_legs: List[RouteLegDTO],
+    ) -> None:
+        expected_leg_count = (
+            len(exact_result.ordered_place_ids)
+            - 1
+        )
+
+        if len(route_legs) != expected_leg_count:
+            raise ValueError(
+                "Route Leg 개수가 경로 구간 수와 다릅니다. "
+                f"expected={expected_leg_count}, "
+                f"actual={len(route_legs)}"
+            )
+
+        route_leg_total = sum(
+            route_leg.travel_minutes
+            for route_leg in route_legs
+        )
+
+        if (
+            route_leg_total
+            != exact_result.total_travel_minutes
+        ):
+            raise ValueError(
+                "Route Leg 이동시간 합계와 정확 경로 "
+                "총 이동시간이 다릅니다. "
+                f"route_leg_total={route_leg_total}, "
+                "exact_total="
+                f"{exact_result.total_travel_minutes}"
+            )

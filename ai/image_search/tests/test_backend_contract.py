@@ -7,11 +7,11 @@
 import pytest
 from pydantic import ValidationError
 
-from ai.image_search.domain.schemas import (
+from ai.image_search.domain.schemas import PlaceCategory
+from ai.image_search.domain.search_schemas import (
     CandidateSource,
     ImageSearchRequest,
     PlaceCandidate,
-    PlaceCategory,
 )
 
 # PhotoPlaceCandidateRead 계약 필드 스냅샷 (id 는 백엔드가 next_id 로 부여하므로 제외)

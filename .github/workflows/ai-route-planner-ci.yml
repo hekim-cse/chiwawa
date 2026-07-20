@@ -77,23 +77,23 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Clustering Evaluation 실행
+      - name: Day Assignment Evaluation 실행
         run: |
-          python -m ai.route_planner.scripts.run_clustering_evaluation \
+          python -m ai.route_planner.scripts.run_day_assignment_evaluation \
             --fixture-path \
-            ai/route_planner/tests/fixtures/clustering_evaluation_scenario.json \
+            ai/route_planner/tests/fixtures/day_assignment_evaluation_scenario.json \
             --output-path \
-            artifacts/clustering_evaluation_result.json
+            artifacts/day_assignment_evaluation_result.json
 
-      - name: Clustering Evaluation 결과 확인
+      - name: Day Assignment Evaluation 결과 확인
         run: |
           python -m json.tool \
-            artifacts/clustering_evaluation_result.json
+            artifacts/day_assignment_evaluation_result.json
 
-      - name: Clustering Evaluation 결과 업로드
+      - name: Day Assignment Evaluation 결과 업로드
         uses: actions/upload-artifact@v4
         with:
-          name: clustering-evaluation-result
-          path: artifacts/clustering_evaluation_result.json
+          name: day-assignment-evaluation-result
+          path: artifacts/day_assignment_evaluation_result.json
           if-no-files-found: error
           retention-days: 14
