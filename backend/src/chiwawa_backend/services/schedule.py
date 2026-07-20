@@ -13,6 +13,7 @@ from chiwawa_backend.state import AppState, synchronized
 SCHEDULE_DATE_ERROR = "schedule date must be within trip dates"
 SCHEDULE_TIME_ERROR = "end_time must be after start_time"
 SCHEDULE_TIMEZONE_ERROR = "timezone offsets are not allowed"
+SCHEDULE_OVERLAP_ERROR = "schedule item overlaps an existing schedule item"
 
 
 @synchronized
@@ -114,6 +115,21 @@ def validate_schedule_item(
         payload.start_time,
         payload.end_time,
     )
+
+
+@synchronized
+def ensure_no_schedule_overlap(
+    state: AppState,
+    trip_id: str,
+    payload: ScheduleItemCreateRequest,
+    excluded_ids: set[str] | None = None,
+) -> None:
+    excluded = excluded_ids or set()
+    for item in state.schedule_items.values():
+        if item.trip_id != trip_id or item.id in excluded or item.date != payload.date:
+            continue
+        if payload.start_time < item.end_time and item.start_time < payload.end_time:
+            raise DomainValidationError(SCHEDULE_OVERLAP_ERROR)
 
 
 def _validate_schedule_values(

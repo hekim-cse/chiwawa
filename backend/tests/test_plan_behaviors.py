@@ -12,7 +12,7 @@ from chiwawa_backend.schemas.plans import (
     PlanDraftRead,
     PlanJobRead,
 )
-from chiwawa_backend.schemas.schedule import ScheduleItemRead
+from chiwawa_backend.schemas.schedule import ScheduleItemRead, ScheduleResponse
 from chiwawa_backend.schemas.travel import ReplanResponse
 from chiwawa_backend.schemas.trips import TripRead
 
@@ -151,6 +151,80 @@ async def test_plan_confirmation_is_idempotent() -> None:
 
 
 @pytest.mark.anyio
+async def test_reconfirming_plan_recreates_deleted_schedule_items() -> None:
+    # Given: 확정 후 생성된 스케줄 아이템이 삭제된 plan.
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        trip = await _create_trip(client)
+        plan = await _create_plan_with_places(client, trip.id, place_count=1)
+        first_response = await client.post(
+            f"/api/v1/trips/{trip.id}/plans/{plan.id}/confirm",
+        )
+        first = PlanConfirmResponse.model_validate_json(first_response.text)
+        created_item = first.schedule.items[0]
+        delete_response = await client.delete(
+            f"/api/v1/trips/{trip.id}/schedule-items/{created_item.id}",
+        )
+        assert delete_response.status_code == HTTPStatus.NO_CONTENT
+
+        # When: 같은 plan을 다시 confirm한다.
+        second_response = await client.post(
+            f"/api/v1/trips/{trip.id}/plans/{plan.id}/confirm",
+        )
+
+    # Then: 삭제된 아이템이 재생성되어 빈 스케줄로 끝나지 않는다.
+    assert second_response.status_code == HTTPStatus.CREATED
+    second = PlanConfirmResponse.model_validate_json(second_response.text)
+    assert len(second.schedule.items) == 1
+    restored = second.schedule.items[0]
+    assert restored.name == created_item.name
+    assert restored.date == created_item.date
+    assert restored.start_time == created_item.start_time
+    assert restored.end_time == created_item.end_time
+
+
+@pytest.mark.anyio
+async def test_confirming_second_overlapping_draft_is_rejected() -> None:
+    # Given: 같은 wanted place로 만들어진 동일한 draft 두 개.
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        trip = await _create_trip(client)
+        plan_one = await _create_plan_with_places(client, trip.id, place_count=1)
+        job_response = await client.post(
+            f"/api/v1/trips/{trip.id}/ai-plans",
+            json={
+                "preferred_start_time": "09:00:00",
+                "preferred_end_time": "21:00:00",
+                "pace": "packed",
+            },
+        )
+        assert job_response.status_code == HTTPStatus.ACCEPTED
+        plan_two_id = PlanJobRead.model_validate_json(job_response.text).plan_id
+        assert plan_two_id is not None
+
+        # When: 두 draft를 차례로 confirm한다.
+        first_response = await client.post(
+            f"/api/v1/trips/{trip.id}/plans/{plan_one.id}/confirm",
+        )
+        second_response = await client.post(
+            f"/api/v1/trips/{trip.id}/plans/{plan_two_id}/confirm",
+        )
+        schedule_response = await client.get(f"/api/v1/trips/{trip.id}/schedule")
+
+    # Then: 겹치는 두 번째 confirm은 거부되고 스케줄은 중복되지 않는다.
+    assert first_response.status_code == HTTPStatus.CREATED
+    assert second_response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    schedule = ScheduleResponse.model_validate_json(schedule_response.text)
+    assert len(schedule.items) == 1
+
+
+@pytest.mark.anyio
 async def test_replan_starts_at_current_schedule_item() -> None:
     # Given: a trip with a completed stop followed by the current stop.
     app = create_app()
@@ -266,3 +340,89 @@ async def test_replan_today_delay_succeeds_despite_late_item_tomorrow() -> None:
     stops = {stop.name: stop for day in plan.days for stop in day.stops}
     assert stops["Today lunch"].start_time.isoformat() == "11:30:00"
     assert stops["Tomorrow night show"].start_time.isoformat() == "23:00:00"
+
+
+@pytest.mark.anyio
+async def test_replan_without_current_item_does_not_anchor_on_first_trip_day() -> None:
+    # Given: 첫날 밤 늦은 일정과 마지막 날 일정이 있는 (이미 지난) 여행.
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        trip = await _create_trip(client)
+        _ = await _create_schedule_item(
+            client,
+            trip.id,
+            name="First-night show",
+            start_time="23:00:00",
+            end_time="23:30:00",
+        )
+        _ = await _create_schedule_item(
+            client,
+            trip.id,
+            name="Last-day brunch",
+            date="2026-07-12",
+            start_time="10:00:00",
+            end_time="11:00:00",
+        )
+
+        # When: current_item_id 없이 60분 지연으로 replan한다.
+        response = await client.post(
+            f"/api/v1/trips/{trip.id}/assistant/replan",
+            json={"delay_minutes": 60},
+        )
+
+    # Then: 여행 첫날이 아니라 오늘과 가장 가까운 날짜(마지막 날)에 지연이 적용되어,
+    # 첫날 밤 일정이 자정을 넘긴다는 이유로 요청이 실패하지 않는다.
+    assert response.status_code == HTTPStatus.CREATED
+    plan = ReplanResponse.model_validate_json(response.text).plan
+    stops = {stop.name: stop for day in plan.days for stop in day.stops}
+    assert stops["First-night show"].start_time.isoformat() == "23:00:00"
+    assert stops["Last-day brunch"].start_time.isoformat() == "11:00:00"
+
+
+@pytest.mark.anyio
+async def test_replan_confirmation_replaces_original_schedule_items() -> None:
+    # Given: 하루에 스케줄 아이템 두 개가 있는 여행.
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        trip = await _create_trip(client)
+        first = await _create_schedule_item(
+            client,
+            trip.id,
+            name="Museum",
+            start_time="09:00:00",
+            end_time="10:00:00",
+        )
+        _ = await _create_schedule_item(
+            client,
+            trip.id,
+            name="Lunch",
+            start_time="11:00:00",
+            end_time="12:00:00",
+        )
+        replan_response = await client.post(
+            f"/api/v1/trips/{trip.id}/assistant/replan",
+            json={"current_item_id": first.id, "delay_minutes": 30},
+        )
+        assert replan_response.status_code == HTTPStatus.CREATED
+        plan = ReplanResponse.model_validate_json(replan_response.text).plan
+
+        # When: 리플랜 draft를 confirm한다.
+        confirm_response = await client.post(
+            f"/api/v1/trips/{trip.id}/plans/{plan.id}/confirm",
+        )
+        schedule_response = await client.get(f"/api/v1/trips/{trip.id}/schedule")
+
+    # Then: 원본 아이템이 밀린 아이템으로 대체되어 하루가 복제되지 않는다.
+    assert confirm_response.status_code == HTTPStatus.CREATED
+    schedule = ScheduleResponse.model_validate_json(schedule_response.text)
+    assert len(schedule.items) == 2
+    assert [item.start_time.isoformat() for item in schedule.items] == [
+        "09:30:00",
+        "11:30:00",
+    ]

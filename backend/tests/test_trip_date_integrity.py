@@ -50,8 +50,29 @@ async def test_trip_patch_keeps_existing_recommendations_in_range() -> None:
     assert persisted.end_date.isoformat() == "2026-07-12"
 
 
+def _draft_plan(trip: TripRead, plan_id: str, *, plan_date: dt.date) -> PlanDraftRead:
+    stop = PlanStopRead(
+        id=f"stop_of_{plan_id}",
+        place_id=None,
+        name="Draft stop",
+        date=plan_date,
+        start_time=dt.time(10),
+        end_time=dt.time(11),
+        notes=None,
+        source=PlaceSource.PLAN,
+    )
+    return PlanDraftRead(
+        id=plan_id,
+        trip_id=trip.id,
+        title="Draft",
+        days=[PlanDayRead(date=plan_date, stops=[stop])],
+        estimated_total_minutes=60,
+    )
+
+
 @pytest.mark.anyio
-async def test_trip_patch_keeps_unconfirmed_plan_dates_in_range() -> None:
+async def test_trip_patch_discards_unconfirmed_drafts_outside_new_range() -> None:
+    # Given: 마지막 날을 참조하는 draft와 첫날만 참조하는 draft가 있는 여행.
     state = AppState()
     trip = TripRead(
         id="trip_with_draft",
@@ -64,34 +85,32 @@ async def test_trip_patch_keeps_unconfirmed_plan_dates_in_range() -> None:
         interests=[],
         travel_style=TravelStyle.BALANCED,
     )
-    stop = PlanStopRead(
-        id="stop_on_last_day",
-        place_id=None,
-        name="Last-day stop",
-        date=trip.end_date,
-        start_time=dt.time(10),
-        end_time=dt.time(11),
-        notes=None,
-        source=PlaceSource.PLAN,
-    )
-    plan = PlanDraftRead(
-        id="unconfirmed_plan",
-        trip_id=trip.id,
-        title="Draft",
-        days=[PlanDayRead(date=trip.end_date, stops=[stop])],
-        estimated_total_minutes=60,
-    )
+    outside_plan = _draft_plan(trip, "draft_on_last_day", plan_date=trip.end_date)
+    inside_plan = _draft_plan(trip, "draft_on_first_day", plan_date=trip.start_date)
     state.trips[trip.id] = trip
-    state.plans[plan.id] = plan
+    state.plans[outside_plan.id] = outside_plan
+    state.plans[inside_plan.id] = inside_plan
     app = create_app(state)
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
     ) as client:
+        # When: 미확정 draft만 마지막 날을 참조하는 상태에서 기간을 줄인다.
         response = await client.patch(
             f"/api/v1/trips/{trip.id}",
             json={"end_date": "2026-07-11"},
         )
+        outside_response = await client.get(
+            f"/api/v1/trips/{trip.id}/plans/{outside_plan.id}",
+        )
+        inside_response = await client.get(
+            f"/api/v1/trips/{trip.id}/plans/{inside_plan.id}",
+        )
 
-    assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
+    # Then: 날짜 변경은 성공하고 범위를 벗어난 draft만 폐기된다.
+    assert response.status_code == HTTPStatus.OK
+    updated = TripRead.model_validate_json(response.text)
+    assert updated.end_date.isoformat() == "2026-07-11"
+    assert outside_response.status_code == HTTPStatus.NOT_FOUND
+    assert inside_response.status_code == HTTPStatus.OK
