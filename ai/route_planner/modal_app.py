@@ -1,9 +1,12 @@
-# Modal 환경에서 TripPlannerService를 실행하는 HTTP entrypoint
+# Modal 환경에서 명시적인 정확 일자 배정 설정으로 TripPlannerService를 실행하는 HTTP entrypoint
 from typing import Any
 
 import modal
 from pydantic import ValidationError
 
+from ai.route_planner.domain.schemas import (
+    TravelMode,
+)
 from ai.route_planner.domain.trip_schemas import (
     TripPlanningRequestDTO,
 )
@@ -13,6 +16,7 @@ from ai.route_planner.providers.google_routes_provider import (
 from ai.route_planner.services.trip_planner_service import (
     TravelTimeMatrixProvider,
     TripPlannerService,
+    TripPlannerServiceConfig,
 )
 
 
@@ -21,7 +25,6 @@ app = modal.App("chiwawa-route-planner")
 
 
 # Modal 컨테이너에서 사용할 Python 환경
-# Modal 1.0 이후 로컬 패키지를 명시적으로 포함해야 하므로 ai 패키지를 추가
 image = (
     modal.Image.debian_slim(
         python_version="3.11",
@@ -38,29 +41,32 @@ image = (
 )
 
 
-# Modal Dashboard의 Secrets에 등록할 Secret 이름
+# Modal Dashboard의 Google Maps API Secret
 google_maps_secret = modal.Secret.from_name(
     "chiwawa-google-maps",
 )
 
 
-# payload를 검증하고 TripPlannerService를 실행하는 순수 Python 함수
-# 테스트에서는 Fake Provider를 주입해 실제 Google API 호출 없이 검증 가능
+# payload를 검증하고 DRIVE 기준 정확 일자 배정 Service를 실행
 def plan_trip_payload(
     payload: dict[str, Any],
     routes_provider: TravelTimeMatrixProvider,
 ) -> dict[str, Any]:
-    request = TripPlanningRequestDTO.model_validate(
-        payload
+    request = (
+        TripPlanningRequestDTO
+        .model_validate(payload)
     )
 
     service = TripPlannerService(
         routes_provider=routes_provider,
+        config=TripPlannerServiceConfig(
+            day_assignment_travel_mode=(
+                TravelMode.DRIVE
+            ),
+        ),
     )
 
-    response = service.plan_trip(
-        request
-    )
+    response = service.plan_trip(request)
 
     return response.model_dump(
         mode="json"
@@ -82,7 +88,6 @@ def plan_trip_payload(
 def plan_trip(
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    # Secret으로 주입된 GOOGLE_MAPS_API_KEY를 사용하는 실제 Provider
     routes_provider = GoogleRoutesProvider()
 
     try:
@@ -91,7 +96,6 @@ def plan_trip(
             routes_provider=routes_provider,
         )
     except ValidationError as error:
-        # FastAPI가 올바른 HTTP 상태를 반환하도록 endpoint 계층에서 변환
         from fastapi import HTTPException
 
         raise HTTPException(
