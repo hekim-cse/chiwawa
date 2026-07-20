@@ -1,8 +1,16 @@
 # RouteOptionSolver 단위 테스트
+import pytest
+
 from ai.route_planner.domain.schemas import TravelMode
 from ai.route_planner.domain.trip_schemas import DayPlanDTO, TripPlanningRequestDTO
 from ai.route_planner.solvers.day_assignment_solver import DayAssignmentSolver
-from ai.route_planner.solvers.route_option_solver import RouteOptionSolver
+from ai.route_planner.solvers.exact_route_solver import (
+    ExactRouteNotFoundError,
+    ExactRouteResult,
+)
+from ai.route_planner.solvers.route_option_solver import (
+    RouteOptionSolver,
+)
 
 
 # RouteOptionSolver 테스트용 TripPlanningRequest payload 생성 함수
@@ -99,7 +107,7 @@ def make_travel_time_matrix():
     }
 
 
-# Cheapest Insertion과 Local Search를 통해 경로 옵션을 생성하는지 검증
+# Held-Karp 정확 최적화 결과로 경로 옵션을 생성하는지 검증
 def test_solve_route_option_returns_ordered_route():
     day_plan = make_day_plan()
     solver = RouteOptionSolver()
@@ -141,31 +149,23 @@ def test_solve_route_option_builds_route_legs():
     assert route_option.route_legs[-1].destination_place_id == "end"
 
 
-# 이동 시간 정보가 부족한 POI는 warning과 missing_segments로 추적되는지 검증
-def test_solve_route_option_tracks_missing_segments():
+# 모든 POI를 방문하는 완전 경로가 없으면 부분 경로 없이 실패
+def test_solve_route_option_rejects_incomplete_route():
     day_plan = make_day_plan()
     solver = RouteOptionSolver()
 
-    travel_time_matrix = {
-        ("start", "a"): 10,
-        ("a", "end"): 10,
-    }
-
-    route_option = solver.solve_route_option(
-        day_plan=day_plan,
-        travel_mode=TravelMode.DRIVE,
-        travel_time_matrix=travel_time_matrix,
-    )
-
-    ordered_place_ids = [
-        stop.place_id
-        for stop in route_option.ordered_stops
-    ]
-
-    assert ordered_place_ids == ["start", "a", "end"]
-    assert route_option.total_travel_minutes == 20
-    assert route_option.missing_segments
-    assert route_option.warnings
+    with pytest.raises(
+        ExactRouteNotFoundError,
+        match="완전 경로가 없습니다",
+    ):
+        solver.solve_route_option(
+            day_plan=day_plan,
+            travel_mode=TravelMode.DRIVE,
+            travel_time_matrix={
+                ("start", "a"): 10,
+                ("a", "end"): 10,
+            },
+        )
 
 
 # assigned_pois가 비어 있어도 start에서 end로 이어지는 route option을 생성하는지 검증
@@ -237,3 +237,122 @@ def test_run_route_option_solver_script_returns_response_dict_with_fake_provider
     assert route_option["travel_mode"] == "DRIVE"
     assert route_option["ordered_stops"][0]["stop_type"] == "START"
     assert route_option["ordered_stops"][-1]["stop_type"] == "END"
+
+
+# 정확 Solver가 POI를 누락한 잘못된 결과를 반환하면 차단
+def test_rejects_exact_result_with_missing_poi():
+    day_plan = make_day_plan()
+
+    class InvalidExactRouteSolver:
+        def solve(
+            self,
+            start_place_id,
+            poi_place_ids,
+            end_place_id,
+            travel_time_matrix,
+        ):
+            return ExactRouteResult(
+                ordered_place_ids=(
+                    "start",
+                    "a",
+                    "end",
+                ),
+                total_travel_minutes=20,
+                evaluated_state_count=1,
+            )
+
+    solver = RouteOptionSolver(
+        exact_route_solver=(
+            InvalidExactRouteSolver()
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="누락된 POI",
+    ):
+        solver.solve_route_option(
+            day_plan=day_plan,
+            travel_mode=TravelMode.DRIVE,
+            travel_time_matrix={
+                ("start", "a"): 10,
+                ("a", "end"): 10,
+            },
+        )
+
+
+# 정확 Solver의 총비용과 Route Leg 합계가 다르면 차단
+def test_rejects_exact_result_with_inconsistent_total():
+    day_plan = make_day_plan()
+
+    class InvalidExactRouteSolver:
+        def solve(
+            self,
+            start_place_id,
+            poi_place_ids,
+            end_place_id,
+            travel_time_matrix,
+        ):
+            return ExactRouteResult(
+                ordered_place_ids=(
+                    "start",
+                    "a",
+                    "b",
+                    "c",
+                    "end",
+                ),
+                total_travel_minutes=999,
+                evaluated_state_count=1,
+            )
+
+    solver = RouteOptionSolver(
+        exact_route_solver=(
+            InvalidExactRouteSolver()
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="총 이동시간이 다릅니다",
+    ):
+        solver.solve_route_option(
+            day_plan=day_plan,
+            travel_mode=TravelMode.DRIVE,
+            travel_time_matrix=(
+                make_travel_time_matrix()
+            ),
+        )
+
+
+# DayPlanDTO의 장소 식별자가 중복되면 정확 계산 전에 차단
+def test_rejects_duplicate_day_plan_place_ids():
+    day_plan = make_day_plan()
+
+    duplicate_poi = (
+        day_plan.assigned_pois[0].model_copy(
+            update={
+                "place_id": "start",
+            }
+        )
+    )
+
+    invalid_day_plan = day_plan.model_copy(
+        update={
+            "assigned_pois": [
+                duplicate_poi,
+                *day_plan.assigned_pois[1:],
+            ]
+        }
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="place_id는 중복될 수 없습니다",
+    ):
+        RouteOptionSolver().solve_route_option(
+            day_plan=invalid_day_plan,
+            travel_mode=TravelMode.DRIVE,
+            travel_time_matrix=(
+                make_travel_time_matrix()
+            ),
+        )
