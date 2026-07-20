@@ -1,10 +1,8 @@
-# RouteEvaluator 단계별 경로 평가 테스트
+# 정확 경로 최적화 Evaluator 단위 테스트
+import pytest
+
 from ai.route_planner.domain.schemas import (
     TravelMode,
-)
-from ai.route_planner.domain.trip_schemas import (
-    PoiCategory,
-    PoiDTO,
 )
 from ai.route_planner.evaluation.route_evaluator import (
     RouteEvaluator,
@@ -12,12 +10,17 @@ from ai.route_planner.evaluation.route_evaluator import (
 from ai.route_planner.evaluation.schemas import (
     RouteEvaluationStage,
 )
+from ai.route_planner.solvers.exact_route_solver import (
+    ExactRouteLimitExceededError,
+    ExactRouteSolver,
+    ExactRouteSolverConfig,
+)
 from ai.route_planner.tests.test_route_option_solver import (
     make_day_plan,
 )
 
 
-# 입력 순서보다 Cheapest Insertion 결과가 짧아지는 Matrix
+# 입력 순서보다 정확 최적 경로가 짧아지는 Matrix
 def make_evaluation_matrix():
     return {
         ("start", "a"): 50,
@@ -36,41 +39,8 @@ def make_evaluation_matrix():
     }
 
 
-# Relocate와 2-opt 평가를 위해 POI d를 추가한 DayPlan 생성
-def make_four_poi_day_plan():
-    base_day_plan = make_day_plan()
-
-    poi_d = PoiDTO(
-        poi_id="poi_004",
-        place_id="d",
-        name="D 장소",
-        lat=34.7000,
-        lng=135.4900,
-        category=PoiCategory.ACTIVITY,
-        estimated_stay_minutes=45,
-        priority=2,
-        must_visit=True,
-        preferred_day_index=1,
-    )
-
-    assigned_pois = [
-        *base_day_plan.assigned_pois,
-        poi_d,
-    ]
-
-    return base_day_plan.model_copy(
-        update={
-            "assigned_pois": assigned_pois,
-            "estimated_total_stay_minutes": sum(
-                poi.estimated_stay_minutes
-                for poi in assigned_pois
-            ),
-        }
-    )
-
-
-# 모든 평가 단계와 비용 개선 결과가 생성되는지 검증
-def test_evaluate_returns_route_stage_results():
+# Baseline과 정확 동적 계획법 평가 결과 생성
+def test_evaluate_returns_exact_route_result():
     result = RouteEvaluator().evaluate(
         scenario_id="route-evaluation-001",
         day_plan=make_day_plan(),
@@ -90,20 +60,9 @@ def test_evaluate_returns_route_stage_results():
         == RouteEvaluationStage.BASELINE
     )
     assert (
-        result.cheapest_insertion.stage
-        == RouteEvaluationStage.CHEAPEST_INSERTION
-    )
-    assert (
-        result.relocate.stage
-        == RouteEvaluationStage.RELOCATE
-    )
-    assert (
-        result.two_opt.stage
-        == RouteEvaluationStage.TWO_OPT
-    )
-    assert (
-        result.final_local_search.stage
-        == RouteEvaluationStage.FINAL_LOCAL_SEARCH
+        result.exact_dynamic_programming.stage
+        == RouteEvaluationStage
+        .EXACT_DYNAMIC_PROGRAMMING
     )
 
     assert (
@@ -111,33 +70,29 @@ def test_evaluate_returns_route_stage_results():
         == 140
     )
     assert (
-        result.cheapest_insertion
+        result.exact_dynamic_programming
         .total_travel_minutes
         == 40
     )
-
     assert (
-        result.cheapest_insertion
-        .improvement_minutes_from_baseline
-        == 100
-    )
-    assert (
-        result.cheapest_insertion
-        .improvement_ratio_from_baseline
-        == 71.4286
-    )
-
-    assert (
-        result.final_local_search
-        .total_travel_minutes
-        <= result.cheapest_insertion
-        .total_travel_minutes
+        result.exact_dynamic_programming
+        .ordered_place_ids
+        == [
+            "start",
+            "b",
+            "a",
+            "c",
+            "end",
+        ]
     )
 
-    assert result.uninserted_place_ids == []
+    assert result.improvement_minutes == 100
+    assert result.improvement_ratio == 71.4286
+    assert result.evaluated_state_count > 0
+    assert result.complete_route_found is True
 
 
-# 모든 단계에서 START, END와 POI 집합이 유지되는지 검증
+# 정확 경로가 모든 POI를 정확히 한 번 포함
 def test_evaluate_preserves_route_invariants():
     result = RouteEvaluator().evaluate(
         scenario_id="route-invariants",
@@ -148,41 +103,37 @@ def test_evaluate_preserves_route_invariants():
         ),
     )
 
-    stages = [
-        result.baseline,
-        result.cheapest_insertion,
-        result.relocate,
-        result.two_opt,
-        result.final_local_search,
-    ]
+    ordered_place_ids = (
+        result.exact_dynamic_programming
+        .ordered_place_ids
+    )
 
-    for stage in stages:
-        assert stage.ordered_place_ids[0] == "start"
-        assert stage.ordered_place_ids[-1] == "end"
+    assert ordered_place_ids[0] == "start"
+    assert ordered_place_ids[-1] == "end"
 
-        poi_place_ids = (
-            stage.ordered_place_ids[1:-1]
-        )
+    poi_place_ids = ordered_place_ids[1:-1]
 
-        assert len(poi_place_ids) == len(
-            set(poi_place_ids)
-        )
-        assert set(poi_place_ids) == {
-            "a",
-            "b",
-            "c",
-        }
+    assert len(poi_place_ids) == len(
+        set(poi_place_ids)
+    )
+    assert set(poi_place_ids) == {
+        "a",
+        "b",
+        "c",
+    }
 
 
-# Matrix 누락 시 가짜 비용을 사용하지 않고 None과 누락 구간을 유지하는지 검증
-def test_evaluate_preserves_missing_matrix_segments():
+# Baseline이 불완전해도 다른 완전 경로가 존재하면 정확 계산
+def test_evaluate_finds_complete_route_when_baseline_is_missing():
     result = RouteEvaluator().evaluate(
-        scenario_id="route-missing-matrix",
+        scenario_id="baseline-missing",
         day_plan=make_day_plan(),
         travel_mode=TravelMode.TRANSIT,
         travel_time_matrix={
-            ("start", "a"): 10,
-            ("a", "end"): 10,
+            ("start", "b"): 10,
+            ("b", "a"): 10,
+            ("a", "c"): 10,
+            ("c", "end"): 10,
         },
     )
 
@@ -193,208 +144,71 @@ def test_evaluate_preserves_missing_matrix_segments():
     assert result.baseline.missing_segments
 
     assert (
-        result.cheapest_insertion
+        result.exact_dynamic_programming
         .total_travel_minutes
-        == 20
-    )
-    assert result.uninserted_place_ids == [
-        "b",
-        "c",
-    ]
-
-    assert (
-        result.cheapest_insertion
-        .improvement_ratio_from_baseline
-        is None
+        == 40
     )
     assert (
-        result.final_local_search
-        .total_travel_minutes
-        == 20
-    )
-
-
-# Cheapest Insertion 이후 Relocate가 추가로 경로를 줄이는 Matrix
-def make_relocate_improvement_matrix():
-    return {
-        ("start", "a"): 24,
-        ("start", "b"): 3,
-        ("start", "c"): 37,
-        ("start", "d"): 44,
-        ("start", "end"): 3,
-        ("a", "b"): 17,
-        ("a", "c"): 18,
-        ("a", "d"): 5,
-        ("a", "end"): 35,
-        ("b", "a"): 37,
-        ("b", "c"): 8,
-        ("b", "d"): 12,
-        ("b", "end"): 31,
-        ("c", "a"): 25,
-        ("c", "b"): 17,
-        ("c", "d"): 29,
-        ("c", "end"): 4,
-        ("d", "a"): 22,
-        ("d", "b"): 3,
-        ("d", "c"): 9,
-        ("d", "end"): 16,
-    }
-
-
-# Relocate 단계가 Cheapest Insertion 결과를 실제로 개선하는지 검증
-def test_evaluate_measures_relocate_improvement():
-    result = RouteEvaluator().evaluate(
-        scenario_id="route-relocate-improvement",
-        day_plan=make_four_poi_day_plan(),
-        travel_mode=TravelMode.DRIVE,
-        travel_time_matrix=(
-            make_relocate_improvement_matrix()
-        ),
-    )
-
-    assert (
-        result.cheapest_insertion
-        .ordered_place_ids
-        == [
-            "start",
-            "b",
-            "a",
-            "d",
-            "c",
-            "end",
-        ]
-    )
-    assert (
-        result.cheapest_insertion
-        .total_travel_minutes
-        == 58
-    )
-
-    assert result.relocate.ordered_place_ids == [
-        "start",
-        "a",
-        "d",
-        "b",
-        "c",
-        "end",
-    ]
-    assert (
-        result.relocate.total_travel_minutes
-        == 44
-    )
-    assert (
-        result.relocate
-        .improvement_minutes_from_previous
-        == 14
-    )
-    assert (
-        result.relocate
-        .improvement_ratio_from_previous
-        == 24.1379
-    )
-
-    assert (
-        result.two_opt.total_travel_minutes
-        == 44
-    )
-    assert (
-        result.final_local_search
-        .total_travel_minutes
-        == 44
-    )
-
-
-# Relocate는 개선하지 못하지만 2-opt가 추가로 경로를 줄이는 Matrix
-def make_two_opt_improvement_matrix():
-    return {
-        ("start", "a"): 39,
-        ("start", "b"): 1,
-        ("start", "c"): 14,
-        ("start", "d"): 20,
-        ("start", "end"): 15,
-        ("a", "b"): 30,
-        ("a", "c"): 11,
-        ("a", "d"): 50,
-        ("a", "end"): 41,
-        ("b", "a"): 14,
-        ("b", "c"): 44,
-        ("b", "d"): 41,
-        ("b", "end"): 21,
-        ("c", "a"): 3,
-        ("c", "b"): 23,
-        ("c", "d"): 42,
-        ("c", "end"): 29,
-        ("d", "a"): 46,
-        ("d", "b"): 50,
-        ("d", "c"): 27,
-        ("d", "end"): 48,
-    }
-
-
-# 2-opt 단계가 Relocate 결과를 실제로 개선하는지 검증
-def test_evaluate_measures_two_opt_improvement():
-    result = RouteEvaluator().evaluate(
-        scenario_id="route-two-opt-improvement",
-        day_plan=make_four_poi_day_plan(),
-        travel_mode=TravelMode.DRIVE,
-        travel_time_matrix=(
-            make_two_opt_improvement_matrix()
-        ),
-    )
-
-    assert (
-        result.cheapest_insertion
+        result.exact_dynamic_programming
         .ordered_place_ids
         == [
             "start",
             "b",
             "a",
             "c",
-            "d",
             "end",
         ]
     )
-    assert (
-        result.cheapest_insertion
-        .total_travel_minutes
-        == 116
+    assert result.complete_route_found is True
+    assert result.improvement_minutes is None
+    assert result.improvement_ratio is None
+
+
+# 모든 POI를 방문하는 경로가 없으면 부분 경로 없이 기록
+def test_evaluate_records_complete_route_not_found():
+    result = RouteEvaluator().evaluate(
+        scenario_id="route-not-found",
+        day_plan=make_day_plan(),
+        travel_mode=TravelMode.TRANSIT,
+        travel_time_matrix={
+            ("start", "a"): 10,
+            ("a", "end"): 10,
+        },
     )
 
-    assert (
-        result.relocate.total_travel_minutes
-        == 116
-    )
-    assert (
-        result.relocate
-        .improvement_minutes_from_previous
-        == 0
+    assert result.complete_route_found is False
+    assert result.evaluated_state_count == 0
+
+    exact_stage = (
+        result.exact_dynamic_programming
     )
 
-    assert result.two_opt.ordered_place_ids == [
-        "start",
-        "d",
-        "c",
-        "a",
-        "b",
-        "end",
-    ]
-    assert (
-        result.two_opt.total_travel_minutes
-        == 101
-    )
-    assert (
-        result.two_opt
-        .improvement_minutes_from_previous
-        == 15
-    )
-    assert (
-        result.two_opt
-        .improvement_ratio_from_previous
-        == 12.931
+    assert exact_stage.ordered_place_ids == []
+    assert exact_stage.total_travel_minutes is None
+    assert exact_stage.missing_segments
+    assert result.improvement_minutes is None
+    assert result.improvement_ratio is None
+
+
+# 정확 계산 제한 초과 시 휴리스틱으로 전환하지 않고 예외 전파
+def test_evaluate_propagates_exact_route_limit():
+    evaluator = RouteEvaluator(
+        exact_route_solver=ExactRouteSolver(
+            config=ExactRouteSolverConfig(
+                max_poi_count=2,
+            )
+        )
     )
 
-    assert (
-        result.final_local_search
-        .total_travel_minutes
-        == 101
-    )
+    with pytest.raises(
+        ExactRouteLimitExceededError,
+        match="휴리스틱 fallback은 사용하지 않습니다",
+    ):
+        evaluator.evaluate(
+            scenario_id="route-limit",
+            day_plan=make_day_plan(),
+            travel_mode=TravelMode.DRIVE,
+            travel_time_matrix=(
+                make_evaluation_matrix()
+            ),
+        )

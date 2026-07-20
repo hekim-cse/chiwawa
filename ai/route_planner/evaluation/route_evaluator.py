@@ -1,6 +1,6 @@
-# RouteOptionSolver의 단계별 경로 품질과 실행 시간을 평가하는 모듈
+# 입력 순서 Baseline과 Held-Karp 정확 최적 경로를 비교하는 Evaluator
 from time import perf_counter
-from typing import Callable, List, Optional, Set, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from ai.route_planner.domain.schemas import (
     TravelMode,
@@ -14,21 +14,24 @@ from ai.route_planner.evaluation.schemas import (
     RouteEvaluationStage,
     RouteStageEvaluationDTO,
 )
-from ai.route_planner.solvers.route_option_solver import (
-    RouteNode,
-    RouteOptionSolver,
+from ai.route_planner.solvers.exact_route_solver import (
+    ExactRouteNotFoundError,
+    ExactRouteSolver,
 )
 
 
-# RouteOptionSolver의 각 최적화 단계를 실행하고 결과를 비교하는 평가기
+# 정확 경로 최적화 품질과 실행 시간을 평가하는 클래스
 class RouteEvaluator:
     def __init__(
         self,
-        solver: RouteOptionSolver | None = None,
+        exact_route_solver: ExactRouteSolver | None = None,
     ):
-        self.solver = solver or RouteOptionSolver()
+        self.exact_route_solver = (
+            exact_route_solver
+            or ExactRouteSolver()
+        )
 
-    # 입력 순서부터 최종 Local Search까지 단계별 평가 결과 생성 (평가 전체 시작점)
+    # 입력 순서와 Held-Karp 전역 최적 경로 비교
     def evaluate(
         self,
         scenario_id: str,
@@ -36,376 +39,278 @@ class RouteEvaluator:
         travel_mode: TravelMode,
         travel_time_matrix: TravelTimeMatrix,
     ) -> RouteEvaluationResultDTO:
-        start_node = self.solver._build_start_node(
-            day_plan
+        start_place_id = (
+            day_plan.start_place.place_id
         )
-        end_node = self.solver._build_end_node(
-            day_plan
+        end_place_id = (
+            day_plan.end_place.place_id
         )
-        poi_nodes = [
-            self.solver._build_poi_node(poi)
+        poi_place_ids = [
+            poi.place_id
             for poi in day_plan.assigned_pois
         ]
 
-        expected_poi_place_ids = {
-            node.place_id
-            for node in poi_nodes
-        }
-
-        # Baseline은 사용자가 전달한 POI 순서를 그대로 사용
-        baseline_route = [
-            start_node,
-            *poi_nodes,
-            end_node,
+        baseline_place_ids = [
+            start_place_id,
+            *poi_place_ids,
+            end_place_id,
         ]
 
-        baseline_stage = self._evaluate_existing_route(
+        baseline = self._evaluate_existing_route(
             stage=RouteEvaluationStage.BASELINE,
-            route_nodes=baseline_route,
+            ordered_place_ids=baseline_place_ids,
             travel_time_matrix=travel_time_matrix,
-            previous_total_minutes=None,
-            baseline_total_minutes=None,
             runtime_ms=0.0,
         )
 
-        # Cheapest Insertion 후보 탐색 중 발생한 누락은 별도로 사용하지 않고,
-        # 완성된 경로의 누락 구간만 Stage 결과에 기록
-        cheapest_search_missing_segments: Set[str] = set()
+        started_at = perf_counter()
 
-        cheapest_started_at = perf_counter()
-        (
-            cheapest_route,
-            uninserted_nodes,
-        ) = (
-            self.solver
-            ._build_initial_route_by_cheapest_insertion(
-                start_node=start_node,
-                end_node=end_node,
-                poi_nodes=poi_nodes,
-                travel_time_matrix=travel_time_matrix,
-                missing_segments=(
-                    cheapest_search_missing_segments
-                ),
-            )
-        )
-        cheapest_runtime_ms = (
-            perf_counter() - cheapest_started_at
-        ) * 1000
-
-        # Stage별 경로 불변조건 검증
-        self._validate_route_invariants(
-            route_nodes=cheapest_route,
-            start_node=start_node,
-            end_node=end_node,
-            expected_poi_place_ids=(
-                expected_poi_place_ids
-            ),
-        )
-
-        cheapest_stage = self._evaluate_existing_route(
-            stage=(
-                RouteEvaluationStage
-                .CHEAPEST_INSERTION
-            ),
-            route_nodes=cheapest_route,
-            travel_time_matrix=travel_time_matrix,
-            previous_total_minutes=(
-                baseline_stage.total_travel_minutes
-            ),
-            baseline_total_minutes=(
-                baseline_stage.total_travel_minutes
-            ),
-            runtime_ms=cheapest_runtime_ms,
-        )
-
-        # Cheapest Insertion 결과에 Relocate를 한 번 적용
-        relocate_route, relocate_runtime_ms = (
-            self._measure_route_operation(
-                operation=lambda: (
-                    self.solver
-                    ._improve_route_by_relocate(
-                        route_nodes=cheapest_route,
-                        travel_time_matrix=(
-                            travel_time_matrix
-                        ),
-                        missing_segments=set(),
-                    )
-                )
-            )
-        )
-
-        self._validate_route_invariants(
-            route_nodes=relocate_route,
-            start_node=start_node,
-            end_node=end_node,
-            expected_poi_place_ids=(
-                expected_poi_place_ids
-            ),
-        )
-
-        relocate_stage = self._evaluate_existing_route(
-            stage=RouteEvaluationStage.RELOCATE,
-            route_nodes=relocate_route,
-            travel_time_matrix=travel_time_matrix,
-            previous_total_minutes=(
-                cheapest_stage.total_travel_minutes
-            ),
-            baseline_total_minutes=(
-                baseline_stage.total_travel_minutes
-            ),
-            runtime_ms=relocate_runtime_ms,
-        )
-
-        # Relocate 결과에 2-opt를 한 번 적용
-        two_opt_route, two_opt_runtime_ms = (
-            self._measure_route_operation(
-                operation=lambda: (
-                    self.solver
-                    ._improve_route_by_two_opt(
-                        route_nodes=relocate_route,
-                        travel_time_matrix=(
-                            travel_time_matrix
-                        ),
-                        missing_segments=set(),
-                    )
-                )
-            )
-        )
-
-        self._validate_route_invariants(
-            route_nodes=two_opt_route,
-            start_node=start_node,
-            end_node=end_node,
-            expected_poi_place_ids=(
-                expected_poi_place_ids
-            ),
-        )
-
-        two_opt_stage = self._evaluate_existing_route(
-            stage=RouteEvaluationStage.TWO_OPT,
-            route_nodes=two_opt_route,
-            travel_time_matrix=travel_time_matrix,
-            previous_total_minutes=(
-                relocate_stage.total_travel_minutes
-            ),
-            baseline_total_minutes=(
-                baseline_stage.total_travel_minutes
-            ),
-            runtime_ms=two_opt_runtime_ms,
-        )
-
-        # 실제 운영 Solver와 동일하게 Cheapest Insertion 결과에서
-        # Relocate와 2-opt를 수렴할 때까지 반복
-        (
-            final_route,
-            final_runtime_ms,
-        ) = self._measure_route_operation(
-            operation=lambda: (
-                self.solver
-                ._improve_route_by_local_search(
-                    route_nodes=cheapest_route,
+        try:
+            exact_result = (
+                self.exact_route_solver.solve(
+                    start_place_id=start_place_id,
+                    poi_place_ids=poi_place_ids,
+                    end_place_id=end_place_id,
                     travel_time_matrix=(
                         travel_time_matrix
                     ),
-                    missing_segments=set(),
                 )
             )
-        )
+        except ExactRouteNotFoundError:
+            runtime_ms = (
+                perf_counter() - started_at
+            ) * 1000
 
-        self._validate_route_invariants(
-            route_nodes=final_route,
-            start_node=start_node,
-            end_node=end_node,
-            expected_poi_place_ids=(
-                expected_poi_place_ids
-            ),
-        )
+            exact_stage = RouteStageEvaluationDTO(
+                stage=(
+                    RouteEvaluationStage
+                    .EXACT_DYNAMIC_PROGRAMMING
+                ),
+                ordered_place_ids=[],
+                total_travel_minutes=None,
+                runtime_ms=round(runtime_ms, 4),
+                missing_segments=(
+                    self._collect_missing_candidate_segments(
+                        start_place_id=start_place_id,
+                        poi_place_ids=poi_place_ids,
+                        end_place_id=end_place_id,
+                        travel_time_matrix=(
+                            travel_time_matrix
+                        ),
+                    )
+                ),
+            )
 
-        final_stage = self._evaluate_existing_route(
+            return RouteEvaluationResultDTO(
+                scenario_id=scenario_id,
+                travel_mode=travel_mode,
+                baseline=baseline,
+                exact_dynamic_programming=(
+                    exact_stage
+                ),
+                improvement_minutes=None,
+                improvement_ratio=None,
+                evaluated_state_count=0,
+                complete_route_found=False,
+            )
+
+        runtime_ms = (
+            perf_counter() - started_at
+        ) * 1000
+
+        exact_stage = RouteStageEvaluationDTO(
             stage=(
                 RouteEvaluationStage
-                .FINAL_LOCAL_SEARCH
+                .EXACT_DYNAMIC_PROGRAMMING
             ),
-            route_nodes=final_route,
-            travel_time_matrix=travel_time_matrix,
-            previous_total_minutes=(
-                cheapest_stage.total_travel_minutes
+            ordered_place_ids=list(
+                exact_result.ordered_place_ids
             ),
-            baseline_total_minutes=(
-                baseline_stage.total_travel_minutes
+            total_travel_minutes=(
+                exact_result.total_travel_minutes
             ),
-            runtime_ms=final_runtime_ms,
+            runtime_ms=round(runtime_ms, 4),
+            missing_segments=[],
+        )
+
+        (
+            improvement_minutes,
+            improvement_ratio,
+        ) = self._calculate_improvement(
+            baseline_total=(
+                baseline.total_travel_minutes
+            ),
+            exact_total=(
+                exact_result.total_travel_minutes
+            ),
         )
 
         return RouteEvaluationResultDTO(
             scenario_id=scenario_id,
             travel_mode=travel_mode,
-            baseline=baseline_stage,
-            cheapest_insertion=cheapest_stage,
-            relocate=relocate_stage,
-            two_opt=two_opt_stage,
-            final_local_search=final_stage,
-            uninserted_place_ids=[
-                node.place_id
-                for node in uninserted_nodes
-            ],
+            baseline=baseline,
+            exact_dynamic_programming=exact_stage,
+            improvement_minutes=(
+                improvement_minutes
+            ),
+            improvement_ratio=improvement_ratio,
+            evaluated_state_count=(
+                exact_result.evaluated_state_count
+            ),
+            complete_route_found=True,
         )
 
-    # 이미 생성된 경로의 비용과 개선율을 평가
+    # 이미 정해진 경로의 비용과 누락 구간 평가
     def _evaluate_existing_route(
         self,
         stage: RouteEvaluationStage,
-        route_nodes: List[RouteNode],
+        ordered_place_ids: Sequence[str],
         travel_time_matrix: TravelTimeMatrix,
-        previous_total_minutes: Optional[int],
-        baseline_total_minutes: Optional[int],
         runtime_ms: float,
     ) -> RouteStageEvaluationDTO:
-        missing_segments: Set[str] = set()
+        total_minutes = 0
+        missing_segments: List[str] = []
 
-        # 총 이동시간 계산 시 누락 구간이 있으면 None 반환
-        total_minutes = (
-            self.solver
-            ._calculate_route_total_minutes(
-                route_nodes=route_nodes,
-                travel_time_matrix=travel_time_matrix,
-                missing_segments=missing_segments,
+        for origin_place_id, destination_place_id in zip(
+            ordered_place_ids,
+            ordered_place_ids[1:],
+        ):
+            travel_minutes = (
+                travel_time_matrix.get(
+                    (
+                        origin_place_id,
+                        destination_place_id,
+                    )
+                )
             )
-        )
 
-        # 이전 단계 대비 개선량과 개선율 계산
-        (
-            previous_improvement_minutes,
-            previous_improvement_ratio,
-        ) = self._calculate_improvement(
-            reference_total_minutes=(
-                previous_total_minutes
-            ),
-            current_total_minutes=total_minutes,
-        )
+            if travel_minutes is None:
+                missing_segments.append(
+                    f"{origin_place_id} -> "
+                    f"{destination_place_id}"
+                )
+                continue
 
-        # Baseline 대비 개선량과 개선율 계산
-        (
-            baseline_improvement_minutes,
-            baseline_improvement_ratio,
-        ) = self._calculate_improvement(
-            reference_total_minutes=(
-                baseline_total_minutes
-            ),
-            current_total_minutes=total_minutes,
-        )
+            total_minutes += travel_minutes
 
         return RouteStageEvaluationDTO(
             stage=stage,
-            ordered_place_ids=[
-                node.place_id
-                for node in route_nodes
-            ],
-            total_travel_minutes=total_minutes,
-            improvement_minutes_from_previous=(
-                previous_improvement_minutes
+            ordered_place_ids=list(
+                ordered_place_ids
             ),
-            improvement_ratio_from_previous=(
-                previous_improvement_ratio
-            ),
-            improvement_minutes_from_baseline=(
-                baseline_improvement_minutes
-            ),
-            improvement_ratio_from_baseline=(
-                baseline_improvement_ratio
+            total_travel_minutes=(
+                None
+                if missing_segments
+                else total_minutes
             ),
             runtime_ms=round(runtime_ms, 4),
-            missing_segments=sorted(
-                missing_segments
-            ),
+            missing_segments=missing_segments,
         )
 
-    # 하나의 경로 최적화 단계 실행 시간을 측정
-    def _measure_route_operation(
+    # 정확 경로 생성 후보에 필요한 누락 간선 진단
+    def _collect_missing_candidate_segments(
         self,
-        operation: Callable[[], List[RouteNode]],
-    ) -> Tuple[List[RouteNode], float]:
-        started_at = perf_counter()
-        route_nodes = operation()
-        runtime_ms = (
-            perf_counter() - started_at
-        ) * 1000
+        start_place_id: str,
+        poi_place_ids: Sequence[str],
+        end_place_id: str,
+        travel_time_matrix: TravelTimeMatrix,
+    ) -> List[str]:
+        missing_segments: List[str] = []
 
-        return route_nodes, runtime_ms
+        # START에서는 각 POI 또는 END로 이동 가능
+        start_destinations = [
+            *poi_place_ids,
+            end_place_id,
+        ]
 
-    # 기준 경로 대비 이동시간 절감량과 개선율 계산
+        for destination_place_id in start_destinations:
+            self._append_missing_segment(
+                origin_place_id=start_place_id,
+                destination_place_id=(
+                    destination_place_id
+                ),
+                travel_time_matrix=travel_time_matrix,
+                missing_segments=missing_segments,
+            )
+
+        # POI에서는 다른 POI 또는 END로 이동 가능
+        for origin_place_id in poi_place_ids:
+            destinations = [
+                poi_place_id
+                for poi_place_id in poi_place_ids
+                if poi_place_id
+                != origin_place_id
+            ]
+            destinations.append(end_place_id)
+
+            for destination_place_id in destinations:
+                self._append_missing_segment(
+                    origin_place_id=(
+                        origin_place_id
+                    ),
+                    destination_place_id=(
+                        destination_place_id
+                    ),
+                    travel_time_matrix=(
+                        travel_time_matrix
+                    ),
+                    missing_segments=(
+                        missing_segments
+                    ),
+                )
+
+        return missing_segments
+
+    # Matrix에 없는 후보 구간 추가
+    def _append_missing_segment(
+        self,
+        origin_place_id: str,
+        destination_place_id: str,
+        travel_time_matrix: TravelTimeMatrix,
+        missing_segments: List[str],
+    ) -> None:
+        if (
+            origin_place_id,
+            destination_place_id,
+        ) in travel_time_matrix:
+            return
+
+        segment = (
+            f"{origin_place_id} -> "
+            f"{destination_place_id}"
+        )
+
+        if segment not in missing_segments:
+            missing_segments.append(segment)
+
+    # Baseline 대비 정확 경로 개선량과 개선율 계산
     def _calculate_improvement(
         self,
-        reference_total_minutes: Optional[int],
-        current_total_minutes: Optional[int],
+        baseline_total: Optional[int],
+        exact_total: Optional[int],
     ) -> Tuple[Optional[int], Optional[float]]:
         if (
-            reference_total_minutes is None
-            or current_total_minutes is None
+            baseline_total is None
+            or exact_total is None
         ):
             return None, None
 
         improvement_minutes = (
-            reference_total_minutes
-            - current_total_minutes
+            baseline_total - exact_total
         )
 
-        if reference_total_minutes == 0:
-            if current_total_minutes == 0:
+        if baseline_total == 0:
+            if exact_total == 0:
                 return improvement_minutes, 0.0
 
             return improvement_minutes, None
 
-        improvement_ratio = (
-            improvement_minutes
-            / reference_total_minutes
-            * 100
-        )
-
         return (
             improvement_minutes,
-            round(improvement_ratio, 4),
+            round(
+                improvement_minutes
+                / baseline_total
+                * 100,
+                4,
+            ),
         )
-
-    # 평가 과정에서 START, END, POI 순서의 기본 불변조건 검증
-    def _validate_route_invariants(
-        self,
-        route_nodes: List[RouteNode],
-        start_node: RouteNode,
-        end_node: RouteNode,
-        expected_poi_place_ids: Set[str],
-    ) -> None:
-        if not route_nodes:
-            raise ValueError(
-                "Evaluated route must not be empty."
-            )
-
-        if route_nodes[0] != start_node:
-            raise ValueError(
-                "START node must remain first."
-            )
-
-        if route_nodes[-1] != end_node:
-            raise ValueError(
-                "END node must remain last."
-            )
-
-        route_poi_place_ids = [
-            node.place_id
-            for node in route_nodes[1:-1]
-        ]
-
-        if (
-            len(route_poi_place_ids)
-            != len(set(route_poi_place_ids))
-        ):
-            raise ValueError(
-                "Evaluated route contains duplicated POIs."
-            )
-
-        if not set(route_poi_place_ids).issubset(
-            expected_poi_place_ids
-        ):
-            raise ValueError(
-                "Evaluated route contains unknown POIs."
-            )

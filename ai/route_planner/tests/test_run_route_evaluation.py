@@ -22,7 +22,7 @@ FIXTURE_PATH = (
 )
 
 
-# Fixture를 검증하고 단계별 평가 결과를 생성하는지 확인
+# Fixture를 검증하고 정확 경로 평가 결과 생성
 def test_run_route_evaluation_returns_result():
     scenario = load_route_evaluation_scenario(
         FIXTURE_PATH
@@ -40,19 +40,17 @@ def test_run_route_evaluation_returns_result():
         == 140
     )
     assert (
-        result.cheapest_insertion
+        result.exact_dynamic_programming
         .total_travel_minutes
         == 40
     )
-    assert (
-        result.final_local_search
-        .total_travel_minutes
-        <= result.cheapest_insertion
-        .total_travel_minutes
-    )
+    assert result.improvement_minutes == 100
+    assert result.improvement_ratio == 71.4286
+    assert result.evaluated_state_count > 0
+    assert result.complete_route_found is True
 
 
-# 평가 결과가 JSON 파일로 저장되는지 확인
+# 정확 경로 평가 결과가 JSON 파일로 저장되는지 확인
 def test_save_route_evaluation_result(
     tmp_path: Path,
 ):
@@ -88,13 +86,14 @@ def test_save_route_evaluation_result(
         == 140
     )
     assert (
-        payload["cheapest_insertion"]
+        payload["exact_dynamic_programming"]
         ["total_travel_minutes"]
         == 40
     )
+    assert payload["complete_route_found"] is True
 
 
-# 같은 이동 구간이 중복 정의되면 명시적으로 실패하는지 확인
+# 같은 이동 구간이 중복 정의되면 명시적으로 실패
 def test_build_travel_time_matrix_rejects_duplicates():
     scenario = (
         RouteEvaluationScenarioDTO
