@@ -45,9 +45,12 @@ class FakeVision:
 
 
 class FakePlaces:
-    def __init__(self, resolved=None, resolve_raises=False, nearby=None, nearby_raises=False):
+    # resolve_map 이 주어지면 이름별로 조회 (없는 이름은 ValueError) — 시드별 성공/실패를 구분
+    def __init__(self, resolved=None, resolve_raises=False, nearby=None,
+                 nearby_raises=False, resolve_map=None):
         self.resolved = resolved
         self.resolve_raises = resolve_raises
+        self.resolve_map = resolve_map
         self.nearby = nearby if nearby is not None else []
         self.nearby_raises = nearby_raises
         self.resolve_calls = []
@@ -57,6 +60,10 @@ class FakePlaces:
         self.resolve_calls.append(place_name)
         if self.resolve_raises:
             raise ValueError("no result")
+        if self.resolve_map is not None:
+            if place_name not in self.resolve_map:
+                raise ValueError(f"no result for {place_name}")
+            return self.resolve_map[place_name]
         return self.resolved
 
     def search_nearby(self, latitude, longitude, category=None, radius_m=1500,
@@ -178,6 +185,55 @@ class TestCascade:
 
         assert result.status is RecognitionStatus.FAILED
         assert result.identified is None
+
+    # 랜드마크 이름이 Places 에서 안 잡히면 LLM 추정으로 폴백해 재시도한다
+    # (예: 랜드마크가 "Sensō-ji" 로 주는데 검색은 "센소지" 로만 잡히는 경우)
+    def test_landmark_resolve_failure_falls_back_to_llm_guess(self):
+        places = FakePlaces(
+            resolve_map={"센소지": resolved_place(name="센소지", pid="p1")},
+            nearby=[],
+        )
+        rec = make_recognizer(
+            FakeLandmark(landmark_det(name="Sensō-ji", score=0.9)),
+            FakeVision(vision_id(guess="센소지")),
+            places,
+        )
+
+        result = rec.search(req())
+
+        assert result.identified is not None
+        assert result.identified.source is CandidateSource.LLM  # 폴백된 시드
+        assert result.identified.name == "센소지"
+        # 랜드마크 이름 먼저 시도 → 실패 후 LLM 추정으로 재확정
+        assert places.resolve_calls == ["Sensō-ji", "센소지"]
+
+    # 랜드마크·LLM 추정 둘 다 Places 에서 못 잡으면 FAILED
+    def test_both_seeds_unresolvable_returns_failed(self):
+        places = FakePlaces(resolve_map={}, nearby=[])  # 아무 이름도 못 찾음
+        rec = make_recognizer(
+            FakeLandmark(landmark_det(name="Sensō-ji", score=0.9)),
+            FakeVision(vision_id(guess="센소지")),
+            places,
+        )
+
+        result = rec.search(req())
+
+        assert result.status is RecognitionStatus.FAILED
+        assert places.resolve_calls == ["Sensō-ji", "센소지"]  # 둘 다 시도
+
+    # 랜드마크 확정 실패 + LLM 추정 없음 → 폴백 불가로 그대로 FAILED (재시도 안 함)
+    def test_landmark_resolve_failure_no_llm_guess_returns_failed(self):
+        places = FakePlaces(resolve_map={}, nearby=[])
+        rec = make_recognizer(
+            FakeLandmark(landmark_det(name="Sensō-ji", score=0.9)),
+            FakeVision(vision_id(guess=None)),
+            places,
+        )
+
+        result = rec.search(req())
+
+        assert result.status is RecognitionStatus.FAILED
+        assert places.resolve_calls == ["Sensō-ji"]  # LLM 추정 없어 재시도 안 함
 
     # 랜드마크 provider 예외 → LLM 으로 우아하게 폴백
     def test_landmark_exception_falls_back_to_llm(self):

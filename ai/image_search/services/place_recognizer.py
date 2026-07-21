@@ -98,7 +98,13 @@ class PlaceRecognizer:
         # 좌표는 항상 Places 로 재확정 (랜드마크가 준 좌표도 신뢰하지 않음, 환각 차단)
         resolved = self._safe_resolve(seed_name)
         if resolved is None:
-            return self._failed(signals)
+            # 랜드마크 이름이 검색되지 않으면 LLM 추정으로 한 번 더 시도 (우아한 저하)
+            fallback = self._llm_fallback_seed(source, seed_name, llm)
+            if fallback is not None:
+                seed_name, base_conf, source, reason = fallback
+                resolved = self._safe_resolve(seed_name)
+            if resolved is None:
+                return self._failed(signals)
 
         identified = self._to_candidate(resolved, base_conf, reason, source, category, request)
 
@@ -129,6 +135,19 @@ class PlaceRecognizer:
         if llm is not None and llm.place_name_guess:
             return llm.place_name_guess, llm.confidence, CandidateSource.LLM, llm.reason
         return None
+
+    # 랜드마크 시드의 Places 확정이 실패했을 때 쓸 LLM 대체 시드
+    # (랜드마크 시드였고, LLM 추정이 있으며, 방금 실패한 이름과 다를 때만)
+    def _llm_fallback_seed(
+        self, source: CandidateSource, failed_name: str, llm: VisionIdentification | None
+    ) -> tuple[str, float, CandidateSource, str] | None:
+        if source is not CandidateSource.LANDMARK:
+            return None
+        if llm is None or not llm.place_name_guess:
+            return None
+        if llm.place_name_guess == failed_name:
+            return None
+        return llm.place_name_guess, llm.confidence, CandidateSource.LLM, llm.reason
 
     # Places searchNearby 의 결과 개수 상한
     _NEARBY_API_MAX = 20
