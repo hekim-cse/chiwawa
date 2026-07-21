@@ -197,6 +197,28 @@ class TestRunDebug:
         assert places.resolve_calls == ["블루보틀"]
         assert report["seed"]["source"] == "LLM"
 
+    # 랜드마크도 LLM 장소명도 없으면 좌표 확정을 건너뛴다 (무시드 분기)
+    def test_debug_no_seed_skips_resolve(self, photo):
+        request = build_request(
+            image_path=str(photo), image_url=None, note=None, max_candidates=2
+        )
+        places = FakePlaces(resolved=resolved_place())
+
+        report = run_debug(
+            request,
+            image_path=photo,
+            landmark=FakeLandmark(None),
+            vision_llm=FakeVision(vision_id(guess=None)),  # 장소명 추정 없음
+            places=places,
+        )
+
+        assert "skipped" in report["places_resolve"]
+        assert "seed" not in report
+        assert places.resolve_calls == []  # 확정 호출 자체를 안 함
+
+
+MODULE = "ai.image_search.scripts.run_image_search"
+
 
 class TestMain:
     # 존재하지 않는 사진 경로면 실패 코드 1 을 반환한다
@@ -211,3 +233,49 @@ class TestMain:
         )
 
         assert main() == 1
+
+    # 성공 경로: 결과를 성공 배너와 함께 출력하고 0 을 반환한다
+    # (실제 provider 호출은 몽키패치로 대체 — 오케스트레이션만 검증)
+    def test_success_prints_banner_and_returns_zero(
+        self, monkeypatch, capsys, tmp_path
+    ):
+        photo = tmp_path / "p.jpg"
+        photo.write_bytes(b"x")
+        monkeypatch.setattr(f"{MODULE}.build_recognizer", lambda image_path=None: object())
+        monkeypatch.setattr(
+            f"{MODULE}.run_image_search", lambda request, recognizer: {"status": "SUCCESS"}
+        )
+        monkeypatch.setattr("sys.argv", ["run_image_search", "--image-path", str(photo)])
+
+        assert main() == 0
+        out = capsys.readouterr().out
+        assert "[이미지 장소 검색 성공]" in out
+        assert "SUCCESS" in out
+
+    # --debug 경로: run_debug 결과를 출력하고 0 을 반환한다
+    def test_debug_flag_runs_debug_and_returns_zero(
+        self, monkeypatch, capsys, tmp_path
+    ):
+        photo = tmp_path / "p.jpg"
+        photo.write_bytes(b"x")
+        monkeypatch.setattr(
+            f"{MODULE}.run_debug", lambda request, image_path=None: {"debug": "ok"}
+        )
+        monkeypatch.setattr(
+            "sys.argv", ["run_image_search", "--image-path", str(photo), "--debug"]
+        )
+
+        assert main() == 0
+        assert "[이미지 장소 검색 성공]" in capsys.readouterr().out
+
+    # 잘못된 인자(후보 개수 0)는 ValidationError → 실패 배너와 코드 1
+    def test_validation_error_returns_one(self, monkeypatch, capsys, tmp_path):
+        photo = tmp_path / "p.jpg"
+        photo.write_bytes(b"x")
+        monkeypatch.setattr(
+            "sys.argv",
+            ["run_image_search", "--image-path", str(photo), "--max-candidates", "0"],
+        )
+
+        assert main() == 1
+        assert "[이미지 장소 검색 실패]" in capsys.readouterr().out
