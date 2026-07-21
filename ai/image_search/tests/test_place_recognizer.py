@@ -408,6 +408,22 @@ class TestCascade:
 
         assert places.nearby_calls[0]["max"] == 20  # (25-1)+1=25 → 상한 20
 
+    # 근처 confidence 감소가 하한(0.1) 아래로는 내려가지 않는다 (음수/0 방지)
+    def test_nearby_confidence_clamped_at_floor(self):
+        places = FakePlaces(
+            resolved=resolved_place(), nearby=[resolved_place(name="근처", pid="n1")]
+        )
+        rec = make_recognizer(
+            FakeLandmark(None),
+            FakeVision(vision_id(guess="카페", conf=0.2)),  # 낮은 base
+            places,
+        )
+
+        result = rec.search(req(max_candidates=2))
+
+        # 0.2 - 0.15 = 0.05 → 하한 0.1 로 클램프
+        assert result.candidates[1].confidence == 0.1
+
     # 근처 추천 confidence 는 식별보다 낮게 점감한다
     def test_nearby_confidence_decays(self):
         nearby = [resolved_place(name=f"근처{i}", pid=f"n{i}") for i in range(3)]

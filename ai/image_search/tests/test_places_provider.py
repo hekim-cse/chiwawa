@@ -158,6 +158,39 @@ class TestEnrichedParsing:
         assert place.review_count == 138000
         assert place.primary_type == "buddhist_temple"
 
+    # 빈 longText·무관 타입 컴포넌트는 무시하고, locality 없으면 admin_area 로 폴백한다
+    def test_ignores_empty_and_unrelated_components_with_admin_fallback(self):
+        place = google_place(
+            addressComponents=[
+                {"longText": "", "types": ["locality"]},  # 빈 값 → 무시
+                {"longText": "1-2-3", "types": ["route"]},  # 무관 타입 → 무시
+                {"longText": "도쿄도", "types": ["administrative_area_level_1"]},
+                {"longText": "일본", "types": ["country"]},
+            ]
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"places": [place]})
+
+        resolved = make_provider(handler).resolve_place("어딘가")
+
+        assert resolved.city == "도쿄도"  # locality 없어 admin_area 폴백
+        assert resolved.country == "일본"
+
+    # 도시·국가 컴포넌트가 하나도 없으면 city/country 는 None 이다
+    def test_no_city_country_components_yield_none(self):
+        place = google_place(
+            addressComponents=[{"longText": "1-2-3", "types": ["route"]}]
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"places": [place]})
+
+        resolved = make_provider(handler).resolve_place("어딘가")
+
+        assert resolved.city is None
+        assert resolved.country is None
+
     # addressComponents 가 아예 없으면 city/country 는 None 이다 (거부 아님)
     def test_missing_address_components_yield_none(self):
         def handler(request: httpx.Request) -> httpx.Response:

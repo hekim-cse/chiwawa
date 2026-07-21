@@ -112,6 +112,44 @@ class TestDetect:
         assert detection is not None
         assert detection.name == "Sensō-ji"
 
+    # 이름(description)이 없는 annotation 은 건너뛰고 다음 후보를 쓴다
+    def test_skips_annotation_without_name(self):
+        no_name = landmark_annotation(description="")
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "responses": [
+                        {"landmarkAnnotations": [no_name, landmark_annotation()]}
+                    ]
+                },
+            )
+
+        detection = make_provider(handler).detect(image_url="https://x/a.jpg")
+
+        assert detection is not None
+        assert detection.name == "Sensō-ji"
+
+    # score 가 없는 annotation 은 건너뛰고 다음 후보를 쓴다
+    def test_skips_annotation_without_score(self):
+        no_score = landmark_annotation(description="점수 없는 곳", score=None)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "responses": [
+                        {"landmarkAnnotations": [no_score, landmark_annotation()]}
+                    ]
+                },
+            )
+
+        detection = make_provider(handler).detect(image_url="https://x/a.jpg")
+
+        assert detection is not None
+        assert detection.name == "Sensō-ji"
+
     # responses 배열이 완전히 비어 있어도 None (인덱스 접근 전 가드)
     def test_returns_none_when_responses_empty(self):
         def handler(request: httpx.Request) -> httpx.Response:
