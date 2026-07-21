@@ -16,7 +16,10 @@ from ai.image_search.domain.search_schemas import ImageSearchRequest
 from ai.image_search.providers.landmark_provider import LandmarkProvider
 from ai.image_search.providers.places_provider import PlacesProvider
 from ai.image_search.providers.vision_llm_provider import VisionLlmProvider
-from ai.image_search.services.image_loader import load_image_bytes
+from ai.image_search.services.image_loader import (
+    detect_image_mime_type,
+    load_image_bytes,
+)
 from ai.image_search.services.place_recognizer import PlaceRecognizer
 
 
@@ -115,7 +118,8 @@ def run_debug(
     )
     image_bytes = loader(request)
 
-    report: dict = {"image_bytes": len(image_bytes)}
+    mime_type = detect_image_mime_type(image_bytes)
+    report: dict = {"image_bytes": len(image_bytes), "mime_type": mime_type}
 
     landmark_result = _probe(
         report, "landmark", lambda: landmark.detect(image_bytes=image_bytes)
@@ -123,7 +127,9 @@ def run_debug(
     llm_result = _probe(
         report,
         "vision_llm",
-        lambda: vision_llm.identify(image_bytes=image_bytes, note=request.note),
+        lambda: vision_llm.identify(
+            image_bytes=image_bytes, mime_type=mime_type, note=request.note
+        ),
     )
 
     # 시드 선택은 캐스케이드와 동일 정책을 재사용한다 (중복 구현으로 드리프트하지 않도록)

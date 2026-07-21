@@ -36,9 +36,11 @@ class FakeVision:
         self.result = result
         self.raises = raises
         self.calls = []
+        self.mime_types = []
 
     def identify(self, image_bytes, mime_type="image/jpeg", note=None):
         self.calls.append((image_bytes, note))
+        self.mime_types.append(mime_type)
         if self.raises:
             raise RuntimeError("gemini down")
         return self.result
@@ -267,6 +269,35 @@ class TestCascade:
 
         assert result.identified.latitude == 35.7148  # 랜드마크(35.0)가 아닌 Places
         assert result.identified.longitude == 139.7967
+
+    # 감지된 이미지 MIME 타입을 Gemini 에 전달한다 (PNG 를 jpeg 로 보내지 않음)
+    def test_detected_mime_type_passed_to_llm(self):
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"rest-of-png"
+        vision = FakeVision(vision_id())
+        rec = PlaceRecognizer(
+            landmark=FakeLandmark(None),
+            vision_llm=vision,
+            places=FakePlaces(resolved=resolved_place()),
+            image_loader=lambda request: png_bytes,
+        )
+
+        rec.search(req())
+
+        assert vision.mime_types == ["image/png"]
+
+    # 형식을 모르는 바이트는 기본값(jpeg)으로 전달한다
+    def test_unknown_bytes_default_to_jpeg(self):
+        vision = FakeVision(vision_id())
+        rec = PlaceRecognizer(
+            landmark=FakeLandmark(None),
+            vision_llm=vision,
+            places=FakePlaces(resolved=resolved_place()),
+            image_loader=lambda request: b"not-a-real-image",
+        )
+
+        rec.search(req())
+
+        assert vision.mime_types == ["image/jpeg"]
 
     # 원신호(landmark·llm)가 결과에 보존된다
     def test_signals_preserved(self):

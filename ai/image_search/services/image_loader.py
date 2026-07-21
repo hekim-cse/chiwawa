@@ -63,6 +63,26 @@ def _resolve_addresses(host: str) -> list[ipaddress._BaseAddress]:
     return addresses
 
 
+# HEIC(아이폰 기본 포맷) 컨테이너의 ftyp 브랜드들
+_HEIC_BRANDS = {b"heic", b"heix", b"hevc", b"heim", b"heis", b"mif1", b"msf1"}
+
+
+# 이미지 바이트의 매직 넘버로 MIME 타입을 추정한다.
+# 식별기(Gemini)에 올바른 타입을 넘기기 위함이며, 알 수 없으면 image/jpeg 로 둔다.
+def detect_image_mime_type(image_bytes: bytes) -> str:
+    if image_bytes.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if image_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if image_bytes.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if image_bytes[:4] == b"RIFF" and image_bytes[8:12] == b"WEBP":
+        return "image/webp"
+    if image_bytes[4:8] == b"ftyp" and image_bytes[8:12] in _HEIC_BRANDS:
+        return "image/heic"
+    return "image/jpeg"
+
+
 # 경로가 허용 base 디렉토리 안에 있는지 검증하고, 정규화된 절대경로를 반환한다.
 # 경로 탈출(../)·절대경로로 base 밖 접근을 차단한다.
 def validate_image_path(path: str, base_dir: Path) -> Path:
