@@ -3,12 +3,6 @@ from pathlib import Path
 
 import pytest
 
-from ai.image_search.domain.schemas import (
-    LandmarkDetection,
-    PlaceCategory,
-    ResolvedPlace,
-    VisionIdentification,
-)
 from ai.image_search.scripts.run_image_search import (
     build_recognizer,
     build_request,
@@ -16,63 +10,14 @@ from ai.image_search.scripts.run_image_search import (
     run_debug,
     run_image_search,
 )
-
-
-# --- 가짜 provider들 (recognizer 테스트와 동일한 형태) ---
-class FakeLandmark:
-    def __init__(self, result=None, raises=False):
-        self.result = result
-        self.raises = raises
-        self.received_bytes = None
-
-    def detect(self, image_bytes=None, image_url=None):
-        self.received_bytes = image_bytes
-        if self.raises:
-            raise RuntimeError("Cloud Vision API 요청 실패: status=403")
-        return self.result
-
-
-class FakeVision:
-    def __init__(self, result=None, raises=False):
-        self.result = result
-        self.raises = raises
-
-    def identify(self, image_bytes, mime_type="image/jpeg", note=None):
-        if self.raises:
-            raise RuntimeError("Gemini API error")
-        return self.result
-
-
-class FakePlaces:
-    def __init__(self, resolved=None, nearby=None):
-        self.resolved = resolved
-        self.nearby = nearby if nearby is not None else []
-        self.resolve_calls = []
-
-    def resolve_place(self, place_name, language_code="ko", region_code="JP"):
-        self.resolve_calls.append(place_name)
-        if self.resolved is None:
-            raise ValueError(f"No Google Places result found for: {place_name}")
-        return self.resolved
-
-    def search_nearby(self, latitude, longitude, category=None, radius_m=1500,
-                      max_result_count=5, language_code="ko", region_code="JP"):
-        return self.nearby
-
-
-def landmark_det(name="센소지", score=0.9):
-    return LandmarkDetection(name=name, latitude=35.70, longitude=139.79, score=score)
-
-
-def vision_id(guess="블루보틀", conf=0.8):
-    return VisionIdentification(
-        place_name_guess=guess, category=PlaceCategory.CAFE, reason="추정", confidence=conf
-    )
-
-
-def resolved_place(name="센소지", pid="p1"):
-    return ResolvedPlace(place_id=pid, name=name, latitude=35.7148, longitude=139.7967,
-                         city="Tokyo", country="Japan")
+from ai.image_search.tests.fakes import (
+    FakeLandmark,
+    FakePlaces,
+    FakeVision,
+    landmark_det,
+    resolved_place,
+    vision_id,
+)
 
 
 # 로컬 사진 파일 하나를 tmp 에 만든다
