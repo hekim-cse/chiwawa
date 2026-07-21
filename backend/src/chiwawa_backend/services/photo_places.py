@@ -78,8 +78,17 @@ def confirm_photo_place(
     if candidate is None:
         raise NotFoundError(entity="photo_candidate", entity_id=payload.candidate_id)
     existing = state.confirmed_photo_places.get(candidate.id)
-    if existing is not None and existing.wanted_place.id in state.wanted_places:
-        return existing
+    if existing is not None:
+        current_place = state.wanted_places.get(existing.wanted_place.id)
+        # wanted place가 삭제됐다면 아래에서 새로 만들고,
+        # 남아 있다면 확정 당시 스냅샷 대신 현재 상태로 응답을 재구성해
+        # PATCH 이후에도 GET /wanted-places와 일치하도록 한다.
+        if current_place is not None:
+            return ConfirmedPhotoPlaceRead(
+                search_id=existing.search_id,
+                candidate=existing.candidate,
+                wanted_place=current_place,
+            )
     wanted_place = create_wanted_place(
         state,
         trip_id,
