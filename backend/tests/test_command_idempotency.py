@@ -81,3 +81,62 @@ async def test_confirmation_commands_are_idempotent() -> None:
     assert first_add.schedule_item.id == second_add.schedule_item.id
     assert first_add.schedule_item.end_time.isoformat() == "16:00:00"
     assert len(schedule.items) == 1
+
+
+@pytest.mark.anyio
+async def test_confirm_retry_reflects_updated_wanted_place() -> None:
+    app = create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        trip_response = await client.post(
+            "/api/v1/trips",
+            json={
+                "city": "Tokyo",
+                "start_date": "2026-07-10",
+                "end_date": "2026-07-10",
+            },
+        )
+        trip = TripRead.model_validate_json(trip_response.text)
+
+        search_response = await client.post(
+            f"/api/v1/trips/{trip.id}/photo-places/search",
+            json={"note": "stale snapshot photo"},
+        )
+        search = PhotoPlaceSearchResponse.model_validate_json(search_response.text)
+        confirm_path = f"/api/v1/trips/{trip.id}/photo-places/{search.id}/confirm"
+        confirm_payload = {"candidate_id": search.candidates[0].id}
+        first_confirm_response = await client.post(confirm_path, json=confirm_payload)
+        first_confirmation = ConfirmedPhotoPlaceRead.model_validate_json(
+            first_confirm_response.text,
+        )
+        place_path = (
+            f"/api/v1/trips/{trip.id}/wanted-places/"
+            f"{first_confirmation.wanted_place.id}"
+        )
+
+        # 확정으로 생긴 wanted place를 수정한 뒤 confirm을 재시도한다.
+        patch_response = await client.patch(
+            place_path,
+            json={"name": "Renamed viewpoint", "priority": 2},
+        )
+        retry_confirm_response = await client.post(confirm_path, json=confirm_payload)
+        places_response = await client.get(f"/api/v1/trips/{trip.id}/wanted-places")
+
+        # wanted place를 삭제하면 confirm 재시도가 새로 만들어 준다.
+        delete_response = await client.delete(place_path)
+        recreated_response = await client.post(confirm_path, json=confirm_payload)
+
+    assert patch_response.status_code == 200
+    retried = ConfirmedPhotoPlaceRead.model_validate_json(retry_confirm_response.text)
+    places = WantedPlaceListResponse.model_validate_json(places_response.text)
+    assert retried.wanted_place.id == first_confirmation.wanted_place.id
+    assert retried.wanted_place.name == "Renamed viewpoint"
+    assert retried.wanted_place.priority == 2
+    assert places.items == [retried.wanted_place]
+
+    assert delete_response.status_code == 204
+    recreated = ConfirmedPhotoPlaceRead.model_validate_json(recreated_response.text)
+    assert recreated.wanted_place.id != first_confirmation.wanted_place.id
+    assert recreated.wanted_place.name == first_confirmation.wanted_place.name
