@@ -16,28 +16,31 @@ from ai.route_planner.domain.schemas import (
 def make_matrix(
     travel_mode: TravelMode,
 ) -> BenchmarkMatrixDTO:
+    place_ids = [
+        "start",
+        "poi",
+        "end",
+    ]
+
     return BenchmarkMatrixDTO.model_validate(
         {
             "travel_mode": travel_mode,
-            "location_place_ids": [
-                "start",
-                "poi",
-                "end",
-            ],
+            "location_place_ids": place_ids,
             "entries": [
                 {
-                    "origin_place_id": "start",
-                    "destination_place_id": "poi",
+                    "origin_place_id": origin,
+                    "destination_place_id": (
+                        destination
+                    ),
                     "travel_minutes": 10,
-                },
-                {
-                    "origin_place_id": "poi",
-                    "destination_place_id": "end",
-                    "travel_minutes": 20,
-                },
+                }
+                for origin in place_ids
+                for destination in place_ids
+                if origin != destination
             ],
         }
     )
+
 
 
 def make_locations() -> list[Location]:
@@ -85,8 +88,21 @@ def test_returns_matrix_for_matching_mode_and_locations():
     )
 
     assert result.matrix == {
-        ("start", "poi"): 10,
-        ("poi", "end"): 20,
+        (
+            origin,
+            destination,
+        ): 10
+        for origin in (
+            "start",
+            "poi",
+            "end",
+        )
+        for destination in (
+            "start",
+            "poi",
+            "end",
+        )
+        if origin != destination
     }
     assert result.missing_elements == []
 

@@ -15,31 +15,29 @@ from ai.route_planner.tests.test_route_option_solver import (
 
 
 def make_matrix_payload() -> dict:
+    place_ids = [
+        "start",
+        "poi_1",
+        "end",
+    ]
+
     return {
         "travel_mode": "DRIVE",
-        "location_place_ids": [
-            "start",
-            "poi_1",
-            "end",
-        ],
+        "location_place_ids": place_ids,
         "entries": [
             {
-                "origin_place_id": "start",
-                "destination_place_id": "poi_1",
+                "origin_place_id": origin,
+                "destination_place_id": (
+                    destination
+                ),
                 "travel_minutes": 10,
-            },
-            {
-                "origin_place_id": "poi_1",
-                "destination_place_id": "end",
-                "travel_minutes": 15,
-            },
-            {
-                "origin_place_id": "start",
-                "destination_place_id": "end",
-                "travel_minutes": 30,
-            },
+            }
+            for origin in place_ids
+            for destination in place_ids
+            if origin != destination
         ],
     }
+
 
 
 # 정상 Scenario 입력 검증
@@ -144,6 +142,20 @@ def test_matrix_rejects_duplicated_entry():
     with pytest.raises(
         ValidationError,
         match="중복 이동 구간",
+    ):
+        BenchmarkMatrixDTO.model_validate(
+            payload
+        )
+
+
+# 모든 방향 이동 구간이 정의되지 않은 Matrix 거부
+def test_matrix_rejects_missing_entry():
+    payload = make_matrix_payload()
+    payload["entries"].pop()
+
+    with pytest.raises(
+        ValidationError,
+        match="필수 이동 구간이 누락",
     ):
         BenchmarkMatrixDTO.model_validate(
             payload

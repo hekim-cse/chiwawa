@@ -153,6 +153,21 @@ jobs:
                   "E2E Benchmark Fixture에서 "
                   "누락 Matrix 구간이 발견되었습니다."
               )
+
+          if any(
+              run[
+                  "provider_expected_element_count"
+              ]
+              != run[
+                  "provider_returned_element_count"
+              ]
+              for run in payload["runs"]
+          ):
+              raise SystemExit(
+                  "E2E Benchmark Matrix의 "
+                  "예상 구간 수와 반환 구간 수가 "
+                  "일치하지 않습니다."
+              )
           PYTHON
 
       - name: Route Planner E2E Benchmark 결과 업로드

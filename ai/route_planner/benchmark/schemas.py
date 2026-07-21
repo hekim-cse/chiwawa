@@ -86,6 +86,33 @@ class BenchmarkMatrixDTO(BaseModel):
                     "정의할 수 없습니다."
                 )
 
+        expected_entry_keys = {
+            (
+                origin_place_id,
+                destination_place_id,
+            )
+            for origin_place_id
+            in self.location_place_ids
+            for destination_place_id
+            in self.location_place_ids
+            if (
+                origin_place_id
+                != destination_place_id
+            )
+        }
+
+        missing_entry_keys = (
+            expected_entry_keys
+            - entry_keys
+        )
+
+        if missing_entry_keys:
+            raise ValueError(
+                "Benchmark Matrix에 "
+                "필수 이동 구간이 누락되었습니다: "
+                f"{sorted(missing_entry_keys)}"
+            )
+
         return self
 
 
