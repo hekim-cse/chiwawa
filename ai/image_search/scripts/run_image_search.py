@@ -126,14 +126,15 @@ def run_debug(
         lambda: vision_llm.identify(image_bytes=image_bytes, note=request.note),
     )
 
-    # 식별된 장소명이 있으면 좌표 확정(Places)까지 진단
-    seed_name = None
-    if landmark_result is not None:
-        seed_name = landmark_result.name
-    elif llm_result is not None and llm_result.place_name_guess:
-        seed_name = llm_result.place_name_guess
+    # 시드 선택은 캐스케이드와 동일 정책을 재사용한다 (중복 구현으로 드리프트하지 않도록)
+    recognizer = PlaceRecognizer(
+        landmark=landmark, vision_llm=vision_llm, places=places
+    )
+    seed = recognizer._pick_seed(landmark_result, llm_result)
 
-    if seed_name:
+    if seed is not None:
+        seed_name, _, seed_source, _ = seed
+        report["seed"] = {"name": seed_name, "source": seed_source.value}
         _probe(report, "places_resolve", lambda: places.resolve_place(seed_name))
     else:
         report["places_resolve"] = {"skipped": "식별된 장소명이 없습니다."}
