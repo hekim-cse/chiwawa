@@ -130,7 +130,12 @@ class PlaceRecognizer:
             return llm.place_name_guess, llm.confidence, CandidateSource.LLM, llm.reason
         return None
 
+    # Places searchNearby 의 결과 개수 상한
+    _NEARBY_API_MAX = 20
+
     # 근처 후보 리스트 생성 (confidence 순차 감소)
+    # 검색 중심이 식별 장소 좌표라 자기 자신이 섞여 올 수 있어,
+    # 1개 더 요청한 뒤 place_id 로 제외하고 wanted 개수로 자른다
     def _build_nearby(
         self,
         resolved: ResolvedPlace,
@@ -141,7 +146,11 @@ class PlaceRecognizer:
     ) -> list[PlaceCandidate]:
         if wanted <= 0:
             return []
-        nearby_places = self._safe_nearby(resolved, category, wanted)
+        fetch_count = min(wanted + 1, self._NEARBY_API_MAX)
+        nearby_places = self._safe_nearby(resolved, category, fetch_count)
+        deduped = [
+            place for place in nearby_places if place.place_id != resolved.place_id
+        ][:wanted]
         return [
             self._to_candidate(
                 place,
@@ -151,7 +160,7 @@ class PlaceRecognizer:
                 category,
                 request,
             )
-            for index, place in enumerate(nearby_places)
+            for index, place in enumerate(deduped)
         ]
 
     # ResolvedPlace → PlaceCandidate 매핑 (도시/국가는 Places → 요청 힌트 순으로 채움)

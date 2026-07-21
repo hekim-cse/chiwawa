@@ -69,8 +69,26 @@ class VisionLlmProvider:
             ),
         )
 
+        # 빈 응답(안전 차단·빈 후보 등)은 원인을 드러내는 예외로 알린다
+        # (None 을 그대로 파싱하면 원인 불명의 ValidationError 가 되어 진단 불가)
+        if response.text is None:
+            raise RuntimeError(self._describe_empty_response(response))
+
         # LLM 출력을 그대로 믿지 않고 pydantic 으로 재검증 (범위·카테고리 폐집합 강제)
         return VisionIdentification.model_validate_json(response.text)
+
+    # 빈 응답의 차단 사유·종료 사유를 모아 진단 메시지를 만든다
+    @staticmethod
+    def _describe_empty_response(response) -> str:
+        candidates = getattr(response, "candidates", None)
+        finish_reason = (
+            getattr(candidates[0], "finish_reason", None) if candidates else None
+        )
+        prompt_feedback = getattr(response, "prompt_feedback", None)
+        return (
+            "Gemini 가 텍스트 없이 응답했습니다: "
+            f"finish_reason={finish_reason}, prompt_feedback={prompt_feedback}"
+        )
 
     # 지시문에 사용자 메모를 힌트로 덧붙인다
     @staticmethod
