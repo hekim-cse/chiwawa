@@ -350,7 +350,7 @@ void main() {
         .ensureVisible(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
-    await tester.pump(const Duration(milliseconds: 1200));
+    await tester.pumpAndSettle();
 
     final container = ProviderScope.containerOf(
       tester.element(find.byType(ChiwawaApp)),
@@ -361,6 +361,13 @@ void main() {
     await tester.pump();
 
     await tester.tap(find.text('기록'));
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(
+      find.text('확정 일정 미리보기'),
+      find.byKey(const ValueKey('memorial-scroll')),
+      const Offset(0, -300),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('확정 일정 미리보기'), findsOneWidget);

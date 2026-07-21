@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
+import '../auth/auth_controller.dart';
 import '../env.dart';
 import '../mock_data.dart' as mock;
 import '../models/travel_models.dart';
@@ -8,6 +9,7 @@ import '../services/trip_session_service.dart';
 import 'api/api_photo_place_repository.dart';
 
 final photoPlaceRepositoryProvider = Provider<PhotoPlaceRepository>((ref) {
+  ref.watch(authSessionRevisionProvider);
   if (useApiBackend) {
     return ApiPhotoPlaceRepository(
       dio: ref.watch(dioClientProvider),
@@ -23,6 +25,7 @@ abstract class PhotoPlaceRepository {
 
   Future<List<PhotoSearchResult>> fetchRecentSearches();
   Future<PhotoSearchResult> analyzePhoto(String imagePath);
+  Future<List<PhotoSearchResult>> analyzePhotoCandidates(String imagePath);
 }
 
 class MockPhotoPlaceRepository implements PhotoPlaceRepository {
@@ -39,5 +42,13 @@ class MockPhotoPlaceRepository implements PhotoPlaceRepository {
   Future<PhotoSearchResult> analyzePhoto(String imagePath) async {
     await Future<void>.delayed(const Duration(milliseconds: 850));
     return mock.photoSearchResult;
+  }
+
+  @override
+  Future<List<PhotoSearchResult>> analyzePhotoCandidates(
+    String imagePath,
+  ) async {
+    await Future<void>.delayed(const Duration(milliseconds: 850));
+    return mock.photoSearchCandidates;
   }
 }

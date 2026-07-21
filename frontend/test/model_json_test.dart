@@ -3,6 +3,37 @@ import 'package:chiwawa/core/models/travel_models.dart';
 import 'package:chiwawa/core/repositories/auth_repository.dart';
 
 void main() {
+  test('Trip parses backend fields and TripDraft serializes create request',
+      () {
+    final trip = Trip.fromJson(const {
+      'id': 'trip-1',
+      'title': '도쿄 봄 여행',
+      'city': 'Tokyo',
+      'country': 'Japan',
+      'start_date': '2026-04-01',
+      'end_date': '2026-04-04',
+      'travelers': 2,
+      'interests': ['photo_spot', 'food'],
+      'travel_style': 'balanced',
+    });
+    const draft = TripDraft(
+      title: '오사카 여행',
+      city: 'Osaka',
+      startDate: '2026-05-01',
+      endDate: '2026-05-03',
+      travelers: 3,
+      interests: ['food'],
+      travelStyle: TravelPace.packed,
+    );
+
+    expect(trip.id, 'trip-1');
+    expect(trip.travelers, 2);
+    expect(trip.travelStyle, TravelPace.balanced);
+    expect(trip.toTripInfo(today: DateTime(2026, 4, 2)).currentDay, '2일차');
+    expect(draft.toJson()['travel_style'], 'packed');
+    expect(draft.toJson()['country'], 'Japan');
+  });
+
   test('ScheduleItem parses and serializes API fields', () {
     final schedule = ScheduleItem.fromJson(const {
       'id': 'schedule-1',

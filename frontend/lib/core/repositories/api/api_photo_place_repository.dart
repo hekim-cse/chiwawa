@@ -30,4 +30,13 @@ class ApiPhotoPlaceRepository implements PhotoPlaceRepository {
       'TODO(A5): 사진 업로드 방식(multipart vs 스토리지 선업로드) 확정 후 구현',
     );
   }
+
+  @override
+  Future<List<PhotoSearchResult>> analyzePhotoCandidates(
+    String imagePath,
+  ) async {
+    throw UnimplementedError(
+      'TODO(A5): 사진 업로드 계약 확정 후 후보 목록 응답을 연결',
+    );
+  }
 }
