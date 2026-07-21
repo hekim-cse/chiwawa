@@ -117,14 +117,25 @@ class TestLoadImageBytes:
         assert result == b"\xff\xd8\xff-image-bytes"
         assert captured["url"] == "https://93.184.216.34/photo.jpg"
 
-    # HTTP 오류 상태(4xx/5xx)는 예외로 전파한다 (조용히 삼키지 않음)
-    def test_raises_on_http_error_status(self):
+    # HTTP 오류 상태(4xx/5xx)는 ImageLoadError 로 감싸 알린다
+    # (호출자는 ValueError 계열 하나로 이미지 로딩 실패를 처리할 수 있어야 함)
+    def test_wraps_http_error_status_as_image_load_error(self):
         def handler(request):
             return httpx.Response(404, content=b"not found")
 
         req = ImageSearchRequest(image_url="https://93.184.216.34/photo.jpg")
 
-        with pytest.raises(httpx.HTTPStatusError):
+        with pytest.raises(ImageLoadError):
+            load_image_bytes(req, transport=httpx.MockTransport(handler))
+
+    # 연결 실패 등 네트워크 예외도 ImageLoadError 로 감싼다
+    def test_wraps_network_error_as_image_load_error(self):
+        def handler(request):
+            raise httpx.ConnectError("connection refused")
+
+        req = ImageSearchRequest(image_url="https://93.184.216.34/photo.jpg")
+
+        with pytest.raises(ImageLoadError):
             load_image_bytes(req, transport=httpx.MockTransport(handler))
 
     # 내부 주소로의 다운로드는 클라이언트 호출 전에 SSRF 가드가 먼저 막는다

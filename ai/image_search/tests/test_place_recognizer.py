@@ -225,14 +225,14 @@ class TestCascade:
         assert result.signals.landmark is not None
         assert result.signals.llm is not None
 
-    # max_candidates 가 근처 검색 개수를 제한한다 (식별 1 + 근처 N-1)
+    # max_candidates 가 근처 검색 개수를 제한한다 (식별 1 + 근처 N-1, 자기자신 제외 대비 +1)
     def test_max_candidates_limits_nearby(self):
         places = FakePlaces(resolved=resolved_place(), nearby=[])
         rec = make_recognizer(FakeLandmark(landmark_det(score=0.9)), FakeVision(vision_id()), places)
 
         rec.search(req(max_candidates=3))
 
-        assert places.nearby_calls[0]["max"] == 2  # 3 - 1(식별)
+        assert places.nearby_calls[0]["max"] == 3  # (3 - 1) + 1(자기자신 제외 대비)
 
     # max_candidates=1 이면 근처 검색을 아예 하지 않고 식별만 반환 (PARTIAL)
     def test_max_candidates_one_skips_nearby(self):
@@ -258,6 +258,40 @@ class TestCascade:
         assert result.status is RecognitionStatus.PARTIAL
         assert len(result.candidates) == 1
         assert result.identified is not None
+
+    # 근처 검색 결과에 식별 장소 자신이 섞여 오면 제외한다 (place_id 기준 중복 방지)
+    def test_excludes_identified_place_from_nearby(self):
+        nearby = [
+            resolved_place(name="센소지", pid="p1"),  # 식별 장소 자신 (같은 place_id)
+            resolved_place(name="근처1", pid="n1"),
+        ]
+        places = FakePlaces(resolved=resolved_place(pid="p1"), nearby=nearby)
+        rec = make_recognizer(FakeLandmark(landmark_det(score=0.9)), FakeVision(vision_id()), places)
+
+        result = rec.search(req())
+
+        ids = [c.place_id for c in result.candidates]
+        assert ids.count("p1") == 1  # 식별로 한 번만 등장
+        assert "n1" in ids
+
+    # 자기 자신 제외 후에도 요청 개수를 초과하지 않게 wanted 로 자른다
+    def test_truncates_nearby_to_wanted_after_filter(self):
+        nearby = [resolved_place(name=f"근처{i}", pid=f"n{i}") for i in range(5)]
+        places = FakePlaces(resolved=resolved_place(pid="p1"), nearby=nearby)
+        rec = make_recognizer(FakeLandmark(landmark_det(score=0.9)), FakeVision(vision_id()), places)
+
+        result = rec.search(req(max_candidates=5))
+
+        assert len(result.candidates) == 5  # 식별 1 + 근처 4 (5개 중 1개 잘림)
+
+    # 근처 검색 요청 개수는 Places API 상한(20)을 넘지 않는다
+    def test_nearby_fetch_respects_places_api_cap(self):
+        places = FakePlaces(resolved=resolved_place(), nearby=[])
+        rec = make_recognizer(FakeLandmark(landmark_det(score=0.9)), FakeVision(vision_id()), places)
+
+        rec.search(req(max_candidates=25))
+
+        assert places.nearby_calls[0]["max"] == 20  # (25-1)+1=25 → 상한 20
 
     # 근처 추천 confidence 는 식별보다 낮게 점감한다
     def test_nearby_confidence_decays(self):

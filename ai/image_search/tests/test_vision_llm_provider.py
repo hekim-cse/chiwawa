@@ -11,25 +11,33 @@ from ai.image_search.providers.vision_llm_provider import VisionLlmProvider
 
 # --- 가짜 genai client (client.models.generate_content 만 흉내) ---
 class _FakeResponse:
-    def __init__(self, text: str) -> None:
+    # text 는 None 일 수 있다 (안전 차단·빈 후보 시 SDK 가 None 반환)
+    def __init__(self, text: str | None, prompt_feedback=None, candidates=None) -> None:
         self.text = text
+        self.prompt_feedback = prompt_feedback
+        self.candidates = candidates
+
+
+class _FakeCandidate:
+    def __init__(self, finish_reason) -> None:
+        self.finish_reason = finish_reason
 
 
 class _FakeModels:
-    def __init__(self, response_text: str, capture: dict) -> None:
-        self._response_text = response_text
+    def __init__(self, response: _FakeResponse, capture: dict) -> None:
+        self._response = response
         self._capture = capture
 
     def generate_content(self, *, model, contents, config):
         self._capture["model"] = model
         self._capture["contents"] = contents
         self._capture["config"] = config
-        return _FakeResponse(self._response_text)
+        return self._response
 
 
 class _FakeClient:
-    def __init__(self, response_text: str, capture: dict) -> None:
-        self.models = _FakeModels(response_text, capture)
+    def __init__(self, response: _FakeResponse, capture: dict) -> None:
+        self.models = _FakeModels(response, capture)
 
 
 # 유효한 Gemini JSON 응답 하나
@@ -47,10 +55,11 @@ def valid_response(**overrides) -> str:
 
 
 # 주어진 응답으로 provider + capture 를 만든다
-def make_provider(response_text: str):
+def make_provider(response_text: str | None, **response_kwargs):
     capture: dict = {}
+    response = _FakeResponse(response_text, **response_kwargs)
     provider = VisionLlmProvider(
-        api_key="test-key", client=_FakeClient(response_text, capture)
+        api_key="test-key", client=_FakeClient(response, capture)
     )
     return provider, capture
 
@@ -115,3 +124,25 @@ class TestIdentify:
 
         assert result.place_name_guess is None
         assert result.category is PlaceCategory.CAFE
+
+    # 빈 응답(text=None)은 진단 정보를 담은 RuntimeError 로 알린다
+    # (안전 차단·토큰 초과 시 SDK 가 None 을 주는데, 그대로 파싱하면 원인 불명 오류가 됨)
+    def test_empty_response_raises_diagnosable_error(self):
+        provider, _ = make_provider(
+            None,
+            prompt_feedback="block_reason: SAFETY",
+            candidates=[_FakeCandidate(finish_reason="SAFETY")],
+        )
+
+        with pytest.raises(RuntimeError) as exc_info:
+            provider.identify(image_bytes=b"x")
+
+        message = str(exc_info.value)
+        assert "SAFETY" in message  # 차단 사유가 메시지에 드러난다
+
+    # 후보 자체가 없는 빈 응답도 RuntimeError 로 알린다 (candidates=None)
+    def test_empty_response_without_candidates_raises(self):
+        provider, _ = make_provider(None)
+
+        with pytest.raises(RuntimeError):
+            provider.identify(image_bytes=b"x")
