@@ -13,8 +13,7 @@ class ApiPlanRepository implements PlanRepository {
   final TripIdStore tripIdStore;
 
   @override
-  List<String> get defaultSelectedPlaces =>
-      const ['메이지 신궁', '하라주쿠', '오모테산도', '시부야'];
+  List<String> get defaultSelectedPlaces => const [];
 
   @override
   Future<List<RoutePlace>> optimizeRoute(

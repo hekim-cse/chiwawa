@@ -15,29 +15,27 @@ class TripSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: ChiwawaColors.primary,
-        borderRadius: BorderRadius.circular(16),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             tripInfo.tripName,
             style: const TextStyle(
-              color: Colors.white,
+              color: ChiwawaColors.textPrimary,
               fontSize: 20,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             tripInfo.period,
-            style: const TextStyle(color: Colors.white70),
+            style: const TextStyle(color: ChiwawaColors.textSecondary),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: ChiwawaSpacing.md),
+          const Divider(height: 1),
+          const SizedBox(height: ChiwawaSpacing.md),
           Row(
             children: [
               _SummaryMetric(label: '총', value: '${summary.days}일'),
@@ -65,15 +63,18 @@ class _SummaryMetric extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(color: Colors.white70, fontSize: 12),
+            style: const TextStyle(
+              color: ChiwawaColors.textSecondary,
+              fontSize: 12,
+            ),
           ),
           const SizedBox(height: 4),
           Text(
             value,
             style: const TextStyle(
-              color: Colors.white,
+              color: ChiwawaColors.primary,
               fontSize: 18,
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ],

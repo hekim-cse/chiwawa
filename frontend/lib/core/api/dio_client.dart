@@ -14,6 +14,7 @@ final apiBaseUrlProvider = Provider<String>(
 
 final dioClientProvider = Provider<Dio>((ref) {
   final baseUrl = ref.watch(apiBaseUrlProvider);
+  final apiOrigin = Uri.tryParse(baseUrl);
 
   final dio = Dio(
     BaseOptions(
@@ -35,8 +36,12 @@ final dioClientProvider = Provider<Dio>((ref) {
     InterceptorsWrapper(
       onRequest: (options, handler) {
         final token = ref.read(authTokenProvider);
-        if (token != null && token.isNotEmpty) {
+        if (token != null &&
+            token.isNotEmpty &&
+            _isSameOrigin(options.uri, apiOrigin)) {
           options.headers['Authorization'] = 'Bearer $token';
+        } else if (!_isSameOrigin(options.uri, apiOrigin)) {
+          options.headers.remove('Authorization');
         }
         handler.next(options);
       },
@@ -57,3 +62,21 @@ final dioClientProvider = Provider<Dio>((ref) {
 
   return dio;
 });
+
+bool _isSameOrigin(Uri request, Uri? apiOrigin) {
+  if (apiOrigin == null || !apiOrigin.hasScheme || apiOrigin.host.isEmpty) {
+    return false;
+  }
+  return request.scheme == apiOrigin.scheme &&
+      request.host == apiOrigin.host &&
+      _effectivePort(request) == _effectivePort(apiOrigin);
+}
+
+int _effectivePort(Uri uri) {
+  if (uri.hasPort) return uri.port;
+  return switch (uri.scheme) {
+    'http' => 80,
+    'https' => 443,
+    _ => -1,
+  };
+}

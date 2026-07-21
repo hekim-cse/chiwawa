@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 import '../../../core/models/memorial_map_models.dart';
 import '../../../core/utils/time_formatters.dart';
+import 'memorial_photo_image.dart';
 
 class PawPhotoSheet extends StatelessWidget {
   const PawPhotoSheet({required this.cluster, super.key});
@@ -86,14 +87,11 @@ class PawPhotoSheet extends StatelessWidget {
                   final photo = cluster.photos[index];
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(10),
-                    child: Image.asset(
-                      photo.assetPath,
+                    child: MemorialPhotoImage(
+                      assetPath: photo.assetPath,
+                      fileUrl: photo.fileUrl,
                       width: 116,
                       height: 116,
-                      cacheWidth: 232,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const _PhotoFallback(),
                     ),
                   );
                 },
@@ -101,23 +99,6 @@ class PawPhotoSheet extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _PhotoFallback extends StatelessWidget {
-  const _PhotoFallback();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 116,
-      height: 116,
-      color: ChiwawaColors.secondary,
-      child: const Icon(
-        Icons.photo_rounded,
-        color: ChiwawaColors.primary,
       ),
     );
   }
