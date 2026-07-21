@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import '../../../app/theme.dart';
 
 class PhotoUploadZone extends StatelessWidget {
-  const PhotoUploadZone({required this.onTap, super.key});
+  const PhotoUploadZone({
+    required this.onTap,
+    this.compact = false,
+    super.key,
+  });
 
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -18,27 +23,48 @@ class PhotoUploadZone extends StatelessWidget {
           radius: 16,
         ),
         child: Container(
-          height: 200,
+          height: compact ? 88 : 200,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
           alignment: Alignment.center,
-          child: const Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.camera_alt,
-                size: 48,
-                color: ChiwawaColors.textMuted,
-              ),
-              SizedBox(height: 12),
-              Text(
-                '사진을 올려 장소를 찾아보세요',
-                style: TextStyle(
-                  color: ChiwawaColors.textSecondary,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
+          child: compact
+              ? const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add_photo_alternate_rounded,
+                      size: 28,
+                      color: ChiwawaColors.textMuted,
+                    ),
+                    SizedBox(width: 10),
+                    Text(
+                      '다른 사진 분석',
+                      style: TextStyle(
+                        color: ChiwawaColors.textSecondary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                )
+              : const Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.camera_alt,
+                      size: 48,
+                      color: ChiwawaColors.textMuted,
+                    ),
+                    SizedBox(height: 12),
+                    Text(
+                      '사진을 올려 장소를 찾아보세요',
+                      style: TextStyle(
+                        color: ChiwawaColors.textSecondary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
         ),
       ),
     );
