@@ -46,6 +46,7 @@ class FakeRoutesProvider:
         self,
         locations,
         travel_mode,
+        departure_time=None,
     ) -> TravelTimeMatrixResult:
         travel_minutes_by_mode = {
             TravelMode.DRIVE: 10,
@@ -72,6 +73,7 @@ class FakeRoutesProviderWithTransitMissing:
         self,
         locations,
         travel_mode,
+        departure_time=None,
     ) -> TravelTimeMatrixResult:
         self.call_count += 1
 
@@ -235,6 +237,7 @@ def test_plan_trip_fetches_assignment_matrix_before_route_matrices():
             self,
             locations,
             travel_mode,
+            departure_time=None,
         ) -> TravelTimeMatrixResult:
             self.calls.append(
                 (
@@ -307,6 +310,7 @@ def test_plan_trip_uses_explicit_assignment_travel_mode():
             self,
             locations,
             travel_mode,
+            departure_time=None,
         ) -> TravelTimeMatrixResult:
             self.called_modes.append(
                 travel_mode
@@ -357,6 +361,7 @@ def test_plan_trip_preserves_missing_assignment_segments():
             self,
             locations,
             travel_mode,
+            departure_time=None,
         ) -> TravelTimeMatrixResult:
             self.call_count += 1
 
@@ -390,4 +395,158 @@ def test_plan_trip_preserves_missing_assignment_segments():
         .unassigned_pois[0]
         .poi.poi_id
         == request.pois[0].poi_id
+    )
+
+
+# 여행 timezone과 day 시작 시각을 Provider에 전달
+def test_plan_trip_passes_timezone_aware_departure_time():
+    request = (
+        TripPlanningRequestDTO
+        .model_validate(
+            make_request_payload()
+        )
+    )
+
+    class RecordingDepartureTimeProvider:
+        def __init__(self) -> None:
+            self.departure_times = []
+
+        def build_travel_time_matrix_result(
+            self,
+            locations,
+            travel_mode,
+            departure_time=None,
+        ) -> TravelTimeMatrixResult:
+            self.departure_times.append(
+                (
+                    travel_mode,
+                    departure_time,
+                )
+            )
+
+            return make_complete_matrix_result(
+                locations=locations,
+                travel_minutes=10,
+            )
+
+    provider = (
+        RecordingDepartureTimeProvider()
+    )
+
+    make_service(provider).plan_trip(
+        request
+    )
+
+    assert provider.departure_times
+
+    for (
+        _,
+        departure_time,
+    ) in provider.departure_times:
+        assert departure_time is not None
+        assert (
+            departure_time.utcoffset()
+            is not None
+        )
+        assert (
+            departure_time.isoformat()
+            == "2026-08-01T10:00:00+09:00"
+        )
+
+
+# 실제 Google 응답처럼 TRANSIT 전체 구간이 누락된 Provider
+class FakeRoutesProviderWithEmptyTransitMatrix:
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    def build_travel_time_matrix_result(
+        self,
+        locations,
+        travel_mode,
+        departure_time=None,
+    ) -> TravelTimeMatrixResult:
+        self.call_count += 1
+
+        # 첫 호출은 일자 배정 Matrix
+        if (
+            self.call_count == 1
+            or travel_mode
+            != TravelMode.TRANSIT
+        ):
+            return make_complete_matrix_result(
+                locations=locations,
+                travel_minutes=10,
+            )
+
+        missing_elements = [
+            TravelTimeElement(
+                origin_name=origin.name,
+                destination_name=(
+                    destination.name
+                ),
+                origin_index=origin_index,
+                destination_index=(
+                    destination_index
+                ),
+                duration_seconds=None,
+                condition="ROUTE_NOT_FOUND",
+            )
+            for origin_index, origin
+            in enumerate(locations)
+            for destination_index, destination
+            in enumerate(locations)
+            if origin_index != destination_index
+        ]
+
+        return TravelTimeMatrixResult(
+            matrix={},
+            missing_elements=missing_elements,
+        )
+
+
+# TRANSIT Matrix가 완전히 비어도 다른 이동 방식 결과 유지
+def test_plan_trip_preserves_other_modes_when_transit_matrix_is_empty():
+    request = (
+        TripPlanningRequestDTO
+        .model_validate(
+            make_request_payload()
+        )
+    )
+
+    response = make_service(
+        FakeRoutesProviderWithEmptyTransitMatrix()
+    ).plan_trip(request)
+
+    route_options_by_mode = {
+        route_option.travel_mode: (
+            route_option
+        )
+        for route_option
+        in response
+        .day_plans[0]
+        .route_options
+    }
+
+    drive_option = route_options_by_mode[
+        TravelMode.DRIVE
+    ]
+    walk_option = route_options_by_mode[
+        TravelMode.WALK
+    ]
+    transit_option = route_options_by_mode[
+        TravelMode.TRANSIT
+    ]
+
+    assert drive_option.timeline is not None
+    assert walk_option.timeline is not None
+
+    assert transit_option.timeline is None
+    assert transit_option.ordered_stops == []
+    assert transit_option.route_legs == []
+    assert transit_option.total_travel_minutes == 0
+    assert transit_option.missing_segments
+    assert any(
+        "완전한 경로를 생성할 수 없습니다"
+        in warning
+        for warning in transit_option.warnings
     )

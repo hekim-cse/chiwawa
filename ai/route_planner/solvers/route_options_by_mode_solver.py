@@ -7,6 +7,9 @@ from ai.route_planner.domain.schemas import (
     TravelTimeMatrixResult,
 )
 from ai.route_planner.domain.trip_schemas import DayPlanDTO, RouteOptionDTO
+from ai.route_planner.solvers.exact_route_solver import (
+    ExactRouteNotFoundError,
+)
 from ai.route_planner.solvers.route_option_solver import RouteOptionSolver
 
 
@@ -66,13 +69,7 @@ class RouteOptionsByModeSolver:
         travel_mode: TravelMode,
         matrix_result: TravelTimeMatrixResult,
     ) -> RouteOptionDTO:
-        route_option = self.route_option_solver.solve_route_option(
-            day_plan=day_plan,
-            travel_mode=travel_mode,
-            travel_time_matrix=matrix_result.matrix,
-        )
-
-        # Google Routes Provider에서 계산하지 못한 이동 구간이 있는 경우 경고 메시지를 추가하고 누락 구간을 합쳐 반환
+        # Provider가 계산하지 못한 실제 이동 구간 목록 생성
         provider_missing_segments = [
             (
                 f"{element.origin_name} -> "
@@ -81,6 +78,51 @@ class RouteOptionsByModeSolver:
             for element in matrix_result.missing_elements
             if element.origin_index != element.destination_index
         ]
+
+        try:
+            route_option = (
+                self.route_option_solver
+                .solve_route_option(
+                    day_plan=day_plan,
+                    travel_mode=travel_mode,
+                    travel_time_matrix=(
+                        matrix_result.matrix
+                    ),
+                )
+            )
+        except ExactRouteNotFoundError:
+            # Provider 누락 구간이 없는 완전한 Matrix에서 발생한
+            # 도메인 오류는 숨기지 않고 그대로 전달
+            if not provider_missing_segments:
+                raise
+
+            return RouteOptionDTO(
+                day_index=day_plan.day_index,
+                travel_mode=travel_mode,
+                total_travel_minutes=0,
+                ordered_stops=[],
+                route_legs=[],
+                missing_segments=sorted(
+                    set(
+                        provider_missing_segments
+                    )
+                ),
+                warnings=[
+                    (
+                        f"{travel_mode.value} 이동 방식은 "
+                        "모든 장소를 방문하는 완전한 "
+                        "경로를 생성할 수 없습니다."
+                    ),
+                    (
+                        "Google Routes Provider에서 "
+                        "계산하지 못한 이동 구간이 "
+                        "있습니다: "
+                        + ", ".join(
+                            provider_missing_segments
+                        )
+                    ),
+                ],
+            )
 
         if not provider_missing_segments:
             return route_option

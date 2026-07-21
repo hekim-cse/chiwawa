@@ -16,6 +16,7 @@ class FakeTravelTimeMatrixProvider:
         self,
         locations,
         travel_mode,
+        departure_time=None,
     ) -> TravelTimeMatrixResult:
         place_ids = [
             location.name

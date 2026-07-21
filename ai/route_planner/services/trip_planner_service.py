@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Dict, List, Protocol
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ai.route_planner.domain.schemas import (
     Location,
@@ -35,6 +37,7 @@ class TravelTimeMatrixProvider(Protocol):
         self,
         locations: List[Location],
         travel_mode: TravelMode,
+        departure_time: datetime | None = None,
     ) -> TravelTimeMatrixResult:
         ...
 
@@ -116,6 +119,8 @@ class TripPlannerService:
             matrix_results_by_mode = (
                 self._build_route_matrix_results_by_mode(
                     day_plan=day_plan,
+                    day_constraint=day_constraint,
+                    timezone_name=request.timezone,
                 )
             )
 
@@ -175,6 +180,14 @@ class TripPlannerService:
                         self.config
                         .day_assignment_travel_mode
                     ),
+                    departure_time=(
+                        self._build_departure_time(
+                            day=day,
+                            timezone_name=(
+                                request.timezone
+                            ),
+                        )
+                    ),
                 )
             )
 
@@ -227,6 +240,8 @@ class TripPlannerService:
     def _build_route_matrix_results_by_mode(
         self,
         day_plan: DayPlanDTO,
+        day_constraint: DayConstraintDTO,
+        timezone_name: str,
     ) -> Dict[
         TravelMode,
         TravelTimeMatrixResult,
@@ -237,12 +252,20 @@ class TripPlannerService:
             )
         )
 
+        departure_time = (
+            self._build_departure_time(
+                day=day_constraint,
+                timezone_name=timezone_name,
+            )
+        )
+
         return {
             travel_mode: (
                 self.routes_provider
                 .build_travel_time_matrix_result(
                     locations=locations,
                     travel_mode=travel_mode,
+                    departure_time=departure_time,
                 )
             )
             for travel_mode in (
@@ -287,6 +310,50 @@ class TripPlannerService:
         )
 
         return locations
+
+    # 여행 날짜와 시작 시각을 timezone-aware datetime으로 변환
+    @staticmethod
+    def _build_departure_time(
+        day: DayConstraintDTO,
+        timezone_name: str,
+    ) -> datetime:
+        try:
+            timezone = ZoneInfo(
+                timezone_name
+            )
+        except ZoneInfoNotFoundError as error:
+            raise ValueError(
+                "지원하지 않는 timezone입니다: "
+                f"{timezone_name}"
+            ) from error
+
+        try:
+            local_departure_time = (
+                datetime.fromisoformat(
+                    f"{day.date}T"
+                    f"{day.start_time}"
+                )
+            )
+        except ValueError as error:
+            raise ValueError(
+                "여행 날짜 또는 시작 시각 형식이 "
+                "올바르지 않습니다: "
+                f"date={day.date}, "
+                f"start_time={day.start_time}"
+            ) from error
+
+        if (
+            local_departure_time.tzinfo
+            is not None
+        ):
+            raise ValueError(
+                "start_time에는 timezone offset을 "
+                "포함할 수 없습니다."
+            )
+
+        return local_departure_time.replace(
+            tzinfo=timezone
+        )
 
     # Matrix key 충돌을 방지하기 위해 Location.name 중복 검증
     def _validate_unique_location_names(
