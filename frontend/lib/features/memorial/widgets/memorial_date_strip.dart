@@ -1,32 +1,70 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/models/memorial_models.dart';
 
 class MemorialDateStrip extends StatelessWidget {
   const MemorialDateStrip({
-    required this.dates,
+    required this.days,
     required this.selectedDate,
     required this.onSelected,
     super.key,
   });
 
-  final List<DateTime> dates;
+  final List<MemorialCalendarDay> days;
   final DateTime selectedDate;
   final ValueChanged<DateTime> onSelected;
 
   @override
   Widget build(BuildContext context) {
+    if (days.isEmpty) {
+      return const SizedBox(
+        height: 44,
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            '이 달에는 저장된 사진이 아직 없어요.',
+            style: TextStyle(
+              color: ChiwawaColors.textSecondary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      );
+    }
+
     return SizedBox(
       height: 44,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemCount: dates.length,
+        itemCount: days.length,
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
-          final date = dates[index];
+          final day = days[index];
+          final date = day.day;
           final selected = _isSameDay(date, selectedDate);
           return ChoiceChip(
-            label: Text(_labelFor(date)),
+            label: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(_labelFor(date)),
+                const SizedBox(width: 5),
+                Icon(
+                  Icons.photo_rounded,
+                  size: 13,
+                  color: selected ? Colors.white70 : ChiwawaColors.primary,
+                ),
+                const SizedBox(width: 2),
+                Text(
+                  '${day.photoCount}',
+                  style: TextStyle(
+                    color: selected ? Colors.white70 : ChiwawaColors.primary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ],
+            ),
             selected: selected,
             onSelected: (_) => onSelected(date),
             selectedColor: ChiwawaColors.primary,

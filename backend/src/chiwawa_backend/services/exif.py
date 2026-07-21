@@ -29,8 +29,15 @@ EMPTY_EXIF = PhotoExif(taken_at=None, latitude=None, longitude=None)
 # GPS 좌표는 (도, 분, 초) 세 부분으로 구성된다.
 _DMS_PART_COUNT = 3
 
+
+# 폼 입력 좌표와 동일한 유효 범위. 손상된 EXIF(예: GPSLatitude 500/1)가
+# 검증을 우회하지 못하도록 범위를 벗어난 좌표는 버린다.
+_MAX_ABS_LATITUDE = 90.0
+_MAX_ABS_LONGITUDE = 180.0
+
 # EXIF 표준 날짜 형식("YYYY:MM:DD ...")인지 판별하는 패턴.
 _EXIF_COLON_DATE = re.compile(r"^\d{4}:\d{2}:\d{2}")
+
 
 
 class InvalidImageError(ValueError):
@@ -64,12 +71,14 @@ def read_exif(data: bytes) -> PhotoExif:
             value_tag=ExifTags.GPS.GPSLatitude,
             ref_tag=ExifTags.GPS.GPSLatitudeRef,
             negative_ref="S",
+            max_abs_degrees=_MAX_ABS_LATITUDE,
         ),
         longitude=_coordinate(
             gps,
             value_tag=ExifTags.GPS.GPSLongitude,
             ref_tag=ExifTags.GPS.GPSLongitudeRef,
             negative_ref="W",
+            max_abs_degrees=_MAX_ABS_LONGITUDE,
         ),
     )
 
@@ -106,6 +115,7 @@ def _coordinate(
     value_tag: int,
     ref_tag: int,
     negative_ref: str,
+    max_abs_degrees: float,
 ) -> float | None:
     raw: object = gps.get(value_tag)
     if not isinstance(raw, tuple):
@@ -118,6 +128,8 @@ def _coordinate(
         return None
     degrees, minutes, seconds = (part for part in parts if part is not None)
     decimal = degrees + minutes / 60 + seconds / 3600
+    if abs(decimal) > max_abs_degrees:
+        return None
     ref: object = gps.get(ref_tag)
     if isinstance(ref, str) and ref.strip().upper() == negative_ref:
         decimal = -decimal

@@ -1,7 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:chiwawa/core/api/api_exception.dart';
+import 'package:chiwawa/core/api/dio_client.dart';
 import 'package:chiwawa/core/auth/auth_controller.dart';
 import 'package:chiwawa/core/auth/deep_link_service.dart';
+import 'package:chiwawa/core/confirmed_route.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
+import 'package:chiwawa/core/saved_photo_places.dart';
 import 'package:chiwawa/core/services/trip_session_service.dart';
 import 'package:chiwawa/core/utils/time_formatters.dart';
 import 'package:dio/dio.dart';
@@ -123,8 +128,142 @@ void main() {
     expect(handled, isFalse);
     expect(container.read(authControllerProvider).isSignedIn, isFalse);
   });
+
+  test('Dio sends JWT only to the configured API origin', () async {
+    final container = ProviderContainer(
+      overrides: [
+        apiBaseUrlProvider.overrideWithValue('https://api.chiwawa.test'),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(authTokenProvider.notifier).state = 'private-jwt';
+    final dio = container.read(dioClientProvider);
+    final adapter = RecordingHttpClientAdapter();
+    dio.httpClientAdapter = adapter;
+
+    await dio.get<void>('/api/v1/auth/me');
+    await dio.get<void>('https://images.example.test/trip/photo.jpg');
+
+    expect(
+      adapter.requests.first.headers['Authorization'],
+      'Bearer private-jwt',
+    );
+    expect(
+      adapter.requests.last.headers.containsKey('Authorization'),
+      isFalse,
+    );
+  });
+
+  test('saved places use place id before display name for identity', () {
+    final notifier = SavedPhotoPlacesNotifier();
+    const first = PhotoSearchResult(
+      id: 'place-a',
+      name: '중앙 공원',
+      address: '도쿄 치요다구',
+      category: '공원',
+    );
+    const sameNameDifferentPlace = PhotoSearchResult(
+      id: 'place-b',
+      name: '중앙 공원',
+      address: '오사카 주오구',
+      category: '공원',
+    );
+    const renamedSamePlace = PhotoSearchResult(
+      id: 'place-a',
+      name: 'Central Park',
+      address: '도쿄 치요다구',
+      category: '공원',
+    );
+
+    expect(notifier.addPlace(first), isTrue);
+    expect(notifier.addPlace(sameNameDifferentPlace), isTrue);
+    expect(notifier.addPlace(renamedSamePlace), isFalse);
+    expect(notifier.state, hasLength(2));
+  });
+
+  test('rapid auth changes persist the newest state', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final controller = container.read(authControllerProvider.notifier);
+
+    final signingIn = controller.signInWithToken(
+      'temporary-token',
+      user: const AuthUser(
+        name: '여행자',
+        email: 'traveler@example.com',
+      ),
+    );
+    final signingOut = controller.signOut();
+    await Future.wait([signingIn, signingOut]);
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(container.read(authControllerProvider).status, AuthStatus.signedOut);
+    expect(prefs.getString('auth_status'), isNull);
+    expect(prefs.getString('auth_token'), isNull);
+    expect(prefs.getString('auth_user_email'), isNull);
+  });
+
+  test('sign out clears session-scoped frontend data', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final auth = container.read(authControllerProvider.notifier);
+    await auth.continueAsGuest();
+
+    container.read(savedPhotoPlacesProvider.notifier).addPlace(
+          const PhotoSearchResult(
+            id: 'saved-place',
+            name: '저장 장소',
+            address: '도쿄',
+            category: '명소',
+          ),
+        );
+    container.read(confirmedRouteProvider.notifier).confirm(
+      const [
+        RoutePlace(
+          name: '확정 장소',
+          duration: '30분',
+          transport: '도보',
+          category: '명소',
+        ),
+      ],
+    );
+    expect(container.read(savedPhotoPlacesProvider), hasLength(1));
+    expect(container.read(confirmedRouteProvider), hasLength(1));
+
+    await auth.signOut();
+
+    expect(container.read(savedPhotoPlacesProvider), isEmpty);
+    expect(container.read(confirmedRouteProvider), isEmpty);
+  });
 }
 
 class SocketExceptionStub implements Exception {
   const SocketExceptionStub();
+}
+
+class RecordingHttpClientAdapter implements HttpClientAdapter {
+  final List<RequestOptions> requests = [];
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    return ResponseBody.fromString(
+      '{}',
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }

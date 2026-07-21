@@ -4,11 +4,19 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme.dart';
 import '../../core/confirmed_route.dart';
 import '../../core/models/memorial_map_models.dart';
+import '../../core/models/memorial_models.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/providers/data_providers.dart';
 import '../../shared/widgets/async_value_view.dart';
-import 'widgets/daily_section.dart';
+import '../../shared/widgets/app_page_header.dart';
+import '../../shared/widgets/app_viewport.dart';
+import 'memorial_photo_edits_controller.dart';
+import 'widgets/confirmed_route_preview.dart';
 import 'widgets/memorial_date_strip.dart';
+import 'widgets/memorial_day_photo_section.dart';
+import 'widgets/memorial_month_selector.dart';
+import 'widgets/memorial_location_sheet.dart';
+import 'widgets/memorial_share_sheet.dart';
 import 'widgets/paw_map_view.dart';
 import 'widgets/trip_summary_card.dart';
 
@@ -18,22 +26,24 @@ class MemorialScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final confirmedRoute = ref.watch(confirmedRouteProvider);
+    final selectedMonth = ref.watch(selectedMemorialMonthProvider);
     final selectedDate = ref.watch(selectedMemorialDateProvider);
-    final dateOptions = ref.watch(memorialDateOptionsProvider);
-    final pawClusters = ref.watch(pawMapProvider(selectedDate));
+    final calendar = ref.watch(memorialCalendarProvider(selectedMonth));
+    final dayTimeline = ref.watch(editedMemorialDayProvider(selectedDate));
+    final pawClusters = ref.watch(editedPawMapProvider(selectedDate));
 
-    return AsyncValueView<MemorialData>(
+    return AsyncValueView<MemorialOverview?>(
       value: ref.watch(memorialDataProvider),
       onRetry: () => ref.invalidate(memorialDataProvider),
-      builder: (data) => _body(
+      builder: (overview) => _body(
         context,
         ref,
-        data.tripInfo,
-        data.summary,
-        data.days,
+        overview,
         confirmedRoute,
-        dateOptions,
+        selectedMonth,
+        calendar,
         selectedDate,
+        dayTimeline,
         pawClusters,
       ),
     );
@@ -42,220 +52,164 @@ class MemorialScreen extends ConsumerWidget {
   Widget _body(
     BuildContext context,
     WidgetRef ref,
-    TripInfo tripInfo,
-    MemorialSummary memorialSummary,
-    List<MemorialDay> memorialDays,
+    MemorialOverview? overview,
     List<RoutePlace> confirmedRoute,
-    AsyncValue<List<DateTime>> dateOptions,
+    MemorialMonth selectedMonth,
+    AsyncValue<MemorialCalendar> calendar,
     DateTime selectedDate,
+    AsyncValue<MemorialDayTimeline> dayTimeline,
     AsyncValue<List<PawCluster>> pawClusters,
   ) {
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 96),
+        key: const ValueKey('memorial-scroll'),
+        padding: AppLayout.pageInsets(context),
         children: [
-          Text(
-            '여행 마무리',
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            '사진과 이동 동선을 자동으로 정리했어요.',
-            style: TextStyle(color: ChiwawaColors.textSecondary),
+          const AppPageHeader(
+            title: '여행 마무리',
+            subtitle: '사진과 이동 동선을 날짜별 여행 기록으로 모았어요.',
           ),
           const SizedBox(height: 18),
-          TripSummaryCard(
-            tripInfo: tripInfo,
-            summary: memorialSummary,
-          ),
-          const SizedBox(height: 20),
-          AsyncValueView<List<DateTime>>(
-            value: dateOptions,
-            loadingHeight: 44,
-            onRetry: () => ref.invalidate(memorialDateOptionsProvider),
-            builder: (dates) => MemorialDateStrip(
-              dates: dates,
-              selectedDate: selectedDate,
-              onSelected: (date) {
-                ref.read(selectedMemorialDateProvider.notifier).state = date;
-              },
+          if (overview != null) ...[
+            TripSummaryCard(
+              tripInfo: overview.tripInfo,
+              summary: overview.summary,
             ),
+            const SizedBox(height: 20),
+          ],
+          MemorialMonthSelector(
+            month: selectedMonth,
+            onPrevious: () => _changeMonth(ref, selectedMonth.previous),
+            onNext: () => _changeMonth(ref, selectedMonth.next),
+          ),
+          const SizedBox(height: 6),
+          AsyncValueView<MemorialCalendar>(
+            value: calendar,
+            loadingHeight: 44,
+            onRetry: () =>
+                ref.invalidate(memorialCalendarProvider(selectedMonth)),
+            builder: (data) {
+              _selectFirstAvailableDate(ref, data, selectedDate);
+              return MemorialDateStrip(
+                days: data.days,
+                selectedDate: selectedDate,
+                onSelected: (date) {
+                  ref.read(selectedMemorialDateProvider.notifier).state = date;
+                },
+              );
+            },
           ),
           const SizedBox(height: 12),
           AsyncValueView<List<PawCluster>>(
             value: pawClusters,
             loadingHeight: 260,
-            onRetry: () => ref.invalidate(pawMapProvider(selectedDate)),
+            onRetry: () => ref.invalidate(memorialDayProvider(selectedDate)),
             builder: (clusters) => PawMapView(clusters: clusters),
+          ),
+          const SizedBox(height: ChiwawaSpacing.section),
+          dayTimeline.when(
+            data: (timeline) => MemorialDayPhotoSection(
+              timeline: timeline,
+              onEditLocation: (photo) =>
+                  _editPhotoLocation(context, ref, photo),
+              onExclude: (photo) => _excludePhoto(context, ref, photo),
+            ),
+            loading: () => const SizedBox(
+              height: 170,
+              child: Center(
+                child: CircularProgressIndicator(
+                  color: ChiwawaColors.primary,
+                ),
+              ),
+            ),
+            error: (error, stackTrace) => const SizedBox.shrink(),
           ),
           if (confirmedRoute.isNotEmpty) ...[
             const SizedBox(height: 20),
-            _ConfirmedRoutePreview(places: confirmedRoute),
+            ConfirmedRoutePreview(places: confirmedRoute),
           ],
-          const SizedBox(height: 20),
-          for (var index = 0; index < memorialDays.length; index++) ...[
-            DailySection(day: memorialDays[index], seedOffset: index * 20),
-            const SizedBox(height: 18),
-          ],
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.share, size: 18),
-                  label: const Text('공유하기'),
-                ),
+          const SizedBox(height: ChiwawaSpacing.lg),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => showMemorialShareSheet(
+                context,
+                overview: overview,
+                date: selectedDate,
+                timeline: dayTimeline.valueOrNull,
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.download, size: 18),
-                  label: const Text('앨범 내보내기'),
-                ),
-              ),
-            ],
+              icon: const Icon(Icons.share_rounded, size: 18),
+              label: const Text('여행 기록 공유'),
+            ),
           ),
         ],
       ),
     );
   }
-}
 
-class _ConfirmedRoutePreview extends StatelessWidget {
-  const _ConfirmedRoutePreview({required this.places});
-
-  final List<RoutePlace> places;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: ChiwawaColors.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Row(
-            children: [
-              Icon(
-                Icons.route_rounded,
-                color: ChiwawaColors.primary,
-                size: 20,
-              ),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  '확정 일정 미리보기',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'AI 일정 설계에서 확정한 동선을 기록 흐름으로 이어봤어요.',
-            style: TextStyle(
-              color: ChiwawaColors.textSecondary,
-              fontSize: 12,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 12),
-          for (var index = 0; index < places.length; index++) ...[
-            _ConfirmedRouteRow(
-              order: index + 1,
-              place: places[index],
-              isLast: index == places.length - 1,
-            ),
-          ],
-        ],
-      ),
-    );
+  Future<void> _editPhotoLocation(
+    BuildContext context,
+    WidgetRef ref,
+    MemorialPhoto photo,
+  ) async {
+    final location = await showMemorialLocationSheet(context, photo: photo);
+    if (location == null || !context.mounted) return;
+    ref.read(memorialPhotoEditsProvider.notifier).updateLocation(
+          photo.id,
+          address: location.address,
+          latitude: location.latitude,
+          longitude: location.longitude,
+        );
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(const SnackBar(content: Text('사진 위치를 수정했어요.')));
   }
-}
 
-class _ConfirmedRouteRow extends StatelessWidget {
-  const _ConfirmedRouteRow({
-    required this.order,
-    required this.place,
-    required this.isLast,
-  });
-
-  final int order;
-  final RoutePlace place;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 28,
-          child: Column(
-            children: [
-              CircleAvatar(
-                radius: 12,
-                backgroundColor: ChiwawaColors.secondary,
-                child: Text(
-                  '$order',
-                  style: const TextStyle(
-                    color: ChiwawaColors.primary,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
-              if (!isLast)
-                Container(
-                  width: 1.4,
-                  height: 28,
-                  margin: const EdgeInsets.symmetric(vertical: 3),
-                  color: ChiwawaColors.border,
-                ),
-            ],
+  void _excludePhoto(
+    BuildContext context,
+    WidgetRef ref,
+    MemorialPhoto photo,
+  ) {
+    ref.read(memorialPhotoEditsProvider.notifier).exclude(photo.id);
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: const Text('사진을 이 여행 기록에서 제외했어요.'),
+          action: SnackBarAction(
+            label: '되돌리기',
+            onPressed: () =>
+                ref.read(memorialPhotoEditsProvider.notifier).restore(photo.id),
           ),
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Padding(
-            padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  place.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  '${place.category} · ${place.duration}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: ChiwawaColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
+      );
+  }
+
+  void _changeMonth(WidgetRef ref, MemorialMonth month) {
+    ref.read(selectedMemorialMonthProvider.notifier).state = month;
+    ref.read(selectedMemorialDateProvider.notifier).state = month.firstDay;
+  }
+
+  void _selectFirstAvailableDate(
+    WidgetRef ref,
+    MemorialCalendar calendar,
+    DateTime selectedDate,
+  ) {
+    if (calendar.days.isEmpty ||
+        calendar.days.any(
+          (day) => isSameMemorialDay(day.day, selectedDate),
+        )) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final selectedMonth = ref.read(selectedMemorialMonthProvider);
+      if (selectedMonth.year != calendar.year ||
+          selectedMonth.month != calendar.month) {
+        return;
+      }
+      ref.read(selectedMemorialDateProvider.notifier).state =
+          calendar.days.first.day;
+    });
   }
 }

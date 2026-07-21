@@ -6,6 +6,7 @@ class MemorialPhotoPoint {
     required this.longitude,
     required this.placeName,
     required this.assetPath,
+    this.fileUrl = '',
   });
 
   final String id;
@@ -14,6 +15,7 @@ class MemorialPhotoPoint {
   final double longitude;
   final String placeName;
   final String assetPath;
+  final String fileUrl;
 
   factory MemorialPhotoPoint.fromJson(Map<String, Object?> json) {
     final latitude = (json['latitude'] as num?)?.toDouble();
@@ -34,6 +36,7 @@ class MemorialPhotoPoint {
       longitude: longitude,
       placeName: json['place_name'] as String? ?? '',
       assetPath: json['asset_path'] as String? ?? '',
+      fileUrl: json['file_url'] as String? ?? '',
     );
   }
 
@@ -45,6 +48,7 @@ class MemorialPhotoPoint {
       'longitude': longitude,
       'place_name': placeName,
       'asset_path': assetPath,
+      'file_url': fileUrl,
     };
   }
 }

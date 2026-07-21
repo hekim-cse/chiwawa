@@ -97,6 +97,123 @@ class TravelPreference {
   }
 }
 
+class Trip {
+  const Trip({
+    required this.id,
+    required this.title,
+    required this.city,
+    required this.country,
+    required this.startDate,
+    required this.endDate,
+    required this.travelers,
+    required this.interests,
+    required this.travelStyle,
+  });
+
+  final String id;
+  final String title;
+  final String city;
+  final String country;
+  final String startDate;
+  final String endDate;
+  final int travelers;
+  final List<String> interests;
+  final TravelPace travelStyle;
+
+  factory Trip.fromJson(Map<String, Object?> json) {
+    final rawInterests = json['interests'];
+    return Trip(
+      id: json['id']?.toString() ?? '',
+      title: json['title'] as String? ?? '여행',
+      city: json['city'] as String? ?? '',
+      country: json['country'] as String? ?? 'Japan',
+      startDate: json['start_date'] as String? ?? '',
+      endDate: json['end_date'] as String? ?? '',
+      travelers: (json['travelers'] as num?)?.toInt() ?? 1,
+      interests: rawInterests is List
+          ? rawInterests.whereType<String>().toList(growable: false)
+          : const [],
+      travelStyle:
+          TravelPaceLabel.fromCode(json['travel_style'] as String? ?? ''),
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'id': id,
+      'title': title,
+      'city': city,
+      'country': country,
+      'start_date': startDate,
+      'end_date': endDate,
+      'travelers': travelers,
+      'interests': interests,
+      'travel_style': travelStyle.code,
+    };
+  }
+
+  TripInfo toTripInfo({DateTime? today}) {
+    final cityLabel = country.isEmpty ? city : '$city, $country';
+    return TripInfo(
+      tripId: id,
+      tripName: title,
+      period: '$startDate ~ $endDate',
+      currentDay: _currentDayLabel(today ?? DateTime.now()),
+      members: travelers,
+      city: cityLabel,
+      weather: '',
+    );
+  }
+
+  String _currentDayLabel(DateTime today) {
+    final start = DateTime.tryParse(startDate);
+    final end = DateTime.tryParse(endDate);
+    if (start == null || end == null) return '';
+
+    final date = DateTime(today.year, today.month, today.day);
+    final firstDay = DateTime(start.year, start.month, start.day);
+    final lastDay = DateTime(end.year, end.month, end.day);
+    if (date.isBefore(firstDay)) return '여행 전';
+    if (date.isAfter(lastDay)) return '여행 완료';
+    return '${date.difference(firstDay).inDays + 1}일차';
+  }
+}
+
+class TripDraft {
+  const TripDraft({
+    required this.city,
+    this.country = 'Japan',
+    required this.startDate,
+    required this.endDate,
+    this.travelers = 1,
+    this.interests = const [],
+    this.travelStyle = TravelPace.balanced,
+    this.title,
+  });
+
+  final String city;
+  final String country;
+  final String startDate;
+  final String endDate;
+  final int travelers;
+  final List<String> interests;
+  final TravelPace travelStyle;
+  final String? title;
+
+  Map<String, Object?> toJson() {
+    return {
+      'city': city,
+      'country': country,
+      'start_date': startDate,
+      'end_date': endDate,
+      'travelers': travelers,
+      'interests': interests,
+      'travel_style': travelStyle.code,
+      if (title != null && title!.trim().isNotEmpty) 'title': title!.trim(),
+    };
+  }
+}
+
 class TripInfo {
   const TripInfo({
     required this.tripId,
@@ -214,18 +331,28 @@ class ScheduleItem {
   }
 }
 
+extension ScheduleItemIdentity on ScheduleItem {
+  String get identityKey {
+    final normalizedId = id.trim();
+    if (normalizedId.isNotEmpty) return normalizedId;
+    return [tripId, date, startTime, placeId ?? '', name ?? ''].join('|');
+  }
+}
+
 class RoutePlace {
   const RoutePlace({
     required this.name,
     required this.duration,
     required this.transport,
     required this.category,
+    this.travelCost = '',
   });
 
   final String name;
   final String duration;
   final String transport;
   final String category;
+  final String travelCost;
 
   factory RoutePlace.fromJson(Map<String, Object?> json) {
     return RoutePlace(
@@ -236,6 +363,8 @@ class RoutePlace {
           json['transport_from_previous'] as String? ??
           '',
       category: json['category'] as String? ?? '',
+      travelCost:
+          json['travel_cost']?.toString() ?? json['cost']?.toString() ?? '',
     );
   }
 
@@ -245,8 +374,14 @@ class RoutePlace {
       'duration': duration,
       'transport': transport,
       'category': category,
+      'travel_cost': travelCost,
     };
   }
+}
+
+extension RoutePlaceIdentity on RoutePlace {
+  String get identityKey =>
+      [name, duration, transport, category, travelCost].join('|');
 }
 
 class RouteOptimizationState {
@@ -339,6 +474,28 @@ class PhotoSearchResult {
   final double? confidence;
   final String? imagePath;
 
+  PhotoSearchResult copyWith({
+    String? id,
+    String? name,
+    String? address,
+    String? category,
+    double? latitude,
+    double? longitude,
+    double? confidence,
+    String? imagePath,
+  }) {
+    return PhotoSearchResult(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      address: address ?? this.address,
+      category: category ?? this.category,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      confidence: confidence ?? this.confidence,
+      imagePath: imagePath ?? this.imagePath,
+    );
+  }
+
   factory PhotoSearchResult.fromJson(Map<String, Object?> json) {
     return PhotoSearchResult(
       id: json['place_id']?.toString() ?? json['id']?.toString() ?? '',
@@ -365,6 +522,33 @@ class PhotoSearchResult {
     };
   }
 }
+
+extension PhotoSearchResultIdentity on PhotoSearchResult {
+  String get identityKey {
+    final normalizedId = id.trim();
+    if (normalizedId.isNotEmpty) return normalizedId;
+    return [
+      _normalizePlaceIdentity(name),
+      _normalizePlaceIdentity(address),
+      latitude?.toStringAsFixed(6) ?? '',
+      longitude?.toStringAsFixed(6) ?? '',
+    ].join('|');
+  }
+
+  bool hasSameIdentityAs(PhotoSearchResult other) {
+    final currentId = id.trim();
+    final otherId = other.id.trim();
+    if (currentId.isNotEmpty && otherId.isNotEmpty) {
+      return currentId == otherId;
+    }
+    return _normalizePlaceIdentity(name) ==
+            _normalizePlaceIdentity(other.name) &&
+        _normalizePlaceIdentity(address) ==
+            _normalizePlaceIdentity(other.address);
+  }
+}
+
+String _normalizePlaceIdentity(String value) => value.trim().toLowerCase();
 
 class MemorialSummary {
   const MemorialSummary({
