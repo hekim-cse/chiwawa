@@ -211,10 +211,11 @@ class PlaceRecognizer:
             rating=place.rating,
         )
 
-    # 근처 후보 confidence 를 순위 기반으로 감소 (0.1 하한)
+    # 근처 후보 confidence 를 순위 기반으로 감소 (0.1 하한, 단 식별을 넘지 않음)
+    # 식별 confidence 가 하한보다 낮은 경우에도 근처가 식별 위로 올라가지 않게 클램프한다
     def _decay(self, base_conf: float, index: int) -> float:
         value = base_conf - self.config.nearby_confidence_decay * (index + 1)
-        return round(max(0.1, value), 2)
+        return round(min(base_conf, max(0.1, value)), 2)
 
     # 식별 실패 시 결과 (원신호는 보존)
     @staticmethod

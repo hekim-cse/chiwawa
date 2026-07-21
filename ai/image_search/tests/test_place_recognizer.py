@@ -351,6 +351,24 @@ class TestCascade:
         # 0.2 - 0.15 = 0.05 → 하한 0.1 로 클램프
         assert result.candidates[1].confidence == 0.1
 
+    # seed confidence 가 하한(0.1)보다 낮아도 근처가 식별보다 높게 정렬되지 않는다
+    # (식별 장소가 항상 앵커 — 근처 confidence 는 식별 이하)
+    def test_nearby_never_ranks_above_identified(self):
+        places = FakePlaces(
+            resolved=resolved_place(), nearby=[resolved_place(name="근처", pid="n1")]
+        )
+        rec = make_recognizer(
+            FakeLandmark(None),
+            FakeVision(vision_id(guess="카페", conf=0.05)),  # 하한보다 낮은 확신도
+            places,
+        )
+
+        result = rec.search(req(max_candidates=2))
+
+        identified_conf = result.candidates[0].confidence
+        nearby_conf = result.candidates[1].confidence
+        assert nearby_conf <= identified_conf  # 근처가 식별을 넘지 않음
+
     # 근처 추천 confidence 는 식별보다 낮게 점감한다
     def test_nearby_confidence_decays(self):
         nearby = [resolved_place(name=f"근처{i}", pid=f"n{i}") for i in range(3)]
