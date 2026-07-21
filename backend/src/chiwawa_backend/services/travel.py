@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from chiwawa_backend.errors import DomainValidationError
 from chiwawa_backend.schemas.base import PlaceSource
@@ -16,9 +15,18 @@ from chiwawa_backend.schemas.travel import (
     ReplanResponse,
     TodayScheduleResponse,
 )
-from chiwawa_backend.services.common import require_recommendation, require_trip
+from chiwawa_backend.services.common import (
+    SERVICE_TIMEZONE,
+    local_today,
+    require_recommendation,
+    require_trip,
+)
 from chiwawa_backend.services.plans import build_replan_from_schedule
-from chiwawa_backend.services.schedule import create_schedule_item, schedule_for_date
+from chiwawa_backend.services.schedule import (
+    create_schedule_item,
+    ensure_no_schedule_overlap,
+    schedule_for_date,
+)
 from chiwawa_backend.state import AppState, synchronized
 
 RECOMMENDATION_DATE_ERROR = "recommendation date must be within trip dates"
@@ -26,7 +34,7 @@ RECOMMENDATION_DATE_ERROR = "recommendation date must be within trip dates"
 
 @synchronized
 def today_schedule(state: AppState, trip_id: str) -> TodayScheduleResponse:
-    today = datetime.now(ZoneInfo("Asia/Tokyo")).date()
+    today = local_today()
     return TodayScheduleResponse(
         trip_id=trip_id,
         date=today,
@@ -83,18 +91,16 @@ def add_recommendation_to_schedule(
         existing_item = state.schedule_items.get(existing_item_id)
         if existing_item is not None and existing_item.trip_id == trip_id:
             return AddRecommendationResponse(schedule_item=existing_item)
-    schedule_item = create_schedule_item(
-        state,
-        trip_id,
-        ScheduleItemCreateRequest(
-            name=recommendation.place_name,
-            date=recommendation.date,
-            start_time=recommendation.start_time,
-            end_time=recommendation.end_time,
-            notes=recommendation.reason,
-            source=PlaceSource.RECOMMENDATION,
-        ),
+    payload = ScheduleItemCreateRequest(
+        name=recommendation.place_name,
+        date=recommendation.date,
+        start_time=recommendation.start_time,
+        end_time=recommendation.end_time,
+        notes=recommendation.reason,
+        source=PlaceSource.RECOMMENDATION,
     )
+    ensure_no_schedule_overlap(state, trip_id, payload)
+    schedule_item = create_schedule_item(state, trip_id, payload)
     state.added_recommendations[recommendation_id] = schedule_item.id
     return AddRecommendationResponse(schedule_item=schedule_item)
 
@@ -137,6 +143,6 @@ def replan_trip(
         payload.current_item_id,
     )
     reason = payload.reason or "schedule update"
-    generated_at = datetime.now(ZoneInfo("Asia/Tokyo")).isoformat(timespec="seconds")
+    generated_at = datetime.now(SERVICE_TIMEZONE).isoformat(timespec="seconds")
     message = f"Replanned for {reason} at {generated_at}"
     return ReplanResponse(plan=plan, message=message)

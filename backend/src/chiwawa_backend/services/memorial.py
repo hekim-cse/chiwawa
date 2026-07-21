@@ -1,5 +1,3 @@
-from datetime import UTC, datetime
-
 from chiwawa_backend.schemas.memorial import (
     MemorialGenerateRequest,
     MemorialPhotoListResponse,
@@ -65,7 +63,9 @@ def generate_memorial(
     title = payload.title or f"{trip.title} memorial"
     timeline = [f"{item.date.isoformat()} {item.name}" for item in schedule.items]
     if not timeline:
-        timeline = [_photo_line(photo) for photo in photos]
+        # 업로드 순서가 아니라 촬영 시각 순서로 타임라인을 만든다.
+        # 촬영 시각이 없는 사진은 맨 뒤로 보낸다.
+        timeline = [_photo_line(photo) for photo in sorted(photos, key=_photo_order)]
     summary = (
         f"{trip.city} trip with {len(schedule.items)} schedule items "
         f"and {len(photos)} photos."
@@ -106,6 +106,14 @@ def update_memorial(
     return updated
 
 
+def _photo_order(photo: MemorialPhotoRead) -> tuple[int, float]:
+    # naive/aware datetime이 섞여도 비교할 수 있도록 timestamp로 정렬한다.
+    if photo.taken_at is None:
+        return (1, 0.0)
+    return (0, photo.taken_at.timestamp())
+
+
 def _photo_line(photo: MemorialPhotoRead) -> str:
-    taken_at = photo.taken_at or datetime.min.replace(tzinfo=UTC)
-    return f"{taken_at.isoformat()} {photo.file_name}"
+    if photo.taken_at is None:
+        return photo.file_name
+    return f"{photo.taken_at.isoformat()} {photo.file_name}"

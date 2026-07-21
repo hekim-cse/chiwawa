@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 import io
 import sqlite3
@@ -22,11 +23,13 @@ from chiwawa_backend.routers.memorial import MAX_MEMORIAL_PHOTO_SIZE_BYTES
 from chiwawa_backend.schemas.auth import GoogleUserProfile
 from chiwawa_backend.services import geocode, memorial_photos
 from chiwawa_backend.services.auth import save_or_update_user
+from chiwawa_backend.services.database import connect
 from chiwawa_backend.services.exif import read_exif
 from chiwawa_backend.services.jwt_auth import create_access_token
 from chiwawa_backend.services.memorial_photos import PhotoUpload
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 # 오사카 도톤보리 근처 좌표
@@ -40,6 +43,19 @@ def memorial_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("MEMORIAL_PHOTO_DIR", str(tmp_path / "photos"))
     monkeypatch.setenv("JWT_SECRET", "test-only-secret-at-least-32-characters")
     monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+
+
+@pytest.fixture
+def force_kst() -> Iterator[None]:
+    # taken_at 정규화가 서버 현지 시간대를 따르므로,
+    # +09:00 값을 단언하는 테스트는 어느 머신에서든 KST로 고정한다.
+    try:
+        with pytest.MonkeyPatch.context() as tz_patch:
+            tz_patch.setenv("TZ", "Asia/Seoul")
+            time.tzset()
+            yield
+    finally:
+        time.tzset()
 
 
 def _create_user_token(google_sub: str) -> str:
@@ -86,6 +102,17 @@ def _plain_png() -> bytes:
     return buffer.getvalue()
 
 
+def _jpeg_with_datetime_original(raw: str, offset: str | None = None) -> bytes:
+    image = Image.new("RGB", (4, 4), "red")
+    exif = Image.Exif()
+    exif.get_ifd(ExifTags.IFD.Exif)[ExifTags.Base.DateTimeOriginal] = raw
+    if offset is not None:
+        exif.get_ifd(ExifTags.IFD.Exif)[ExifTags.Base.OffsetTimeOriginal] = offset
+    buffer = io.BytesIO()
+    image.save(buffer, "JPEG", exif=exif)
+    return buffer.getvalue()
+
+
 def test_photo_file_is_removed_when_database_connection_fails(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -117,7 +144,7 @@ def test_photo_file_is_removed_when_database_connection_fails(
 
 
 @pytest.mark.anyio
-@pytest.mark.usefixtures("memorial_env")
+@pytest.mark.usefixtures("memorial_env", "force_kst")
 async def test_upload_extracts_exif_and_builds_day_timeline() -> None:
     app = create_app()
     token = _create_user_token("memorial-user-1")
@@ -192,7 +219,7 @@ async def test_upload_extracts_exif_and_builds_day_timeline() -> None:
 
 
 @pytest.mark.anyio
-@pytest.mark.usefixtures("memorial_env")
+@pytest.mark.usefixtures("memorial_env", "force_kst")
 async def test_upload_without_exif_uses_form_fields_and_patch_updates() -> None:
     app = create_app()
     token = _create_user_token("memorial-user-2")
@@ -484,6 +511,142 @@ async def test_upload_drops_out_of_range_exif_gps() -> None:
     assert photo["latitude"] is None
     assert photo["longitude"] is None
     assert photo["address"] is None
+
+@pytest.mark.anyio
+@pytest.mark.usefixtures("memorial_env")
+async def test_upload_normalizes_utc_taken_at_to_local_date_group() -> None:
+    # Given: KST 7/20 00:30 촬영을 UTC offset(7/19 15:30Z)으로 표기해 업로드하고,
+    #        같은 날 아침 사진은 현지 offset으로 표기해 업로드하는 상황.
+    try:
+        with pytest.MonkeyPatch.context() as tz_patch:
+            tz_patch.setenv("TZ", "Asia/Seoul")
+            time.tzset()
+            app = create_app()
+            token = _create_user_token("memorial-utc-normalize")
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test",
+            ) as client:
+                midnight_response = await client.post(
+                    "/api/v1/memorial/photos",
+                    headers=_auth_header(token),
+                    files={"file": ("midnight.png", _plain_png(), "image/png")},
+                    data={"taken_at": "2026-07-19T15:30:00+00:00"},
+                )
+                morning_response = await client.post(
+                    "/api/v1/memorial/photos",
+                    headers=_auth_header(token),
+                    files={"file": ("morning.png", _plain_png(), "image/png")},
+                    data={"taken_at": "2026-07-20T10:00:00+09:00"},
+                )
+                calendar_response = await client.get(
+                    "/api/v1/memorial/calendar",
+                    headers=_auth_header(token),
+                    params={"year": 2026, "month": 7},
+                )
+                day_response = await client.get(
+                    "/api/v1/memorial/days/2026-07-20",
+                    headers=_auth_header(token),
+                )
+    finally:
+        time.tzset()
+
+    # Then: 두 사진 모두 현지 날짜 7/20 하루로 묶이고, 촬영 시각 순서여야 한다.
+    assert midnight_response.status_code == HTTPStatus.CREATED
+    assert _json_dict(midnight_response)["taken_at"] == "2026-07-20T00:30:00+09:00"
+    assert morning_response.status_code == HTTPStatus.CREATED
+    calendar = _json_dict(calendar_response)
+    assert calendar["days"] == [{"day": "2026-07-20", "photo_count": 2}]
+    day = _json_dict(day_response)
+    items = cast("list[dict[str, object]]", day["items"])
+    photos = [cast("dict[str, object]", item["photo"]) for item in items]
+    assert [photo["file_name"] for photo in photos] == ["midnight.png", "morning.png"]
+
+
+@pytest.mark.usefixtures("memorial_env")
+def test_mixed_legacy_taken_at_rows_group_and_sort_by_local_time() -> None:
+    # Given: 과거 배포에서 naive/UTC/현지 offset 문자열이 섞여 저장된 상황.
+    try:
+        with pytest.MonkeyPatch.context() as tz_patch:
+            tz_patch.setenv("TZ", "Asia/Seoul")
+            time.tzset()
+            user = save_or_update_user(
+                GoogleUserProfile(
+                    sub="memorial-legacy-rows",
+                    email="memorial-legacy-rows@test.dev",
+                    name="legacy",
+                ),
+            )
+            user_id = int(user.id)
+            legacy_rows = [
+                ("utc.jpg", "2026-07-19T16:30:00+00:00"),  # KST 2026-07-20 01:30
+                ("kst.jpg", "2026-07-20T04:00:00+09:00"),
+                ("naive.jpg", "2026-07-20T05:00:00"),
+            ]
+            with contextlib.closing(connect()) as connection, connection:
+                for file_name, taken_at in legacy_rows:
+                    _ = connection.execute(
+                        """
+                        INSERT INTO memorial_photos (
+                            user_id, file_name, stored_path, content_type,
+                            taken_at, created_at
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            user_id,
+                            file_name,
+                            f"/nonexistent/{file_name}",
+                            "image/jpeg",
+                            taken_at,
+                            "2026-07-20T00:00:00+00:00",
+                        ),
+                    )
+
+            # When: 캘린더와 하루 타임라인을 조회한다.
+            calendar = memorial_photos.month_calendar(user_id, 2026, 7)
+            day = memorial_photos.day_timeline(user_id, dt.date(2026, 7, 20))
+    finally:
+        time.tzset()
+
+    # Then: 세 장 모두 현지 날짜 7/20 하루로 묶이고 현지 시각 순서여야 한다.
+    assert [(entry.day, entry.photo_count) for entry in calendar.days] == [
+        (dt.date(2026, 7, 20), 3),
+    ]
+    assert [entry.photo.file_name for entry in day.items] == [
+        "utc.jpg",
+        "kst.jpg",
+        "naive.jpg",
+    ]
+
+
+def test_exif_iso_dash_datetime_is_parsed_without_mangling() -> None:
+    # Given: 일부 편집기/폰이 쓰는 ISO dash 형식의 EXIF DateTimeOriginal.
+    data = read_exif(_jpeg_with_datetime_original("2023-05-01T10:20:30"))
+
+    # Then: 콜론 치환으로 시간 구분자를 망가뜨리지 말고 그대로 파싱해야 한다.
+    assert data.taken_at is not None
+    assert data.taken_at.isoformat() == "2023-05-01T10:20:30"
+
+
+def test_exif_iso_dash_datetime_applies_offset_tag() -> None:
+    data = read_exif(
+        _jpeg_with_datetime_original("2023-05-01T10:20:30", offset="+09:00"),
+    )
+
+    assert data.taken_at is not None
+    assert data.taken_at.isoformat() == "2023-05-01T10:20:30+09:00"
+
+
+def test_exif_embedded_offset_is_not_doubled_by_offset_tag() -> None:
+    # Given: 촬영 시각 문자열에 이미 offset이 들어 있고 offset 태그도 있는 EXIF.
+    data = read_exif(
+        _jpeg_with_datetime_original("2023-05-01T10:20:30+02:00", offset="+09:00"),
+    )
+
+    # Then: offset을 이어 붙여 파싱을 깨뜨리지 말고 내장 offset을 유지해야 한다.
+    assert data.taken_at is not None
+    assert data.taken_at.isoformat() == "2023-05-01T10:20:30+02:00"
+
 
 
 def test_exif_zero_denominator_gps_yields_no_coordinate() -> None:

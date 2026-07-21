@@ -18,10 +18,15 @@ class BottomNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentLocation = GoRouterState.of(context).uri.path;
+    final isNarrow = MediaQuery.sizeOf(context).width <= 340;
     final matchedIndex = _items.indexWhere(
       (item) => currentLocation.startsWith(item.path),
     );
-    final currentIndex = matchedIndex == -1 ? 0 : matchedIndex;
+    final currentIndex = currentLocation.startsWith('/trips')
+        ? 4
+        : matchedIndex == -1
+            ? 0
+            : matchedIndex;
 
     return DecoratedBox(
       decoration: const BoxDecoration(
@@ -36,29 +41,101 @@ class BottomNavBar extends StatelessWidget {
             constraints: const BoxConstraints(
               maxWidth: AppLayout.maxContentWidth,
             ),
-            child: NavigationBar(
-              height: 64,
-              selectedIndex: currentIndex,
-              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-              indicatorColor: Colors.transparent,
-              backgroundColor: Colors.white,
-              onDestinationSelected: (index) {
-                context.go(_items[index].path);
-              },
-              destinations: [
-                for (final item in _items)
-                  NavigationDestination(
-                    icon: Icon(item.icon, color: ChiwawaColors.textMuted),
-                    selectedIcon: Icon(
-                      item.icon,
-                      color: ChiwawaColors.primary,
+            child: isNarrow
+                ? _CompactBottomNav(
+                    items: _items,
+                    currentIndex: currentIndex,
+                    onSelected: (index) => context.go(_items[index].path),
+                  )
+                : NavigationBar(
+                    height: 66,
+                    selectedIndex: currentIndex,
+                    labelBehavior:
+                        NavigationDestinationLabelBehavior.alwaysShow,
+                    indicatorColor: ChiwawaColors.secondary,
+                    indicatorShape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(ChiwawaRadii.control),
                     ),
-                    label: item.label,
+                    backgroundColor: Colors.white,
+                    surfaceTintColor: Colors.transparent,
+                    onDestinationSelected: (index) {
+                      context.go(_items[index].path);
+                    },
+                    destinations: [
+                      for (final item in _items)
+                        NavigationDestination(
+                          icon: Icon(
+                            item.icon,
+                            color: ChiwawaColors.textMuted,
+                          ),
+                          selectedIcon: Icon(
+                            item.icon,
+                            color: ChiwawaColors.primary,
+                          ),
+                          label: item.label,
+                        ),
+                    ],
                   ),
-              ],
-            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _CompactBottomNav extends StatelessWidget {
+  const _CompactBottomNav({
+    required this.items,
+    required this.currentIndex,
+    required this.onSelected,
+  });
+
+  final List<_NavItem> items;
+  final int currentIndex;
+  final ValueChanged<int> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 66,
+      child: Row(
+        children: [
+          for (var index = 0; index < items.length; index++)
+            Expanded(
+              child: Semantics(
+                button: true,
+                selected: index == currentIndex,
+                label: items[index].label,
+                child: InkWell(
+                  onTap: () => onSelected(index),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        items[index].icon,
+                        size: 21,
+                        color: index == currentIndex
+                            ? ChiwawaColors.primary
+                            : ChiwawaColors.textMuted,
+                      ),
+                      const SizedBox(height: 3),
+                      if (index == currentIndex)
+                        Text(
+                          items[index].label,
+                          maxLines: 1,
+                          style:
+                              Theme.of(context).textTheme.labelMedium?.copyWith(
+                                    color: ChiwawaColors.primary,
+                                  ),
+                        )
+                      else
+                        const SizedBox(height: 15),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

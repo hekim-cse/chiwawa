@@ -56,7 +56,7 @@ def save_photo(user_id: int, upload: PhotoUpload) -> MemorialPhotoItem:
             detail="uploaded file is not a valid image",
         ) from error
     exif = read_exif(upload.data)
-    taken_at = upload.taken_at or exif.taken_at or _now_local()
+    taken_at = _normalize_taken_at(upload.taken_at or exif.taken_at or _now_local())
     latitude = upload.latitude if upload.latitude is not None else exif.latitude
     longitude = upload.longitude if upload.longitude is not None else exif.longitude
     address = _resolve_address(latitude, longitude)
@@ -101,27 +101,23 @@ def save_photo(user_id: int, upload: PhotoUpload) -> MemorialPhotoItem:
 
 
 def month_calendar(user_id: int, year: int, month: int) -> MemorialCalendarResponse:
-    month_prefix = f"{year:04d}-{month:02d}"
+    # 과거에 저장된 taken_at은 naive/UTC 문자열이 섞여 있을 수 있으므로
+    # 문자열 prefix 대신 파싱해 현지 날짜 기준으로 묶는다.
     with contextlib.closing(connect()) as connection:
         rows = cast(
             "list[sqlite3.Row]",
             connection.execute(
-                """
-            SELECT substr(taken_at, 1, 10) AS day, COUNT(*) AS photo_count
-            FROM memorial_photos
-            WHERE user_id = ? AND substr(taken_at, 1, 7) = ?
-            GROUP BY day
-            ORDER BY day
-            """,
-                (user_id, month_prefix),
+                "SELECT taken_at FROM memorial_photos WHERE user_id = ?",
+                (user_id,),
             ).fetchall(),
         )
+    counts: dict[dt.date, int] = {}
+    for row in rows:
+        day = _stored_taken_at(row).date()
+        if day.year == year and day.month == month:
+            counts[day] = counts.get(day, 0) + 1
     days = [
-        MemorialCalendarDay(
-            day=dt.date.fromisoformat(_text(row, "day")),
-            photo_count=_int(row, "photo_count"),
-        )
-        for row in rows
+        MemorialCalendarDay(day=day, photo_count=counts[day]) for day in sorted(counts)
     ]
     return MemorialCalendarResponse(year=year, month=month, days=days)
 
@@ -131,17 +127,20 @@ def day_timeline(user_id: int, day: dt.date) -> MemorialDayResponse:
         rows = cast(
             "list[sqlite3.Row]",
             connection.execute(
-                """
-                SELECT * FROM memorial_photos
-                WHERE user_id = ? AND substr(taken_at, 1, 10) = ?
-                ORDER BY taken_at, id
-                """,
-                (user_id, day.isoformat()),
+                "SELECT * FROM memorial_photos WHERE user_id = ?",
+                (user_id,),
             ).fetchall(),
         )
+    photos = sorted(
+        (
+            photo
+            for photo in (_item_from_row(row) for row in rows)
+            if photo.taken_at.date() == day
+        ),
+        key=lambda photo: (photo.taken_at, photo.id),
+    )
     items = [
-        MemorialTimelineEntry(seq=seq, photo=_item_from_row(row))
-        for seq, row in enumerate(rows)
+        MemorialTimelineEntry(seq=seq, photo=photo) for seq, photo in enumerate(photos)
     ]
     return MemorialDayResponse(day=day, items=items)
 
@@ -164,7 +163,7 @@ def update_photo(
     patch: MemorialPhotoPatchRequest,
 ) -> MemorialPhotoItem:
     current = get_photo(user_id, photo_id)
-    taken_at = patch.taken_at or current.taken_at
+    taken_at = _normalize_taken_at(patch.taken_at or current.taken_at)
     latitude = patch.latitude if patch.latitude is not None else current.latitude
     longitude = patch.longitude if patch.longitude is not None else current.longitude
     memo = patch.memo if patch.memo is not None else current.memo
@@ -216,6 +215,16 @@ def _now_local() -> dt.datetime:
     return dt.datetime.now(dt.UTC).astimezone().replace(microsecond=0)
 
 
+def _normalize_taken_at(value: dt.datetime) -> dt.datetime:
+    """taken_at을 서버 현지 시간대의 aware datetime으로 통일한다.
+
+    naive 값(EXIF 등)은 현지 시각으로 간주해 현지 시간대를 붙이고,
+    aware 값은 현지 시간대로 변환한다. 저장 형식이 단일 offset의
+    isoformat으로 통일돼야 같은 순간이 항상 같은 현지 날짜로 묶인다.
+    """
+    return value.astimezone().replace(microsecond=0)
+
+
 def _photo_dir() -> Path:
     configured = os.getenv("MEMORIAL_PHOTO_DIR")
     if configured:
@@ -246,13 +255,18 @@ def _require_row(user_id: int, photo_id: int) -> sqlite3.Row:
     return row
 
 
+def _stored_taken_at(row: sqlite3.Row) -> dt.datetime:
+    # 과거 데이터의 naive/UTC 문자열도 현지 시간대 기준으로 통일해 읽는다.
+    return _normalize_taken_at(dt.datetime.fromisoformat(_text(row, "taken_at")))
+
+
 def _item_from_row(row: sqlite3.Row) -> MemorialPhotoItem:
     photo_id = _int(row, "id")
     return MemorialPhotoItem(
         id=photo_id,
         file_name=_text(row, "file_name"),
         content_type=_text(row, "content_type"),
-        taken_at=dt.datetime.fromisoformat(_text(row, "taken_at")),
+        taken_at=_stored_taken_at(row),
         latitude=_optional_float(row, "latitude"),
         longitude=_optional_float(row, "longitude"),
         address=_optional_text(row, "address"),

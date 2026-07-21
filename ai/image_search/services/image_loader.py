@@ -97,9 +97,14 @@ def load_image_bytes(
     # 클라이언트 호출 전에 SSRF 가드를 먼저 통과시킨다(내부/사설 주소 차단)
     validate_image_url(url)
     # 리다이렉트로 SSRF 우회를 막기 위해 follow_redirects=False
-    with httpx.Client(
-        timeout=timeout_seconds, follow_redirects=False, transport=transport
-    ) as client:
-        response = client.get(url)
-        response.raise_for_status()
-        return response.content
+    # 네트워크·HTTP 오류는 ImageLoadError(ValueError 계열)로 감싸,
+    # 호출자가 이미지 로딩 실패를 한 종류의 예외로 처리하게 한다
+    try:
+        with httpx.Client(
+            timeout=timeout_seconds, follow_redirects=False, transport=transport
+        ) as client:
+            response = client.get(url)
+            response.raise_for_status()
+            return response.content
+    except httpx.HTTPError as exc:
+        raise ImageLoadError(f"이미지 다운로드에 실패했습니다: {url} ({exc})") from exc
