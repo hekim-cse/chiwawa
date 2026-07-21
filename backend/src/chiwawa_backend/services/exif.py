@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import io
 import math
+import re
 from dataclasses import dataclass
 from typing import SupportsFloat, cast
 
@@ -27,6 +28,9 @@ EMPTY_EXIF = PhotoExif(taken_at=None, latitude=None, longitude=None)
 
 # GPS 좌표는 (도, 분, 초) 세 부분으로 구성된다.
 _DMS_PART_COUNT = 3
+
+# EXIF 표준 날짜 형식("YYYY:MM:DD ...")인지 판별하는 패턴.
+_EXIF_COLON_DATE = re.compile(r"^\d{4}:\d{2}:\d{2}")
 
 
 class InvalidImageError(ValueError):
@@ -77,15 +81,23 @@ def _taken_at(exif: Image.Exif) -> dt.datetime | None:
     )
     if not isinstance(raw, str):
         return None
-    # EXIF 형식 "YYYY:MM:DD HH:MM:SS" → ISO 8601 "YYYY-MM-DD HH:MM:SS"
-    text = raw.strip().replace(":", "-", 2)
-    offset: object = exif_ifd.get(ExifTags.Base.OffsetTimeOriginal)
-    if isinstance(offset, str):
-        text += offset.strip()
+    text = raw.strip()
+    # EXIF 표준 형식 "YYYY:MM:DD HH:MM:SS"만 ISO 8601로 바꾼다.
+    # 일부 편집기는 이미 ISO dash 형식("2023-05-01T10:20:30")을 쓰는데,
+    # 그 경우 콜론을 치환하면 시간 구분자가 망가져 파싱에 실패한다.
+    if _EXIF_COLON_DATE.match(text):
+        text = text.replace(":", "-", 2)
     try:
-        return dt.datetime.fromisoformat(text)
+        parsed = dt.datetime.fromisoformat(text)
     except ValueError:
         return None
+    offset: object = exif_ifd.get(ExifTags.Base.OffsetTimeOriginal)
+    if parsed.tzinfo is None and isinstance(offset, str):
+        try:
+            return dt.datetime.fromisoformat(text + offset.strip())
+        except ValueError:
+            return parsed
+    return parsed
 
 
 def _coordinate(
