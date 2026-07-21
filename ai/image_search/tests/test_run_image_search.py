@@ -28,7 +28,7 @@ class FakeLandmark:
     def detect(self, image_bytes=None, image_url=None):
         self.received_bytes = image_bytes
         if self.raises:
-            raise RuntimeError("Cloud Vision API request failed: status=403")
+            raise RuntimeError("Cloud Vision API 요청 실패: status=403")
         return self.result
 
 
