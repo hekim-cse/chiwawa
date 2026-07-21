@@ -272,6 +272,7 @@ def test_run_route_option_solver_script_returns_response_dict_with_fake_provider
 
 
 # 정확 Solver가 POI를 누락한 잘못된 결과를 반환하면 차단
+departure_time=None,
 def test_rejects_exact_result_with_missing_poi():
     day_plan = make_day_plan()
 

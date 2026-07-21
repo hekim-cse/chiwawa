@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from datetime import datetime
 
 from ai.route_planner.benchmark.schemas import (
     BenchmarkMatrixDTO,
@@ -48,6 +49,7 @@ class FixtureTravelTimeMatrixProvider:
         self,
         locations: list[Location],
         travel_mode: TravelMode,
+        departure_time: datetime | None = None,
     ) -> TravelTimeMatrixResult:
         place_ids = [
             location.name

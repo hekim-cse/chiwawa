@@ -160,6 +160,7 @@ def test_run_route_options_by_mode_returns_day_plans_with_three_options():
             self,
             locations,
             travel_mode,
+            departure_time=None,
         ):
             place_ids = [
                 location.name
@@ -198,3 +199,87 @@ def test_run_route_options_by_mode_returns_day_plans_with_three_options():
         "WALK",
         "TRANSIT",
     ]
+
+
+# Provider Matrix가 비어 있는 이동 방식만 사용 불가 옵션으로 격리
+def test_assign_route_options_returns_unavailable_option_for_empty_matrix():
+    day_plan = make_day_plan()
+
+    place_ids = [
+        day_plan.start_place.place_id,
+        *[
+            poi.place_id
+            for poi in day_plan.assigned_pois
+        ],
+        day_plan.end_place.place_id,
+    ]
+
+    complete_result = (
+        TravelTimeMatrixResult(
+            matrix={
+                (
+                    origin,
+                    destination,
+                ): 10
+                for origin in place_ids
+                for destination in place_ids
+                if origin != destination
+            },
+            missing_elements=[],
+        )
+    )
+
+    transit_result = (
+        TravelTimeMatrixResult(
+            matrix={},
+            missing_elements=[
+                TravelTimeElement(
+                    origin_name="start",
+                    destination_name="poi",
+                    origin_index=0,
+                    destination_index=1,
+                    duration_seconds=None,
+                    condition="ROUTE_NOT_FOUND",
+                ),
+                TravelTimeElement(
+                    origin_name="poi",
+                    destination_name="end",
+                    origin_index=1,
+                    destination_index=2,
+                    duration_seconds=None,
+                    condition="ROUTE_NOT_FOUND",
+                ),
+            ],
+        )
+    )
+
+    result = RouteOptionsByModeSolver().assign_route_options(
+        day_plan=day_plan,
+        matrix_results_by_mode={
+            TravelMode.DRIVE: complete_result,
+            TravelMode.WALK: complete_result,
+            TravelMode.TRANSIT: transit_result,
+        },
+    )
+
+    options_by_mode = {
+        option.travel_mode: option
+        for option in result.route_options
+    }
+
+    assert options_by_mode[
+        TravelMode.DRIVE
+    ].ordered_stops
+
+    assert options_by_mode[
+        TravelMode.WALK
+    ].ordered_stops
+
+    transit_option = options_by_mode[
+        TravelMode.TRANSIT
+    ]
+
+    assert transit_option.ordered_stops == []
+    assert transit_option.route_legs == []
+    assert transit_option.missing_segments
+    assert transit_option.warnings

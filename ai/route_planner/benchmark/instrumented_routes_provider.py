@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from time import perf_counter
 from typing import List
 
@@ -52,6 +53,7 @@ class InstrumentedTravelTimeMatrixProvider:
         self,
         locations: List[Location],
         travel_mode: TravelMode,
+        departure_time: datetime | None = None,
     ) -> TravelTimeMatrixResult:
         started_at = perf_counter()
 
@@ -60,6 +62,7 @@ class InstrumentedTravelTimeMatrixProvider:
             .build_travel_time_matrix_result(
                 locations=locations,
                 travel_mode=travel_mode,
+                departure_time=departure_time,
             )
         )
 
