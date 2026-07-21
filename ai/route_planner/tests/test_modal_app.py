@@ -21,6 +21,7 @@ class FakeRoutesProvider:
         self,
         locations,
         travel_mode,
+        departure_time=None,
     ) -> TravelTimeMatrixResult:
         place_ids = [
             location.name
@@ -52,6 +53,7 @@ class FakeRoutesProviderWithTransitMissing:
         self,
         locations,
         travel_mode,
+        departure_time=None,
     ) -> TravelTimeMatrixResult:
         place_ids = [
             location.name

@@ -1,4 +1,5 @@
 # Google Routes API를 호출해서 “장소 좌표 목록”을 “이동 시간 행렬”로 변환하는 Provider
+from datetime import datetime, timezone
 import re
 from typing import List, Optional
 
@@ -33,10 +34,12 @@ class GoogleRoutesProvider:
         self,
         locations: List[Location],
         travel_mode: TravelMode = TravelMode.TRANSIT,
+        departure_time: datetime | None = None,
     ) -> TravelTimeMatrixResult:
         elements = self.compute_route_matrix(
             locations=locations,
             travel_mode=travel_mode,
+            departure_time=departure_time,
         )
 
         matrix: TravelTimeMatrix = {}
@@ -65,10 +68,12 @@ class GoogleRoutesProvider:
         self,
         locations: List[Location],
         travel_mode: TravelMode = TravelMode.TRANSIT,
+        departure_time: datetime | None = None,
     ) -> TravelTimeMatrix:
         result = self.build_travel_time_matrix_result(
             locations=locations,
             travel_mode=travel_mode,
+            departure_time=departure_time,
         )
 
         return result.matrix
@@ -82,6 +87,7 @@ class GoogleRoutesProvider:
         self,
         locations: List[Location],
         travel_mode: TravelMode = TravelMode.TRANSIT,
+        departure_time: datetime | None = None,
     ) -> List[TravelTimeElement]:
         if len(locations) < 2:
             raise ValueError("At least two locations are required.")
@@ -113,6 +119,28 @@ class GoogleRoutesProvider:
             "destinations": [self._to_route_matrix_location(location) for location in locations],
             "travelMode": travel_mode.value,
         }
+
+        if (
+            travel_mode == TravelMode.TRANSIT
+            and departure_time is not None
+        ):
+            if (
+                departure_time.tzinfo is None
+                or departure_time.utcoffset()
+                is None
+            ):
+                raise ValueError(
+                    "TRANSIT departure_time은 "
+                    "timezone-aware datetime이어야 "
+                    "합니다."
+                )
+
+            payload["departureTime"] = (
+                departure_time
+                .astimezone(timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
 
         # Google Routes API에 POST 요청 전송
         with httpx.Client(timeout=self.timeout_seconds) as client:
