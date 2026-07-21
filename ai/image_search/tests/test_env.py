@@ -4,6 +4,10 @@ import pytest
 from ai.image_search.providers import env
 
 
+# autouse 패치 전에 실제 로더를 포착해 둔다 (아래 실제-로딩 테스트에서 되돌리기 위함)
+_REAL_LOAD_ENV = env.load_image_search_env
+
+
 # .env 파일 로딩을 무력화해 테스트를 결정론적으로 만든다
 # (개발자 로컬에 .env 가 있어도 테스트 결과가 흔들리지 않게)
 @pytest.fixture(autouse=True)
@@ -53,3 +57,18 @@ class TestApiKeyGetters:
 
         with pytest.raises(ValueError):
             env.get_gemini_api_key()
+
+
+class TestRealDotenvLoading:
+    # 실제 .env 파일 로딩 경로를 검증한다 (autouse 무력화를 되돌리고 임시 .env 사용)
+    # 셸 환경변수가 아닌 파일에서 값이 올라오는지 확인
+    def test_loads_key_from_dotenv_file(self, monkeypatch, tmp_path):
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "GOOGLE_MAPS_API_KEY=from-dotenv-file\n", encoding="utf-8"
+        )
+        monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+        monkeypatch.setattr(env, "IMAGE_SEARCH_ENV_PATH", env_file)
+        monkeypatch.setattr(env, "load_image_search_env", _REAL_LOAD_ENV)
+
+        assert env.get_google_maps_api_key() == "from-dotenv-file"

@@ -120,7 +120,8 @@ class TestRunImageSearch:
         payload = run_image_search(request, recognizer)
 
         assert landmark.received_bytes == b"\xff\xd8\xff-test-image"
-        assert payload["status"] in {"SUCCESS", "PARTIAL"}
+        # 근처 결과가 없는 결정론적 입력이므로 정확히 PARTIAL 이어야 한다
+        assert payload["status"] == "PARTIAL"
         assert payload["identified"]["name"] == "센소지"
 
     # 결과에 원신호(signals)가 포함된다 (실검증 진단용)
@@ -223,7 +224,7 @@ MODULE = "ai.image_search.scripts.run_image_search"
 class TestMain:
     # 존재하지 않는 사진 경로면 실패 코드 1 을 반환한다
     # (provider 는 가짜 키로 생성되게 해, 실패 지점이 파일 로딩임을 보장)
-    def test_returns_failure_for_missing_photo(self, monkeypatch, tmp_path):
+    def test_returns_failure_for_missing_photo(self, monkeypatch, capsys, tmp_path):
         monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "dummy")
         monkeypatch.setenv("GOOGLE_CLOUD_VISION_API_KEY", "dummy")
         monkeypatch.setenv("GEMINI_API_KEY", "dummy")
@@ -233,6 +234,8 @@ class TestMain:
         )
 
         assert main() == 1
+        # 종료 코드뿐 아니라 실패 배너까지 확인 (조용한 실패 아님)
+        assert "[이미지 장소 검색 실패]" in capsys.readouterr().out
 
     # 성공 경로: 결과를 성공 배너와 함께 출력하고 0 을 반환한다
     # (실제 provider 호출은 몽키패치로 대체 — 오케스트레이션만 검증)
