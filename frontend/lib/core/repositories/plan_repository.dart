@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api/dio_client.dart';
+import '../auth/auth_controller.dart';
 import '../env.dart';
 import '../mock_data.dart' as mock;
 import '../models/travel_models.dart';
@@ -8,6 +9,7 @@ import '../services/trip_session_service.dart';
 import 'api/api_plan_repository.dart';
 
 final planRepositoryProvider = Provider<PlanRepository>((ref) {
+  ref.watch(authSessionRevisionProvider);
   if (useApiBackend) {
     return ApiPlanRepository(
       dio: ref.watch(dioClientProvider),

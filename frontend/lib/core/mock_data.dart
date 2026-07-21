@@ -2,6 +2,42 @@ import 'assets/app_images.dart';
 import 'models/memorial_map_models.dart';
 import 'models/travel_models.dart';
 
+const trips = [
+  Trip(
+    id: 'trip-tokyo-spring',
+    title: '도쿄 봄 여행',
+    city: '도쿄',
+    country: '일본',
+    startDate: '2025-04-01',
+    endDate: '2025-04-04',
+    travelers: 2,
+    interests: ['photo_spot', 'culture'],
+    travelStyle: TravelPace.balanced,
+  ),
+  Trip(
+    id: 'trip-osaka-food',
+    title: '오사카 맛집 여행',
+    city: '오사카',
+    country: '일본',
+    startDate: '2025-08-15',
+    endDate: '2025-08-18',
+    travelers: 3,
+    interests: ['food', 'shopping'],
+    travelStyle: TravelPace.packed,
+  ),
+  Trip(
+    id: 'trip-kyoto-autumn',
+    title: '교토 가을 산책',
+    city: '교토',
+    country: '일본',
+    startDate: '2025-11-06',
+    endDate: '2025-11-09',
+    travelers: 1,
+    interests: ['culture', 'photo_spot'],
+    travelStyle: TravelPace.relaxed,
+  ),
+];
+
 const tripInfo = TripInfo(
   tripId: 'trip-tokyo-spring',
   tripName: '도쿄 봄 여행',
@@ -102,30 +138,58 @@ const photoSearchResult = PhotoSearchResult(
   imagePath: MockImages.mockPlace01,
 );
 
+const photoSearchCandidates = [
+  photoSearchResult,
+  PhotoSearchResult(
+    id: 'place-kaminarimon',
+    name: '가미나리몬',
+    address: '도쿄 다이토구 아사쿠사 2-3-1',
+    category: '문·랜드마크',
+    latitude: 35.7111,
+    longitude: 139.7964,
+    confidence: 0.78,
+    imagePath: MockImages.mockPlace02,
+  ),
+  PhotoSearchResult(
+    id: 'place-asakusa-shrine',
+    name: '아사쿠사 신사',
+    address: '도쿄 다이토구 아사쿠사 2-3-1',
+    category: '신사',
+    latitude: 35.7149,
+    longitude: 139.7974,
+    confidence: 0.64,
+    imagePath: MockImages.mockPlace03,
+  ),
+];
+
 const routePlaces = [
   RoutePlace(
     name: '메이지 신궁',
     duration: '90분',
     transport: '지하철 12분',
     category: '신사',
+    travelCost: '¥180',
   ),
   RoutePlace(
     name: '하라주쿠 다케시타도리',
     duration: '60분',
     transport: '도보 8분',
     category: '쇼핑',
+    travelCost: '무료',
   ),
   RoutePlace(
     name: '오모테산도',
     duration: '120분',
     transport: '도보 5분',
     category: '카페·거리',
+    travelCost: '무료',
   ),
   RoutePlace(
     name: '시부야 스크램블',
     duration: '60분',
     transport: '지하철 7분',
     category: '랜드마크',
+    travelCost: '¥150',
   ),
 ];
 
