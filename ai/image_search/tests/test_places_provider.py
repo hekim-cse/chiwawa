@@ -256,6 +256,21 @@ class TestSearchNearby:
 
         assert "includedTypes" not in captured["body"]
 
+    # 근처 결과 중 불량 항목(필수값 누락)이 있어도 유효한 것은 유지한다
+    # (하나가 망가졌다고 근처 추천 전체를 버리지 않음)
+    def test_skips_malformed_places_and_keeps_valid(self):
+        good = google_place(id="n1", displayName={"text": "정상1"})
+        bad = google_place(id="n2", displayName={"text": "좌표없음"})
+        del bad["location"]  # 좌표 누락 → 파싱 불량
+        good2 = google_place(id="n3", displayName={"text": "정상2"})
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"places": [good, bad, good2]})
+
+        results = make_provider(handler).search_nearby(latitude=35.7, longitude=139.7)
+
+        assert [p.place_id for p in results] == ["n1", "n3"]  # 불량 n2 만 제외
+
     # 근처 결과가 없으면 빈 리스트를 반환한다 (resolve 와 달리 예외 아님)
     def test_returns_empty_list_when_no_results(self):
         def handler(request: httpx.Request) -> httpx.Response:
