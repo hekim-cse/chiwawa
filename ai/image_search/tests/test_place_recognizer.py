@@ -299,6 +299,34 @@ class TestCascade:
 
         assert vision.mime_types == ["image/jpeg"]
 
+    # LLM 카테고리가 식별 후보·근처 후보·근처 검색 필터로 전파된다
+    def test_category_propagates_to_candidates_and_nearby_filter(self):
+        places = FakePlaces(
+            resolved=resolved_place(), nearby=[resolved_place(name="근처", pid="n1")]
+        )
+        rec = make_recognizer(
+            FakeLandmark(landmark_det(score=0.9)),
+            FakeVision(vision_id(cat=PlaceCategory.CAFE)),
+            places,
+        )
+
+        result = rec.search(req())
+
+        assert result.identified.category is PlaceCategory.CAFE  # 식별 후보
+        assert result.candidates[1].category is PlaceCategory.CAFE  # 근처 후보
+        assert places.nearby_calls[0]["category"] is PlaceCategory.CAFE  # 근처 필터
+
+    # LLM 이 없으면(랜드마크만) 카테고리 미지정 → 후보는 ETC 로 채운다
+    def test_missing_llm_category_defaults_to_etc(self):
+        places = FakePlaces(resolved=resolved_place(), nearby=[])
+        rec = make_recognizer(
+            FakeLandmark(landmark_det(score=0.9)), FakeVision(raises=True), places
+        )
+
+        result = rec.search(req())
+
+        assert result.identified.category is PlaceCategory.ETC
+
     # 원신호(landmark·llm)가 결과에 보존된다
     def test_signals_preserved(self):
         rec = make_recognizer(

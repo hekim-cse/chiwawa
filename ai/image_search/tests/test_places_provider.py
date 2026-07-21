@@ -6,12 +6,22 @@ import httpx
 import pytest
 
 from ai.image_search.domain.schemas import PlaceCategory
-from ai.image_search.providers.places_provider import PlacesProvider
+from ai.image_search.providers.places_provider import (
+    CATEGORY_INCLUDED_TYPES,
+    PlacesProvider,
+)
 
 
 # 주어진 핸들러로 MockTransport 를 붙인 PlacesProvider 를 만든다
 def make_provider(handler) -> PlacesProvider:
     return PlacesProvider(api_key="test-key", transport=httpx.MockTransport(handler))
+
+
+class TestCategoryMapping:
+    # 모든 PlaceCategory 가 근처 검색 타입 매핑을 갖는다
+    # (미매핑 카테고리는 필터 없이 검색되는 조용한 저하로 이어지므로 전수 보장)
+    def test_mapping_covers_all_place_categories(self):
+        assert set(CATEGORY_INCLUDED_TYPES) == set(PlaceCategory)
 
 
 class TestResolvePlace:
