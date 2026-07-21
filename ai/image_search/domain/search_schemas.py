@@ -1,7 +1,7 @@
 # 백엔드와 이미지 장소 검색 모듈이 주고받는 DTO 정의 파일
 # (route_planner 의 trip_schemas.py 에 대응하는 계약 파일)
 # - 요청: ImageSearchRequest  ← 백엔드 PhotoPlaceSearchRequest 의 상위집합
-# - 응답: ImageSearchResult / PlaceCandidate ← 백엔드 PhotoPlaceCandidateRead 에 1:1 매핑
+# - 응답: PlaceCandidate ← 백엔드 PhotoPlaceCandidateRead 에 1:1 매핑 (ImageSearchResult 는 후보 목록을 감싸는 결과 래퍼)
 # 내부 모델(원신호·Places 결과)은 domain/schemas.py 에 있다. 의존은 이 파일 → schemas 한 방향만 허용.
 from enum import Enum
 from typing import Self
