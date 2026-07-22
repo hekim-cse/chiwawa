@@ -128,8 +128,13 @@ class PlaceRecognizer:
         )
 
         candidates = [identified, *nearby_candidates]
+        # 근처 추천을 얻었으면 SUCCESS. 못 얻었어도 애초에 근처를 요청하지 않았다면
+        # (max_candidates=1) 요청을 온전히 채운 것이므로 SUCCESS.
+        # 근처를 원했는데 하나도 못 얻은 경우(없거나 실패)만 PARTIAL.
         status = (
-            RecognitionStatus.SUCCESS if nearby_candidates else RecognitionStatus.PARTIAL
+            RecognitionStatus.SUCCESS
+            if nearby_candidates or nearby_wanted == 0
+            else RecognitionStatus.PARTIAL
         )
         return ImageSearchResult(
             identified=identified,
