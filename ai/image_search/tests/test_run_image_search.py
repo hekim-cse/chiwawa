@@ -3,12 +3,6 @@ from pathlib import Path
 
 import pytest
 
-from ai.image_search.domain.schemas import (
-    LandmarkDetection,
-    PlaceCategory,
-    ResolvedPlace,
-    VisionIdentification,
-)
 from ai.image_search.scripts.run_image_search import (
     build_recognizer,
     build_request,
@@ -16,63 +10,14 @@ from ai.image_search.scripts.run_image_search import (
     run_debug,
     run_image_search,
 )
-
-
-# --- 가짜 provider들 (recognizer 테스트와 동일한 형태) ---
-class FakeLandmark:
-    def __init__(self, result=None, raises=False):
-        self.result = result
-        self.raises = raises
-        self.received_bytes = None
-
-    def detect(self, image_bytes=None, image_url=None):
-        self.received_bytes = image_bytes
-        if self.raises:
-            raise RuntimeError("Cloud Vision API request failed: status=403")
-        return self.result
-
-
-class FakeVision:
-    def __init__(self, result=None, raises=False):
-        self.result = result
-        self.raises = raises
-
-    def identify(self, image_bytes, mime_type="image/jpeg", note=None):
-        if self.raises:
-            raise RuntimeError("Gemini API error")
-        return self.result
-
-
-class FakePlaces:
-    def __init__(self, resolved=None, nearby=None):
-        self.resolved = resolved
-        self.nearby = nearby if nearby is not None else []
-        self.resolve_calls = []
-
-    def resolve_place(self, place_name, language_code="ko", region_code="JP"):
-        self.resolve_calls.append(place_name)
-        if self.resolved is None:
-            raise ValueError(f"No Google Places result found for: {place_name}")
-        return self.resolved
-
-    def search_nearby(self, latitude, longitude, category=None, radius_m=1500,
-                      max_result_count=5, language_code="ko", region_code="JP"):
-        return self.nearby
-
-
-def landmark_det(name="센소지", score=0.9):
-    return LandmarkDetection(name=name, latitude=35.70, longitude=139.79, score=score)
-
-
-def vision_id(guess="블루보틀", conf=0.8):
-    return VisionIdentification(
-        place_name_guess=guess, category=PlaceCategory.CAFE, reason="추정", confidence=conf
-    )
-
-
-def resolved_place(name="센소지", pid="p1"):
-    return ResolvedPlace(place_id=pid, name=name, latitude=35.7148, longitude=139.7967,
-                         city="Tokyo", country="Japan")
+from ai.image_search.tests.fakes import (
+    FakeLandmark,
+    FakePlaces,
+    FakeVision,
+    landmark_det,
+    resolved_place,
+    vision_id,
+)
 
 
 # 로컬 사진 파일 하나를 tmp 에 만든다
@@ -120,7 +65,8 @@ class TestRunImageSearch:
         payload = run_image_search(request, recognizer)
 
         assert landmark.received_bytes == b"\xff\xd8\xff-test-image"
-        assert payload["status"] in {"SUCCESS", "PARTIAL"}
+        # 근처 결과가 없는 결정론적 입력이므로 정확히 PARTIAL 이어야 한다
+        assert payload["status"] == "PARTIAL"
         assert payload["identified"]["name"] == "센소지"
 
     # 결과에 원신호(signals)가 포함된다 (실검증 진단용)
@@ -197,11 +143,33 @@ class TestRunDebug:
         assert places.resolve_calls == ["블루보틀"]
         assert report["seed"]["source"] == "LLM"
 
+    # 랜드마크도 LLM 장소명도 없으면 좌표 확정을 건너뛴다 (무시드 분기)
+    def test_debug_no_seed_skips_resolve(self, photo):
+        request = build_request(
+            image_path=str(photo), image_url=None, note=None, max_candidates=2
+        )
+        places = FakePlaces(resolved=resolved_place())
+
+        report = run_debug(
+            request,
+            image_path=photo,
+            landmark=FakeLandmark(None),
+            vision_llm=FakeVision(vision_id(guess=None)),  # 장소명 추정 없음
+            places=places,
+        )
+
+        assert "skipped" in report["places_resolve"]
+        assert "seed" not in report
+        assert places.resolve_calls == []  # 확정 호출 자체를 안 함
+
+
+MODULE = "ai.image_search.scripts.run_image_search"
+
 
 class TestMain:
     # 존재하지 않는 사진 경로면 실패 코드 1 을 반환한다
     # (provider 는 가짜 키로 생성되게 해, 실패 지점이 파일 로딩임을 보장)
-    def test_returns_failure_for_missing_photo(self, monkeypatch, tmp_path):
+    def test_returns_failure_for_missing_photo(self, monkeypatch, capsys, tmp_path):
         monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "dummy")
         monkeypatch.setenv("GOOGLE_CLOUD_VISION_API_KEY", "dummy")
         monkeypatch.setenv("GEMINI_API_KEY", "dummy")
@@ -211,3 +179,51 @@ class TestMain:
         )
 
         assert main() == 1
+        # 종료 코드뿐 아니라 실패 배너까지 확인 (조용한 실패 아님)
+        assert "[이미지 장소 검색 실패]" in capsys.readouterr().out
+
+    # 성공 경로: 결과를 성공 배너와 함께 출력하고 0 을 반환한다
+    # (실제 provider 호출은 몽키패치로 대체 — 오케스트레이션만 검증)
+    def test_success_prints_banner_and_returns_zero(
+        self, monkeypatch, capsys, tmp_path
+    ):
+        photo = tmp_path / "p.jpg"
+        photo.write_bytes(b"x")
+        monkeypatch.setattr(f"{MODULE}.build_recognizer", lambda image_path=None: object())
+        monkeypatch.setattr(
+            f"{MODULE}.run_image_search", lambda request, recognizer: {"status": "SUCCESS"}
+        )
+        monkeypatch.setattr("sys.argv", ["run_image_search", "--image-path", str(photo)])
+
+        assert main() == 0
+        out = capsys.readouterr().out
+        assert "[이미지 장소 검색 성공]" in out
+        assert "SUCCESS" in out
+
+    # --debug 경로: run_debug 결과를 출력하고 0 을 반환한다
+    def test_debug_flag_runs_debug_and_returns_zero(
+        self, monkeypatch, capsys, tmp_path
+    ):
+        photo = tmp_path / "p.jpg"
+        photo.write_bytes(b"x")
+        monkeypatch.setattr(
+            f"{MODULE}.run_debug", lambda request, image_path=None: {"debug": "ok"}
+        )
+        monkeypatch.setattr(
+            "sys.argv", ["run_image_search", "--image-path", str(photo), "--debug"]
+        )
+
+        assert main() == 0
+        assert "[이미지 장소 검색 성공]" in capsys.readouterr().out
+
+    # 잘못된 인자(후보 개수 0)는 ValidationError → 실패 배너와 코드 1
+    def test_validation_error_returns_one(self, monkeypatch, capsys, tmp_path):
+        photo = tmp_path / "p.jpg"
+        photo.write_bytes(b"x")
+        monkeypatch.setattr(
+            "sys.argv",
+            ["run_image_search", "--image-path", str(photo), "--max-candidates", "0"],
+        )
+
+        assert main() == 1
+        assert "[이미지 장소 검색 실패]" in capsys.readouterr().out

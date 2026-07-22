@@ -20,7 +20,12 @@ from ai.image_search.services.image_loader import (
     detect_image_mime_type,
     load_image_bytes,
 )
-from ai.image_search.services.place_recognizer import PlaceRecognizer
+from ai.image_search.services.place_recognizer import (
+    LandmarkDetector,
+    PlaceRecognizer,
+    PlacesResolver,
+    VisionIdentifier,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -76,9 +81,9 @@ def build_request(
 # 로컬 사진은 그 파일이 있는 디렉토리만 허용 base 로 지정해 로딩한다
 def build_recognizer(
     image_path: Path | None = None,
-    landmark=None,
-    vision_llm=None,
-    places=None,
+    landmark: LandmarkDetector | None = None,
+    vision_llm: VisionIdentifier | None = None,
+    places: PlacesResolver | None = None,
 ) -> PlaceRecognizer:
     image_loader = (
         partial(load_image_bytes, allowed_base_dir=image_path.resolve().parent)
@@ -103,9 +108,9 @@ def run_image_search(request: ImageSearchRequest, recognizer: PlaceRecognizer) -
 def run_debug(
     request: ImageSearchRequest,
     image_path: Path | None = None,
-    landmark=None,
-    vision_llm=None,
-    places=None,
+    landmark: LandmarkDetector | None = None,
+    vision_llm: VisionIdentifier | None = None,
+    places: PlacesResolver | None = None,
 ) -> dict:
     landmark = landmark or LandmarkProvider()
     vision_llm = vision_llm or VisionLlmProvider()

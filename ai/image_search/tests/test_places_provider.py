@@ -6,12 +6,22 @@ import httpx
 import pytest
 
 from ai.image_search.domain.schemas import PlaceCategory
-from ai.image_search.providers.places_provider import PlacesProvider
+from ai.image_search.providers.places_provider import (
+    CATEGORY_INCLUDED_TYPES,
+    PlacesProvider,
+)
 
 
 # 주어진 핸들러로 MockTransport 를 붙인 PlacesProvider 를 만든다
 def make_provider(handler) -> PlacesProvider:
     return PlacesProvider(api_key="test-key", transport=httpx.MockTransport(handler))
+
+
+class TestCategoryMapping:
+    # 모든 PlaceCategory 가 근처 검색 타입 매핑을 갖는다
+    # (미매핑 카테고리는 필터 없이 검색되는 조용한 저하로 이어지므로 전수 보장)
+    def test_mapping_covers_all_place_categories(self):
+        assert set(CATEGORY_INCLUDED_TYPES) == set(PlaceCategory)
 
 
 class TestResolvePlace:
@@ -147,6 +157,39 @@ class TestEnrichedParsing:
 
         assert place.review_count == 138000
         assert place.primary_type == "buddhist_temple"
+
+    # 빈 longText·무관 타입 컴포넌트는 무시하고, locality 없으면 admin_area 로 폴백한다
+    def test_ignores_empty_and_unrelated_components_with_admin_fallback(self):
+        place = google_place(
+            addressComponents=[
+                {"longText": "", "types": ["locality"]},  # 빈 값 → 무시
+                {"longText": "1-2-3", "types": ["route"]},  # 무관 타입 → 무시
+                {"longText": "도쿄도", "types": ["administrative_area_level_1"]},
+                {"longText": "일본", "types": ["country"]},
+            ]
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"places": [place]})
+
+        resolved = make_provider(handler).resolve_place("어딘가")
+
+        assert resolved.city == "도쿄도"  # locality 없어 admin_area 폴백
+        assert resolved.country == "일본"
+
+    # 도시·국가 컴포넌트가 하나도 없으면 city/country 는 None 이다
+    def test_no_city_country_components_yield_none(self):
+        place = google_place(
+            addressComponents=[{"longText": "1-2-3", "types": ["route"]}]
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json={"places": [place]})
+
+        resolved = make_provider(handler).resolve_place("어딘가")
+
+        assert resolved.city is None
+        assert resolved.country is None
 
     # addressComponents 가 아예 없으면 city/country 는 None 이다 (거부 아님)
     def test_missing_address_components_yield_none(self):

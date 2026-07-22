@@ -42,7 +42,7 @@ def validate_image_url(url: str) -> None:
 
 
 # 호스트명을 IP 주소 목록으로 해석 (해석 실패도 차단 대상)
-def _resolve_addresses(host: str) -> list[ipaddress._BaseAddress]:
+def _resolve_addresses(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     # 호스트가 이미 IP 리터럴이면 그대로 사용
     try:
         return [ipaddress.ip_address(host)]
@@ -54,7 +54,7 @@ def _resolve_addresses(host: str) -> list[ipaddress._BaseAddress]:
     except socket.gaierror as exc:
         raise ImageLoadError(f"호스트를 해석할 수 없습니다: {host}") from exc
 
-    addresses: list[ipaddress._BaseAddress] = []
+    addresses: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
     for info in infos:
         ip_str = info[4][0]
         addresses.append(ipaddress.ip_address(ip_str))

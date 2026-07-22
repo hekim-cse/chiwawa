@@ -69,7 +69,7 @@ class LandmarkProvider:
         # API 요청 실패 시 상태 코드와 응답 본문을 함께 알린다
         if response.status_code >= 400:
             raise RuntimeError(
-                "Cloud Vision API request failed: "
+                "Cloud Vision API 요청 실패: "
                 f"status={response.status_code}, body={response.text}"
             )
 
@@ -98,7 +98,7 @@ class LandmarkProvider:
 
         error = entry.get("error")
         if error:
-            raise RuntimeError(f"Cloud Vision API returned an error: {error}")
+            raise RuntimeError(f"Cloud Vision API 오류 응답: {error}")
 
         for annotation in entry.get("landmarkAnnotations", []):
             detection = self._parse_annotation(annotation)

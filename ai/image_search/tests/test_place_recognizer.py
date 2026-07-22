@@ -1,11 +1,6 @@
 # services/place_recognizer.py 테스트 — 캐스케이드 조립 로직
 # 실제 provider 대신 가짜 provider(Protocol 만족)를 주입해 분기·상태·좌표 출처를 검증
-from ai.image_search.domain.schemas import (
-    LandmarkDetection,
-    PlaceCategory,
-    ResolvedPlace,
-    VisionIdentification,
-)
+from ai.image_search.domain.schemas import PlaceCategory
 from ai.image_search.domain.search_schemas import (
     CandidateSource,
     ImageSearchRequest,
@@ -15,82 +10,14 @@ from ai.image_search.services.place_recognizer import (
     PlaceRecognizer,
     PlaceRecognizerConfig,
 )
-
-
-# --- 가짜 provider들 (호출 기록 포함) ---
-class FakeLandmark:
-    def __init__(self, result=None, raises=False):
-        self.result = result
-        self.raises = raises
-        self.calls = []
-
-    def detect(self, image_bytes=None, image_url=None):
-        self.calls.append(image_bytes)
-        if self.raises:
-            raise RuntimeError("vision down")
-        return self.result
-
-
-class FakeVision:
-    def __init__(self, result=None, raises=False):
-        self.result = result
-        self.raises = raises
-        self.calls = []
-        self.mime_types = []
-
-    def identify(self, image_bytes, mime_type="image/jpeg", note=None):
-        self.calls.append((image_bytes, note))
-        self.mime_types.append(mime_type)
-        if self.raises:
-            raise RuntimeError("gemini down")
-        return self.result
-
-
-class FakePlaces:
-    # resolve_map 이 주어지면 이름별로 조회 (없는 이름은 ValueError) — 시드별 성공/실패를 구분
-    def __init__(self, resolved=None, resolve_raises=False, nearby=None,
-                 nearby_raises=False, resolve_map=None):
-        self.resolved = resolved
-        self.resolve_raises = resolve_raises
-        self.resolve_map = resolve_map
-        self.nearby = nearby if nearby is not None else []
-        self.nearby_raises = nearby_raises
-        self.resolve_calls = []
-        self.nearby_calls = []
-
-    def resolve_place(self, place_name, language_code="ko", region_code="JP"):
-        self.resolve_calls.append(place_name)
-        if self.resolve_raises:
-            raise ValueError("no result")
-        if self.resolve_map is not None:
-            if place_name not in self.resolve_map:
-                raise ValueError(f"no result for {place_name}")
-            return self.resolve_map[place_name]
-        return self.resolved
-
-    def search_nearby(self, latitude, longitude, category=None, radius_m=1500,
-                      max_result_count=5, language_code="ko", region_code="JP"):
-        self.nearby_calls.append(
-            {"lat": latitude, "lng": longitude, "category": category, "max": max_result_count}
-        )
-        if self.nearby_raises:
-            raise RuntimeError("places nearby down")
-        return self.nearby
-
-
-# --- 빌더 ---
-def landmark_det(name="센소지", lat=35.70, lng=139.70, score=0.9):
-    return LandmarkDetection(name=name, latitude=lat, longitude=lng, score=score)
-
-
-def vision_id(guess="블루보틀", cat=PlaceCategory.CAFE, conf=0.8):
-    return VisionIdentification(place_name_guess=guess, category=cat, reason="추정", confidence=conf)
-
-
-def resolved_place(name="센소지", lat=35.7148, lng=139.7967, city="Tokyo",
-                   country="Japan", pid="p1", rating=4.5):
-    return ResolvedPlace(place_id=pid, name=name, latitude=lat, longitude=lng,
-                         city=city, country=country, rating=rating)
+from ai.image_search.tests.fakes import (
+    FakeLandmark,
+    FakePlaces,
+    FakeVision,
+    landmark_det,
+    resolved_place,
+    vision_id,
+)
 
 
 def make_recognizer(landmark, vision, places, **cfg):
@@ -299,6 +226,34 @@ class TestCascade:
 
         assert vision.mime_types == ["image/jpeg"]
 
+    # LLM 카테고리가 식별 후보·근처 후보·근처 검색 필터로 전파된다
+    def test_category_propagates_to_candidates_and_nearby_filter(self):
+        places = FakePlaces(
+            resolved=resolved_place(), nearby=[resolved_place(name="근처", pid="n1")]
+        )
+        rec = make_recognizer(
+            FakeLandmark(landmark_det(score=0.9)),
+            FakeVision(vision_id(cat=PlaceCategory.CAFE)),
+            places,
+        )
+
+        result = rec.search(req())
+
+        assert result.identified.category is PlaceCategory.CAFE  # 식별 후보
+        assert result.candidates[1].category is PlaceCategory.CAFE  # 근처 후보
+        assert places.nearby_calls[0]["category"] is PlaceCategory.CAFE  # 근처 필터
+
+    # LLM 이 없으면(랜드마크만) 카테고리 미지정 → 후보는 ETC 로 채운다
+    def test_missing_llm_category_defaults_to_etc(self):
+        places = FakePlaces(resolved=resolved_place(), nearby=[])
+        rec = make_recognizer(
+            FakeLandmark(landmark_det(score=0.9)), FakeVision(raises=True), places
+        )
+
+        result = rec.search(req())
+
+        assert result.identified.category is PlaceCategory.ETC
+
     # 원신호(landmark·llm)가 결과에 보존된다
     def test_signals_preserved(self):
         rec = make_recognizer(
@@ -379,6 +334,22 @@ class TestCascade:
         rec.search(req(max_candidates=25))
 
         assert places.nearby_calls[0]["max"] == 20  # (25-1)+1=25 → 상한 20
+
+    # 근처 confidence 감소가 하한(0.1) 아래로는 내려가지 않는다 (음수/0 방지)
+    def test_nearby_confidence_clamped_at_floor(self):
+        places = FakePlaces(
+            resolved=resolved_place(), nearby=[resolved_place(name="근처", pid="n1")]
+        )
+        rec = make_recognizer(
+            FakeLandmark(None),
+            FakeVision(vision_id(guess="카페", conf=0.2)),  # 낮은 base
+            places,
+        )
+
+        result = rec.search(req(max_candidates=2))
+
+        # 0.2 - 0.15 = 0.05 → 하한 0.1 로 클램프
+        assert result.candidates[1].confidence == 0.1
 
     # 근처 추천 confidence 는 식별보다 낮게 점감한다
     def test_nearby_confidence_decays(self):
