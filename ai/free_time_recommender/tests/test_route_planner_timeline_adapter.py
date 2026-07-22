@@ -244,6 +244,43 @@ def test_adapter_rejects_window_without_positive_time_budget():
         )
 
 
+# Timeline의 모든 연속 Stop을 이동 구간 삽입 범위로 변환 검증
+def test_adapter_builds_insertion_window_for_each_route_leg():
+    windows = (
+        RoutePlannerTimelineAdapter()
+        .to_route_leg_insertion_windows(make_timeline())
+    )
+
+    assert len(windows) == 4
+    assert [
+        (
+            window.leg_index,
+            window.previous_place_id,
+            window.next_place_id,
+            window.original_travel_minutes,
+        )
+        for window in windows
+    ] == [
+        (0, "start", "poi-a", 20),
+        (1, "poi-a", "poi-b", 30),
+        (2, "poi-b", "poi-c", 15),
+        (3, "poi-c", "end", 25),
+    ]
+
+    assert windows[1].previous_departure_at.isoformat() == (
+        "2026-08-01T11:20:00"
+    )
+    assert windows[1].next_arrival_at.isoformat() == (
+        "2026-08-01T11:50:00"
+    )
+    assert windows[1].original_timeline_end_at.isoformat() == (
+        "2026-08-01T15:00:00"
+    )
+    assert windows[1].planned_end_at.isoformat() == (
+        "2026-08-01T20:00:00"
+    )
+
+
 # 계획 종료를 초과한 Timeline은 계획 범위 전체를 점유하는지 검증
 def test_to_day_availability_caps_busy_time_at_planned_end():
     timeline = make_timeline().model_copy(
