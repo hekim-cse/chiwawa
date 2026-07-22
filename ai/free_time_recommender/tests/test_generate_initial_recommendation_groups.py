@@ -11,9 +11,10 @@ from ai.free_time_recommender.domain.candidate_route_metrics import (
     RouteLegMetrics,
 )
 from ai.free_time_recommender.domain.place_candidate import (
-    CategoryPlaceCandidates,
+    CategoryRouteLegPlaceCandidates,
     PlaceCandidate,
     RecommendationCategory,
+    RouteLegPlaceCandidate,
 )
 from ai.free_time_recommender.domain.recommendation_policy import (
     RecommendationPolicy,
@@ -75,8 +76,29 @@ def make_window(leg_index: int, previous_id: str) -> RouteLegInsertionWindow:
     )
 
 
-# 모든 구간을 평가하고 추가시간이 가장 작은 구간을 선택하는지 검증
-def test_execute_returns_best_insertable_window_by_category() -> None:
+def make_group(
+    candidate: PlaceCandidate,
+    *,
+    leg_index: int,
+    previous_id: str,
+) -> CategoryRouteLegPlaceCandidates:
+    return CategoryRouteLegPlaceCandidates(
+        category=candidate.category,
+        display_name="랜드마크·관광명소",
+        candidates=(
+            RouteLegPlaceCandidate(
+                candidate=candidate,
+                day_index=1,
+                leg_index=leg_index,
+                origin_place_id=previous_id,
+                destination_place_id=f"next-{leg_index}",
+            ),
+        ),
+    )
+
+
+# 후보가 검색된 원래 구간만 평가하는지 검증
+def test_execute_evaluates_only_candidate_source_window() -> None:
     provider = StubRouteMetricsProvider({"previous-0": 15, "previous-1": 10})
     candidate = PlaceCandidate(
         place_id="도쿄타워-place-id",
@@ -97,11 +119,7 @@ def test_execute_returns_best_insertable_window_by_category() -> None:
     ).execute(
         GenerateInitialRecommendationGroupsRequest(
             candidate_groups=(
-                CategoryPlaceCandidates(
-                    category=RecommendationCategory.LANDMARK,
-                    display_name="랜드마크·관광명소",
-                    candidates=(candidate,),
-                ),
+                make_group(candidate, leg_index=1, previous_id="previous-1"),
             ),
             insertion_windows=(
                 make_window(0, "previous-0"),
@@ -114,10 +132,10 @@ def test_execute_returns_best_insertable_window_by_category() -> None:
 
     recommendation = result[0].recommendations[0]
 
-    # 두 구간을 모두 조회한 뒤 이동시간이 짧은 두 번째 구간을 선택한다.
+    # 검색된 두 번째 구간만 조회해 후보별 API 호출 수를 제한한다.
     assert recommendation.window.leg_index == 1
     assert recommendation.insertion_impact.additional_minutes == 60
-    assert len(provider.queries) == 2
+    assert len(provider.queries) == 1
 
 
 # 시간 정책을 만족하지 못한 카테고리를 결과에서 제외하는지 검증
@@ -137,11 +155,7 @@ def test_execute_omits_category_without_insertable_candidate() -> None:
     ).execute(
         GenerateInitialRecommendationGroupsRequest(
             candidate_groups=(
-                CategoryPlaceCandidates(
-                    RecommendationCategory.LANDMARK,
-                    "랜드마크·관광명소",
-                    (candidate,),
-                ),
+                make_group(candidate, leg_index=0, previous_id="previous-0"),
             ),
             insertion_windows=(make_window(0, "previous-0"),),
             travel_mode=RouteTravelMode.TRANSIT,
@@ -169,10 +183,10 @@ def test_execute_skips_place_already_in_original_route() -> None:
     ).execute(
         GenerateInitialRecommendationGroupsRequest(
             candidate_groups=(
-                CategoryPlaceCandidates(
-                    RecommendationCategory.LANDMARK,
-                    "랜드마크·관광명소",
-                    (existing_candidate,),
+                make_group(
+                    existing_candidate,
+                    leg_index=0,
+                    previous_id="previous-0",
                 ),
             ),
             insertion_windows=(make_window(0, "previous-0"),),

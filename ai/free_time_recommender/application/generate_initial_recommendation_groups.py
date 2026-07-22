@@ -11,9 +11,10 @@ from ai.free_time_recommender.domain.candidate_route_metrics import (
     CandidateRouteMetricsQuery,
 )
 from ai.free_time_recommender.domain.place_candidate import (
-    CategoryPlaceCandidates,
+    CategoryRouteLegPlaceCandidates,
     PlaceCandidate,
     RecommendationCategory,
+    RouteLegPlaceCandidate,
 )
 from ai.free_time_recommender.domain.recommendation_budget import (
     CandidateTravelTimes,
@@ -53,7 +54,7 @@ class InitialRecommendationGroup:
 class GenerateInitialRecommendationGroupsRequest:
     """장소 후보와 기존 일정 삽입 구간을 연결하는 요청."""
 
-    candidate_groups: tuple[CategoryPlaceCandidates, ...]
+    candidate_groups: tuple[CategoryRouteLegPlaceCandidates, ...]
     insertion_windows: tuple[RouteLegInsertionWindow, ...]
     travel_mode: RouteTravelMode
     policy: RecommendationPolicy
@@ -108,21 +109,22 @@ class GenerateInitialRecommendationGroups:
             # 2단계: Google 호출 비용을 통제하기 위해 각 카테고리의
             # 검색 상위 후보만 실제 경로 삽입 평가 대상으로 사용한다.
             # --------------------------------------------------------
-            recommendations = tuple(
-                recommendation
-                for candidate in candidate_group.candidates[
-                    : self._candidate_limit
-                ]
-                if (
-                    recommendation := self._find_best_insertion(
-                        candidate=candidate,
-                        windows=request.insertion_windows,
-                        travel_mode=request.travel_mode,
-                        policy=request.policy,
-                    )
+            recommendations = []
+            for routed_candidate in candidate_group.candidates[
+                : self._candidate_limit
+            ]:
+                window = self._find_matching_window(
+                    routed_candidate,
+                    request.insertion_windows,
                 )
-                is not None
-            )
+                recommendation = self._evaluate_insertion(
+                    candidate=routed_candidate.candidate,
+                    window=window,
+                    travel_mode=request.travel_mode,
+                    policy=request.policy,
+                )
+                if recommendation is not None:
+                    recommendations.append(recommendation)
 
             # --------------------------------------------------------
             # 3단계: 삽입 가능한 후보가 없는 카테고리는 화면에
@@ -133,7 +135,7 @@ class GenerateInitialRecommendationGroups:
                     InitialRecommendationGroup(
                         category=candidate_group.category,
                         display_name=candidate_group.display_name,
-                        recommendations=recommendations,
+                        recommendations=tuple(recommendations),
                     )
                 )
 
@@ -143,91 +145,87 @@ class GenerateInitialRecommendationGroups:
         # ------------------------------------------------------------
         return tuple(groups)
 
-    def _find_best_insertion(
+    @staticmethod
+    def _find_matching_window(
+        routed_candidate: RouteLegPlaceCandidate,
+        windows: tuple[RouteLegInsertionWindow, ...],
+    ) -> RouteLegInsertionWindow:
+        matches = tuple(
+            window
+            for window in windows
+            if window.day_index == routed_candidate.day_index
+            and window.leg_index == routed_candidate.leg_index
+            and window.previous_place_id == routed_candidate.origin_place_id
+            and window.next_place_id == routed_candidate.destination_place_id
+        )
+        if not matches:
+            raise ValueError(
+                "후보의 경로 구간과 일치하는 삽입 Window가 없습니다."
+            )
+        if len(matches) > 1:
+            raise ValueError(
+                "후보의 경로 구간과 일치하는 삽입 Window가 중복됩니다."
+            )
+        return matches[0]
+
+    def _evaluate_insertion(
         self,
         *,
         candidate: PlaceCandidate,
-        windows: tuple[RouteLegInsertionWindow, ...],
+        window: RouteLegInsertionWindow,
         travel_mode: RouteTravelMode,
         policy: RecommendationPolicy,
     ) -> InsertableCandidateRecommendation | None:
         # 기존 최적화 일정에 이미 포함된 장소 ID를 수집한다.
         # 기존 방문지를 다시 추천하거나 동일 장소 경로를 조회하지 않는다.
-        existing_place_ids = {
-            place_id
-            for window in windows
-            for place_id in (
-                window.previous_place_id,
-                window.next_place_id,
-            )
-        }
-        if candidate.place_id in existing_place_ids:
+        if candidate.place_id in (
+            window.previous_place_id,
+            window.next_place_id,
+        ):
             return None
 
-        # 후보 하나를 모든 삽입 가능 구간에 대입한다.
+        # 후보가 검색된 실제 구간만 평가해 불필요한 Routes 호출을 막는다.
         # Provider 오류는 숨기지 않고 호출자에게 그대로 전달한다.
-        insertable: list[InsertableCandidateRecommendation] = []
-        for window in windows:
-            # 이전 장소 출발시각과 기존 이동 방식을 기준으로
-            # 이전→후보, 후보→다음의 실제 이동시간과 거리를 조회한다.
-            metrics = self._route_metrics_provider.get_candidate_route_metrics(
-                CandidateRouteMetricsQuery(
-                    previous_place_id=window.previous_place_id,
-                    candidate_place_id=candidate.place_id,
-                    next_place_id=window.next_place_id,
-                    previous_departure_at=window.previous_departure_at,
-                    stay_minutes=policy.minimum_stay_minutes,
-                    travel_mode=travel_mode,
-                )
+        metrics = self._route_metrics_provider.get_candidate_route_metrics(
+            CandidateRouteMetricsQuery(
+                previous_place_id=window.previous_place_id,
+                candidate_place_id=candidate.place_id,
+                next_place_id=window.next_place_id,
+                previous_departure_at=window.previous_departure_at,
+                stay_minutes=policy.minimum_stay_minutes,
+                travel_mode=travel_mode,
             )
+        )
 
-            # 외부 이동 지표를 순수 도메인 평가 입력으로 변환한다.
-            # 최소 체류시간은 추천 정책의 값을 동일하게 적용한다.
-            impact = self._evaluator.evaluate(
-                window=window,
-                policy=policy,
-                candidate_schedule=CandidateInsertionSchedule(
-                    travel_times=CandidateTravelTimes(
-                        previous_to_candidate_minutes=(
-                            metrics.previous_to_candidate.travel_minutes
-                        ),
-                        candidate_to_next_minutes=(
-                            metrics.candidate_to_next.travel_minutes
-                        ),
+        # 외부 이동 지표를 순수 도메인 평가 입력으로 변환한다.
+        impact = self._evaluator.evaluate(
+            window=window,
+            policy=policy,
+            candidate_schedule=CandidateInsertionSchedule(
+                travel_times=CandidateTravelTimes(
+                    previous_to_candidate_minutes=(
+                        metrics.previous_to_candidate.travel_minutes
                     ),
-                    previous_to_candidate_distance_meters=(
-                        metrics.previous_to_candidate.distance_meters
+                    candidate_to_next_minutes=(
+                        metrics.candidate_to_next.travel_minutes
                     ),
-                    candidate_to_next_distance_meters=(
-                        metrics.candidate_to_next.distance_meters
-                    ),
-                    stay_minutes=policy.minimum_stay_minutes,
                 ),
-            )
-
-            # 시간, 양쪽 편도 거리, 계획 종료시각을 모두 만족한
-            # 구간만 최종 선택 후보에 포함한다.
-            if impact.is_insertable:
-                insertable.append(
-                    InsertableCandidateRecommendation(
-                        candidate=candidate,
-                        window=window,
-                        route_metrics=metrics,
-                        insertion_impact=impact,
-                    )
-                )
-
-        # 어떤 구간에도 삽입할 수 없으면 해당 장소를 추천하지 않는다.
-        if not insertable:
-            return None
-
-        # 추가 시간이 가장 작은 구간을 대표 삽입 위치로 선택한다.
-        # 동률이면 기존 일정 순서를 보존하도록 날짜와 구간 순서를 쓴다.
-        return min(
-            insertable,
-            key=lambda item: (
-                item.insertion_impact.additional_minutes,
-                item.window.day_index,
-                item.window.leg_index,
+                previous_to_candidate_distance_meters=(
+                    metrics.previous_to_candidate.distance_meters
+                ),
+                candidate_to_next_distance_meters=(
+                    metrics.candidate_to_next.distance_meters
+                ),
+                stay_minutes=policy.minimum_stay_minutes,
             ),
+        )
+
+        # 시간·거리·종료시각 정책을 모두 만족한 후보만 반환한다.
+        if not impact.is_insertable:
+            return None
+        return InsertableCandidateRecommendation(
+            candidate=candidate,
+            window=window,
+            route_metrics=metrics,
+            insertion_impact=impact,
         )
