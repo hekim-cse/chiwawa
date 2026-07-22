@@ -7,14 +7,8 @@ on:
       - main
     paths:
       - "ai/route_planner/**"
-      - ".github/workflows/ai-route-planner-ci.yml"
-
-  push:
-    branches:
-      - develop
-      - main
-    paths:
-      - "ai/route_planner/**"
+      - "ai/free_time_recommender/**"
+      - "ai/route_planner/requirements.txt"
       - ".github/workflows/ai-route-planner-ci.yml"
 
   workflow_dispatch:
@@ -49,10 +43,11 @@ jobs:
           python -m pip install \
             -r ai/route_planner/requirements.txt
 
-      - name: Route Planner 전체 테스트
+      - name: Route Planner 및 빈 시간대 추천 전체 테스트
         run: |
           python -m pytest \
-            ai/route_planner/tests
+            ai/route_planner/tests \
+            ai/free_time_recommender/tests
 
       - name: Route Evaluation 실행
         run: |
