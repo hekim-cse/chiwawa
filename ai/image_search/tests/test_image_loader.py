@@ -1,11 +1,14 @@
 # services/image_loader.py 의 SSRF 가드·경로 제한 검증 (순수 함수, 네트워크·파일 I/O 없음)
 # 다운로드 경로는 httpx MockTransport 를 주입해 실제 네트워크 없이 검증한다.
+import httpcore
 import httpx
 import pytest
 
 from ai.image_search.domain.search_schemas import ImageSearchRequest
 from ai.image_search.services.image_loader import (
     ImageLoadError,
+    _build_pinned_transport,
+    _PinnedIpBackend,
     detect_image_mime_type,
     load_image_bytes,
     validate_image_path,
@@ -24,6 +27,19 @@ class TestValidateImageUrl:
 
         validate_image_url("https://example.com/photo.jpg")
         validate_image_url("http://images.example.org/a.png")
+
+    # 검증에 성공하면 접속 고정용으로 해석된 공인 IP 를 돌려준다
+    def test_returns_validated_public_ip(self, monkeypatch):
+        monkeypatch.setattr(
+            "ai.image_search.services.image_loader.socket.getaddrinfo",
+            lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],
+        )
+
+        assert validate_image_url("https://example.com/photo.jpg") == "93.184.216.34"
+
+    # 호스트가 이미 IP 리터럴이면 그 IP 를 그대로 돌려준다
+    def test_returns_ip_for_ip_literal_host(self):
+        assert validate_image_url("https://93.184.216.34/a.jpg") == "93.184.216.34"
 
     # http/https 가 아닌 스킴은 거부한다 (file://, ftp://, gopher:// 등)
     @pytest.mark.parametrize(
@@ -82,6 +98,39 @@ class TestValidateImageUrl:
         )
         with pytest.raises(ImageLoadError):
             validate_image_url("https://nonexistent.invalid/a.jpg")
+
+
+class TestPinnedIpBackend:
+    # 원 호스트명이 무엇이든, 검증 단계에서 확정한 IP 로만 TCP 접속한다
+    # (검사↔접속 사이 DNS 재해석(리바인딩) 틈 제거)
+    def test_connects_to_pinned_ip_ignoring_host(self):
+        calls = []
+
+        class _FakeInner(httpcore.NetworkBackend):
+            def connect_tcp(
+                self, host, port, timeout=None, local_address=None, socket_options=None
+            ):
+                calls.append((host, port))
+                return object()
+
+            def connect_unix_socket(self, path, timeout=None, socket_options=None):
+                return object()
+
+        backend = _PinnedIpBackend("93.184.216.34", _FakeInner())
+        backend.connect_tcp("attacker-rebind.example", 443)
+
+        assert calls == [("93.184.216.34", 443)]
+
+    # _build_pinned_transport 가 httpx 내부 backend 를 pinned 버전으로 교체하는지 확인
+    # (httpx/httpcore 내부 구조가 바뀌면 조기에 실패시키는 canary)
+    def test_build_pinned_transport_wires_pinned_backend(self):
+        transport = _build_pinned_transport("93.184.216.34")
+        try:
+            backend = transport._pool._network_backend
+            assert isinstance(backend, _PinnedIpBackend)
+            assert backend._pinned_ip == "93.184.216.34"
+        finally:
+            transport.close()
 
 
 class TestDetectImageMimeType:
@@ -151,6 +200,30 @@ class TestLoadImageBytes:
 
         assert result == b"\xff\xd8\xff-image-bytes"
         assert captured["url"] == "https://93.184.216.34/photo.jpg"
+
+    # transport 주입이 없으면(운영 경로) 호스트를 검증·해석해 그 IP 로 고정한 transport 를 만든다
+    def test_load_builds_pinned_transport_with_validated_ip(self, monkeypatch):
+        captured = {}
+
+        def fake_build(pinned_ip):
+            captured["ip"] = pinned_ip
+            return httpx.MockTransport(
+                lambda request: httpx.Response(200, content=b"\xff\xd8\xff-ok")
+            )
+
+        monkeypatch.setattr(
+            "ai.image_search.services.image_loader._build_pinned_transport", fake_build
+        )
+        monkeypatch.setattr(
+            "ai.image_search.services.image_loader.socket.getaddrinfo",
+            lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],
+        )
+        req = ImageSearchRequest(image_url="https://example.com/photo.jpg")
+
+        data = load_image_bytes(req)
+
+        assert data == b"\xff\xd8\xff-ok"
+        assert captured["ip"] == "93.184.216.34"
 
     # HTTP 오류 상태(4xx/5xx)는 ImageLoadError 로 감싸 알린다
     # (호출자는 ValueError 계열 하나로 이미지 로딩 실패를 처리할 수 있어야 함)
