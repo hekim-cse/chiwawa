@@ -14,6 +14,7 @@ dependencies = [
     "pillow>=12.3.0",
     "python-multipart>=0.0.32",
     "pillow-heif>=1.4.0",
+    "google-genai>=1.0.0",
 ]
 
 [build-system]
@@ -22,6 +23,13 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/chiwawa_backend"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"../ai/__init__.py" = "ai/__init__.py"
+"../ai/image_search/__init__.py" = "ai/image_search/__init__.py"
+"../ai/image_search/domain" = "ai/image_search/domain"
+"../ai/image_search/providers" = "ai/image_search/providers"
+"../ai/image_search/services" = "ai/image_search/services"
 
 [dependency-groups]
 dev = [
@@ -106,7 +114,7 @@ docstring-code-line-length = "dynamic"
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", ".."]
 addopts = [
     "-ra",
     "--strict-config",

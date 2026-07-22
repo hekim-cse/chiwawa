@@ -1,4 +1,15 @@
-from chiwawa_backend.errors import NotFoundError
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Protocol
+
+from ai.image_search.domain.search_schemas import (
+    ImageSearchRequest,
+    ImageSearchResult,
+)
+from ai.image_search.services.image_loader import ImageLoadError
+
+from chiwawa_backend.errors import DomainValidationError, NotFoundError
 from chiwawa_backend.schemas.base import PlaceSource
 from chiwawa_backend.schemas.places import (
     ConfirmedPhotoPlaceRead,
@@ -12,54 +23,62 @@ from chiwawa_backend.services.common import require_photo_search, require_trip
 from chiwawa_backend.services.wanted_places import create_wanted_place
 from chiwawa_backend.state import AppState, synchronized
 
+PHOTO_SEARCH_MAX_CANDIDATES = 5
 
-@synchronized
+
+class PhotoPlaceRecognizer(Protocol):
+    def search(self, request: ImageSearchRequest) -> ImageSearchResult: ...
+
+
+@dataclass(frozen=True, slots=True)
+class PhotoPlaceSearchContext:
+    trip_id: str
+    payload: PhotoPlaceSearchRequest
+    recognizer: PhotoPlaceRecognizer
+
+
 def search_photo_places(
     state: AppState,
-    trip_id: str,
-    payload: PhotoPlaceSearchRequest,
+    context: PhotoPlaceSearchContext,
 ) -> PhotoPlaceSearchResponse:
-    trip = require_trip(state, trip_id)
-    city = trip.city
-    note = payload.note or "uploaded travel photo"
-    candidates = [
-        PhotoPlaceCandidateRead(
-            id=state.next_id("candidate"),
-            name=f"{city} landmark viewpoint",
-            city=city,
-            country=trip.country,
-            latitude=35.6586,
-            longitude=139.7454,
-            confidence=0.91,
-            reason=f"Best match for {note}",
-        ),
-        PhotoPlaceCandidateRead(
-            id=state.next_id("candidate"),
-            name=f"{city} local photo spot",
-            city=city,
-            country=trip.country,
-            latitude=35.6595,
-            longitude=139.7005,
-            confidence=0.84,
-            reason="Similar skyline, street texture, and travel context",
-        ),
-        PhotoPlaceCandidateRead(
-            id=state.next_id("candidate"),
-            name=f"{city} evening walk area",
-            city=city,
-            country=trip.country,
-            latitude=35.6716,
-            longitude=139.765,
-            confidence=0.76,
-            reason="Useful nearby alternative for route planning",
-        ),
-    ]
-    search = PhotoPlaceSearchResponse(
-        id=state.next_id("photo_search"),
-        trip_id=trip_id,
-        candidates=candidates,
+    with state.lock:
+        trip = require_trip(state, context.trip_id)
+
+    request = ImageSearchRequest(
+        image_url=context.payload.image_url,
+        note=context.payload.note,
+        latitude=context.payload.latitude,
+        longitude=context.payload.longitude,
+        city=trip.city,
+        country=trip.country,
+        max_candidates=PHOTO_SEARCH_MAX_CANDIDATES,
     )
-    state.photo_searches[search.id] = search
+    try:
+        result = context.recognizer.search(request)
+    except ImageLoadError as error:
+        raise DomainValidationError(str(error)) from error
+
+    with state.lock:
+        trip = require_trip(state, context.trip_id)
+        candidates = [
+            PhotoPlaceCandidateRead(
+                id=state.next_id("candidate"),
+                name=candidate.name,
+                city=candidate.city or trip.city,
+                country=candidate.country or trip.country,
+                latitude=candidate.latitude,
+                longitude=candidate.longitude,
+                confidence=candidate.confidence,
+                reason=candidate.reason,
+            )
+            for candidate in result.candidates
+        ]
+        search = PhotoPlaceSearchResponse(
+            id=state.next_id("photo_search"),
+            trip_id=context.trip_id,
+            candidates=candidates,
+        )
+        state.photo_searches[search.id] = search
     return search
 
 
@@ -89,13 +108,14 @@ def confirm_photo_place(
                 candidate=existing.candidate,
                 wanted_place=current_place,
             )
+    trip = require_trip(state, trip_id)
     wanted_place = create_wanted_place(
         state,
         trip_id,
         WantedPlaceCreateRequest(
             name=candidate.name,
-            city=candidate.city,
-            country=candidate.country,
+            city=candidate.city or trip.city,
+            country=candidate.country or trip.country,
             latitude=candidate.latitude,
             longitude=candidate.longitude,
             priority=5,

@@ -34,8 +34,9 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
   노출하기 전에는 여행 API 인증과 사용자 소유권을 먼저 적용해야 합니다.
 - 여행, 장소, 일정, 추천, 기록은 서버 메모리에 저장되므로 재시작 시
   초기화됩니다.
-- 사진 검색, AI 일정 생성, 동선 최적화, 주변 추천, 빈 시간 추천은 외부
-  서비스가 아닌 모의 휴리스틱입니다. 생성 ID와 시각은 요청마다 달라질 수 있습니다.
+- 사진 검색은 `ai/image_search`와 Google Maps·Cloud Vision·Gemini를 호출합니다.
+  AI 일정 생성, 동선 최적화, 주변 추천, 빈 시간 추천은 외부 서비스가 아닌 모의
+  휴리스틱입니다.
 - 인증 흐름 상세는 [auth.md](./auth.md)를 봅니다.
 - 회원 단위 Memorial API 상세는 [memorial.md](./memorial.md)를 봅니다.
 - 백엔드 구조는 [backend.md](../architecture/backend.md)를 봅니다.
@@ -53,7 +54,7 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 | trips | GET | 200 | 여행 프로젝트 상세 조회 | `/api/v1/trips/{trip_id}` | - | `TripRead` |
 | trips | PATCH | 200 | 여행 프로젝트 수정 | `/api/v1/trips/{trip_id}` | `TripUpdateRequest` | `TripRead` |
 | trips | DELETE | 204 | 여행 프로젝트 삭제 | `/api/v1/trips/{trip_id}` | - | - |
-| photo-places | POST | 201 | 사진 기반 장소 후보 검색 | `/api/v1/trips/{trip_id}/photo-places/search` | `PhotoPlaceSearchRequest` | `PhotoPlaceSearchResponse` |
+| photo-places | POST | 201 | 사진 기반 장소 후보 검색 | `/api/v1/trips/{trip_id}/photo-places/search` | Authorization header; `PhotoPlaceSearchRequest` | `PhotoPlaceSearchResponse` |
 | photo-places | POST | 201 | 사진 장소 후보 확정 | `/api/v1/trips/{trip_id}/photo-places/{photo_search_id}/confirm` | `PhotoPlaceConfirmRequest` | `ConfirmedPhotoPlaceRead` |
 | places | POST | 201 | 방문 희망 장소 등록 | `/api/v1/trips/{trip_id}/wanted-places` | `WantedPlaceCreateRequest` | `WantedPlaceRead` |
 | places | GET | 200 | 방문 희망 장소 목록 조회 | `/api/v1/trips/{trip_id}/wanted-places` | - | `WantedPlaceListResponse` |
@@ -114,6 +115,8 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 - 동일 계획 확정 요청은 멱등적으로 처리되어 일정이 중복되지 않습니다.
 - 동일 사진 후보 확정과 빈 시간 추천 추가 요청도 기존 결과를 반환해 중복
   장소·일정을 만들지 않습니다.
+- 사진 장소 검색은 `image_url`이 필수이며, 이미지 로딩 실패는 422입니다. 장소를
+  특정하지 못한 경우에는 201과 빈 `candidates`를 반환합니다.
 - `assistant/replan`의 `current_item_id`가 있으면 해당 항목부터 지연을
   적용합니다.
 - 재계획 지연은 최대 1,440분이며 결과가 여행 기간이나 날짜 경계를 넘으면

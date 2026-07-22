@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from chiwawa_backend.config import get_settings
-from chiwawa_backend.dependencies import get_state
+from chiwawa_backend.dependencies import get_photo_place_recognizer, get_state
 from chiwawa_backend.errors import (
     ConfigurationError,
     DomainValidationError,
@@ -24,10 +24,14 @@ from chiwawa_backend.routers import (
     wanted_places,
 )
 from chiwawa_backend.schemas.base import ErrorResponse
+from chiwawa_backend.services.photo_places import PhotoPlaceRecognizer
 from chiwawa_backend.state import AppState
 
 
-def create_app(state: AppState | None = None) -> FastAPI:
+def create_app(
+    state: AppState | None = None,
+    photo_place_recognizer: PhotoPlaceRecognizer | None = None,
+) -> FastAPI:
     app_state = state or AppState()
     app = FastAPI(
         title="Chiwawa Backend",
@@ -51,6 +55,10 @@ def create_app(state: AppState | None = None) -> FastAPI:
         include_in_schema=False,
     )
     app.dependency_overrides[get_state] = _state_dependency(app_state)
+    if photo_place_recognizer is not None:
+        app.dependency_overrides[get_photo_place_recognizer] = _recognizer_dependency(
+            photo_place_recognizer
+        )
     _register_exception_handlers(app)
     for router in (
         health.router,
@@ -72,6 +80,15 @@ def create_app(state: AppState | None = None) -> FastAPI:
 def _state_dependency(state: AppState) -> Callable[[], AppState]:
     def dependency() -> AppState:
         return state
+
+    return dependency
+
+
+def _recognizer_dependency(
+    recognizer: PhotoPlaceRecognizer,
+) -> Callable[[], PhotoPlaceRecognizer]:
+    def dependency() -> PhotoPlaceRecognizer:
+        return recognizer
 
     return dependency
 

@@ -47,14 +47,14 @@ JWT 작업 시점에 검사하므로 비인증 개발 API와 문서는 독립적
 
 | 기능 | 현재 동작 | 실제 연동 시 교체 지점 |
 | --- | --- | --- |
-| 사진 장소 검색 | 여행 도시 기반 고정 후보 생성 | 사진 인식·장소 검색 provider |
+| 사진 장소 검색 | `ai/image_search` 캐스케이드와 Places grounding | 백엔드 후보 계약 adapter |
 | AI 일정 | 우선순위, pace, 시간창 기반 순차 휴리스틱 | AI planner adapter |
 | 동선 최적화 | 우선순위 정렬과 추정 이동시간 | 지도 route provider |
 | 주변 추천 | 위치 요청을 받는 결정적 추천 | 장소·지도 nearby provider |
 | 빈 시간 추천 | 지역명과 시간창 기반 고정 산책 추천 | 장소·영업시간 recommendation provider |
 
-현재 서비스 이름과 API 계약은 제품 흐름 검증용이며 외부 API 호출이나 실제 AI
-추론을 보장하지 않습니다.
+사진 장소 검색은 동기 provider 호출을 threadpool에서 실행하고, 인메모리 상태를
+갱신하는 짧은 구간만 `AppState.lock`을 사용합니다.
 
 ## 인증 경계
 
@@ -63,7 +63,7 @@ JWT 작업 시점에 검사하므로 비인증 개발 API와 문서는 독립적
   호출합니다. 별도 앱 HTTP 클라이언트 흐름은 PKCE/state 계약 조정 전까지
   지원하지 않습니다.
 - JWT 공개 기본 키는 없으며 최소 32자의 명시적 `JWT_SECRET`이 필요합니다.
-- 현재 보호 경로는 `/api/v1/auth/me`와 회원 단위 Memorial API
+- 현재 보호 경로는 `/api/v1/auth/me`, 사진 장소 검색, 회원 단위 Memorial API
   (`/api/v1/memorial/*`)입니다.
 - 외부 또는 공유 환경으로 옮기기 전에 여행 리소스의 사용자 소유권,
   인증 의존성, 영속 DB, 마이그레이션을 추가해야 합니다.
