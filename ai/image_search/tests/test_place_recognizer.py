@@ -279,7 +279,8 @@ class TestCascade:
 
         assert places.nearby_calls[0]["max"] == 3  # (3 - 1) + 1(자기자신 제외 대비)
 
-    # max_candidates=1 이면 근처 검색을 아예 하지 않고 식별만 반환 (PARTIAL)
+    # max_candidates=1 이면 근처 검색을 아예 하지 않고 식별만 반환
+    # 요청한 1개를 온전히 채웠으므로 SUCCESS (근처 부재를 PARTIAL로 오라벨하지 않음)
     def test_max_candidates_one_skips_nearby(self):
         places = FakePlaces(resolved=resolved_place(), nearby=[resolved_place(name="근처", pid="n1")])
         rec = make_recognizer(FakeLandmark(landmark_det(score=0.9)), FakeVision(vision_id()), places)
@@ -288,7 +289,7 @@ class TestCascade:
 
         assert places.nearby_calls == []  # 근처 검색 호출 자체를 안 함
         assert len(result.candidates) == 1
-        assert result.status is RecognitionStatus.PARTIAL
+        assert result.status is RecognitionStatus.SUCCESS
 
     # 근처 검색(Places) 예외 → 식별만 반환 (PARTIAL, 우아한 저하)
     def test_nearby_exception_returns_partial(self):
