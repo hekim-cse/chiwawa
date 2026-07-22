@@ -11,17 +11,16 @@
 - Swagger UI, ReDoc, OpenAPI JSON
 - Pydantic 요청 검증과 서비스 계층 도메인 검증
 
-현재 아래 기능은 외부 공급자와 연결되지 않은 모의 구현입니다.
+현재 아래 기능 중 외부 공급자와 연결되지 않은 모의 구현은 다음과 같습니다.
 
-- 사진 기반 장소 후보 검색
 - AI 일정 초안 생성
 - 방문 동선 최적화
 - 현재 위치 기반 주변 추천
 - 빈 시간 활동 추천
 
-생성 ID와 시각을 제외한 핵심 후보·추천 내용은 같은 입력에 같은 규칙을 적용하는
-시연용 휴리스틱이며, 실제 사진 인식, 지도 경로 계산, 장소 검색, AI 모델 호출을
-의미하지 않습니다.
+사진 기반 장소 후보 검색은 `ai/image_search`를 직접 호출하며 Google Maps,
+Cloud Vision, Gemini API 키가 필요합니다. 나머지 후보·추천 기능은 생성 ID와
+시각을 제외하고 같은 입력에 같은 규칙을 적용하는 시연용 휴리스틱입니다.
 
 ## 개발 단계의 저장·인증 범위
 
@@ -33,8 +32,8 @@
   wheel에 포함된 패키지 SQL 마이그레이션으로 자동 초기화됩니다.
 - OAuth `state`는 서버 메모리에서 1회 검증되고 같은 브라우저의 HttpOnly
   쿠키와 함께 결합됩니다.
-- 현재 Bearer 인증이 필수인 경로는 `GET /api/v1/auth/me`와 회원 단위
-  Memorial API(`/api/v1/memorial/*`)입니다.
+- 현재 Bearer 인증이 필수인 경로는 `GET /api/v1/auth/me`, 사진 장소 검색,
+  회원 단위 Memorial API(`/api/v1/memorial/*`)입니다.
 - 여행 관련 API는 프론트엔드 연동용 프로토타입 계약을 유지하기 위해 현재
   공개 상태입니다. 공유 개발 서버나 외부 배포 전에는 사용자 소유권과
   인증 의존성을 추가해야 합니다.
@@ -50,7 +49,7 @@
 
 ```bash
 uv sync --frozen
-uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.1 --port 8000
+PYTHONPATH=..:src uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.1 --port 8000
 ```
 
 또는 `make run`을 사용할 수 있습니다. 인증 API를 테스트하려면

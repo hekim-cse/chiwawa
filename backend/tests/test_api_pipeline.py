@@ -21,12 +21,13 @@ from chiwawa_backend.schemas.travel import (
     ReplanResponse,
 )
 from chiwawa_backend.schemas.trips import TripListResponse, TripRead
+from tests.photo_place_fakes import create_photo_place_test_app
 
 
 @pytest.mark.anyio
 async def test_pipeline_creates_trip_plan_schedule_and_memorial() -> None:
     # Given: a fresh backend app for the full travel-planning flow.
-    app = create_app()
+    app = create_photo_place_test_app()
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -67,7 +68,10 @@ async def test_pipeline_creates_trip_plan_schedule_and_memorial() -> None:
 
         photo_response = await client.post(
             f"/api/v1/trips/{trip.id}/photo-places/search",
-            json={"note": "night skyline photo"},
+            json={
+                "image_url": "https://example.com/night-skyline.jpg",
+                "note": "night skyline photo",
+            },
         )
         assert photo_response.status_code == HTTPStatus.CREATED
         photo_search = PhotoPlaceSearchResponse.model_validate(photo_response.json())

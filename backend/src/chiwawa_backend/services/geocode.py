@@ -6,16 +6,20 @@ GOOGLE_MAPS_API_KEY 환경변수가 없거나 호출에 실패하면 None을 반
 
 from __future__ import annotations
 
-import os
 from typing import cast
 
 import httpx
+
+from chiwawa_backend.config import get_settings
 
 GEOCODE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
 
 def reverse_geocode(latitude: float, longitude: float) -> str | None:
-    api_key = os.getenv("GOOGLE_MAPS_API_KEY", "")
+    configured_key = get_settings().google_maps_api_key
+    if configured_key is None:
+        return None
+    api_key = configured_key.get_secret_value()
     if not api_key:
         return None
     try:

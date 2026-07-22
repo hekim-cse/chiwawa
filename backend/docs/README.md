@@ -10,10 +10,10 @@
   SQLite 파일에 저장된다.
 - 사진 원본은 모바일 앱 로컬 저장소가 소유하며 백엔드는 원본 파일을 저장하지
   않는다.
-- `/api/v1/auth/me`와 회원 단위 Memorial API(`/api/v1/memorial/*`)가 JWT 보호
-  대상이며 여행 API는 현재 공개다.
-- 사진 검색, AI 일정, 동선 최적화, 주변 추천, 빈 시간 추천은 생성 ID와 시각을
-  제외하고 같은 규칙을 적용하는 모의 휴리스틱이다.
+- `/api/v1/auth/me`, 사진 장소 검색, 회원 단위 Memorial API
+  (`/api/v1/memorial/*`)가 JWT 보호 대상이며 나머지 여행 API는 현재 공개다.
+- 사진 장소 검색은 `ai/image_search`와 Google Maps·Cloud Vision·Gemini를
+  호출하고, AI 일정·동선 최적화·주변 추천·빈 시간 추천은 모의 휴리스틱이다.
 
 ## 빠른 링크
 

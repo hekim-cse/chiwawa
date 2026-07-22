@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     google_oauth_cookie_secure: bool = False
     google_oauth_state_ttl_seconds: int = Field(default=600, ge=60, le=3600)
     jwt_secret: SecretStr | None = None
+    google_maps_api_key: SecretStr | None = None
+    google_cloud_vision_api_key: SecretStr | None = None
+    gemini_api_key: SecretStr | None = None
     cors_allow_origins: str = "http://localhost:8080"
 
     def allowed_origins(self) -> list[str]:
