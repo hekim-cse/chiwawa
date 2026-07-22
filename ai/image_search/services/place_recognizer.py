@@ -3,7 +3,7 @@
 # 원칙: 사진 이해는 AI가, 좌표·사실은 항상 Google Places 실제값으로.
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from ai.image_search.domain.schemas import (
     LandmarkDetection,
@@ -26,18 +26,22 @@ from ai.image_search.services.image_loader import (
 
 
 # --- provider 인터페이스 (구체 구현에 직접 의존하지 않도록 Protocol 로 주입) ---
+# runtime_checkable: 실제/가짜 provider 가 인터페이스를 만족하는지 테스트에서 isinstance 로 검증
+@runtime_checkable
 class LandmarkDetector(Protocol):
     def detect(
         self, image_bytes: bytes | None = None, image_url: str | None = None
     ) -> LandmarkDetection | None: ...
 
 
+@runtime_checkable
 class VisionIdentifier(Protocol):
     def identify(
         self, image_bytes: bytes, mime_type: str = "image/jpeg", note: str | None = None
     ) -> VisionIdentification: ...
 
 
+@runtime_checkable
 class PlacesResolver(Protocol):
     def resolve_place(
         self, place_name: str, language_code: str = "ko", region_code: str = "JP"

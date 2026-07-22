@@ -68,5 +68,6 @@ class ResolvedPlace(BaseModel):
     city: str | None = None
     country: str | None = None
     rating: float | None = Field(default=None, ge=0, le=5)
-    review_count: int | None = Field(default=None, ge=0)  # 평점 신뢰도 판단용 리뷰 수
-    primary_type: str | None = None  # Google 장소 유형 (예: cafe) — 카테고리 역매핑용
+    # 아래 두 필드는 파싱해 보관만 한다 (현재 내부 로직 미사용, 백엔드 매핑·향후 활용 대비)
+    review_count: int | None = Field(default=None, ge=0)  # 리뷰 수
+    primary_type: str | None = None  # Google 장소 유형 (예: cafe)

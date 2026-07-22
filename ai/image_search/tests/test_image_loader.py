@@ -44,7 +44,6 @@ class TestValidateImageUrl:
         "url",
         [
             "http://127.0.0.1/a.jpg",  # 루프백
-            "http://localhost/a.jpg",  # 루프백 이름
             "http://10.0.0.5/a.jpg",  # 사설 A
             "http://172.16.3.4/a.jpg",  # 사설 B
             "http://192.168.1.10/a.jpg",  # 사설 C
@@ -56,6 +55,15 @@ class TestValidateImageUrl:
     def test_rejects_internal_addresses(self, url):
         with pytest.raises(ImageLoadError):
             validate_image_url(url)
+
+    # 이름 호스트(localhost)도 거부한다 — 실제 DNS 대신 getaddrinfo 를 모킹
+    def test_rejects_localhost_name(self, monkeypatch):
+        monkeypatch.setattr(
+            "ai.image_search.services.image_loader.socket.getaddrinfo",
+            lambda *a, **k: [(2, 1, 6, "", ("127.0.0.1", 0))],
+        )
+        with pytest.raises(ImageLoadError):
+            validate_image_url("http://localhost/a.jpg")
 
     # 호스트가 없는 URL 도 거부한다
     def test_rejects_url_without_host(self):

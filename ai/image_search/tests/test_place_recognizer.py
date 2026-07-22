@@ -7,8 +7,11 @@ from ai.image_search.domain.search_schemas import (
     RecognitionStatus,
 )
 from ai.image_search.services.place_recognizer import (
+    LandmarkDetector,
     PlaceRecognizer,
     PlaceRecognizerConfig,
+    PlacesResolver,
+    VisionIdentifier,
 )
 from ai.image_search.tests.fakes import (
     FakeLandmark,
@@ -383,3 +386,23 @@ class TestCascade:
         assert confs[0] == 0.9  # 식별
         assert confs[1] > confs[2] > confs[3]  # 근처는 순차 감소
         assert all(0 <= c <= 1 for c in confs)
+
+
+class TestProtocolConformance:
+    # 가짜 provider 가 주입 Protocol 을 만족한다 (테스트가 의존하는 인터페이스 드리프트 방지)
+    def test_fakes_satisfy_protocols(self):
+        assert isinstance(FakeLandmark(), LandmarkDetector)
+        assert isinstance(FakeVision(), VisionIdentifier)
+        assert isinstance(FakePlaces(), PlacesResolver)
+
+    # 실제 provider 도 Protocol 을 만족한다 (구현이 인터페이스에서 어긋나지 않게)
+    def test_real_providers_satisfy_protocols(self):
+        from ai.image_search.providers.landmark_provider import LandmarkProvider
+        from ai.image_search.providers.places_provider import PlacesProvider
+        from ai.image_search.providers.vision_llm_provider import VisionLlmProvider
+
+        assert isinstance(LandmarkProvider(api_key="x"), LandmarkDetector)
+        assert isinstance(PlacesProvider(api_key="x"), PlacesResolver)
+        assert isinstance(
+            VisionLlmProvider(api_key="x", client=object()), VisionIdentifier
+        )
