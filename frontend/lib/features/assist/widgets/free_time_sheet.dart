@@ -6,6 +6,7 @@ import '../../../core/models/travel_models.dart';
 import '../../../core/providers/data_providers.dart';
 import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/bottom_sheet_base.dart';
+import '../../plan/plan_controller.dart';
 
 void showFreeTimeRecommendSheet(BuildContext context) {
   showModalBottomSheet<void>(
@@ -50,7 +51,20 @@ class FreeTimeRecommendSheet extends ConsumerWidget {
                     builder: (recommends) => Column(
                       children: [
                         for (final item in recommends) ...[
-                          _RecommendCard(item: item),
+                          _RecommendCard(
+                            item: item,
+                            onAdd: () {
+                              ref.read(planActionsProvider).addPlace(item.name);
+                              final messenger = ScaffoldMessenger.of(context);
+                              Navigator.of(context).pop();
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Text('${item.name}을 일정 후보에 추가했어요.'),
+                                ),
+                              );
+                            },
+                            onDismiss: () => Navigator.of(context).pop(),
+                          ),
                           const SizedBox(height: 12),
                         ],
                       ],
@@ -67,9 +81,15 @@ class FreeTimeRecommendSheet extends ConsumerWidget {
 }
 
 class _RecommendCard extends StatelessWidget {
-  const _RecommendCard({required this.item});
+  const _RecommendCard({
+    required this.item,
+    required this.onAdd,
+    required this.onDismiss,
+  });
 
   final FreeTimeRecommend item;
+  final VoidCallback onAdd;
+  final VoidCallback onDismiss;
 
   @override
   Widget build(BuildContext context) {
@@ -100,16 +120,16 @@ class _RecommendCard extends StatelessWidget {
             children: [
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  child: const Text('일정 추가'),
+                  onPressed: onAdd,
+                  child: const Text('일정 후보에 추가'),
                 ),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: TextButton(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: onDismiss,
                   child: const Text(
-                    '패스',
+                    '나중에',
                     style: TextStyle(color: ChiwawaColors.textSecondary),
                   ),
                 ),

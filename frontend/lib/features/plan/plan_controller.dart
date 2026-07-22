@@ -1,0 +1,200 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/auth/auth_controller.dart';
+import '../../core/models/travel_models.dart';
+import '../../core/repositories/plan_repository.dart';
+import '../../core/services/trip_session_service.dart';
+import 'models/plan_itinerary.dart';
+
+final selectedPlacesProvider = StateProvider<List<String>>((ref) {
+  ref.watch(currentTripRevisionProvider);
+  return ref.watch(planRepositoryProvider).defaultSelectedPlaces;
+});
+
+final travelPreferenceProvider = StateProvider<TravelPreference>(
+  (ref) {
+    ref.watch(authSessionRevisionProvider);
+    ref.watch(currentTripRevisionProvider);
+    return const TravelPreference();
+  },
+);
+
+final routeOptimizationProvider =
+    StateNotifierProvider<RouteOptimizationController, RouteOptimizationState>(
+        (ref) {
+  ref.watch(authSessionRevisionProvider);
+  ref.watch(currentTripRevisionProvider);
+  return RouteOptimizationController(ref);
+});
+
+final planActionsProvider = Provider<PlanActions>(PlanActions.new);
+
+final planItineraryProvider =
+    StateNotifierProvider<PlanItineraryController, PlanItineraryState>((ref) {
+  ref.watch(authSessionRevisionProvider);
+  ref.watch(currentTripRevisionProvider);
+  return PlanItineraryController();
+});
+
+class PlanItineraryController extends StateNotifier<PlanItineraryState> {
+  PlanItineraryController() : super(const PlanItineraryState());
+
+  void selectDay(int day) {
+    if (day == state.selectedDay || day < 1) return;
+    state = state.copyWith(selectedDay: day);
+  }
+
+  void replaceCurrentDay(List<RoutePlace> places) {
+    final stops = <PlanItineraryStop>[
+      for (var index = 0; index < places.length; index++)
+        PlanItineraryStop(
+          id: '${places[index].identityKey}-$index',
+          startTime: _timeForIndex(index),
+          place: places[index],
+        ),
+    ];
+    _setCurrentStops(stops);
+  }
+
+  void clearCurrentDay() => _setCurrentStops(const <PlanItineraryStop>[]);
+
+  void move(int fromIndex, int toIndex) {
+    final stops = [...state.currentStops];
+    if (fromIndex < 0 ||
+        fromIndex >= stops.length ||
+        toIndex < 0 ||
+        toIndex >= stops.length ||
+        fromIndex == toIndex) {
+      return;
+    }
+    final stop = stops.removeAt(fromIndex);
+    stops.insert(toIndex, stop);
+    _setCurrentStops(stops);
+  }
+
+  void updateTime(String stopId, String startTime) {
+    _setCurrentStops([
+      for (final stop in state.currentStops)
+        if (stop.id == stopId) stop.copyWith(startTime: startTime) else stop,
+    ]);
+  }
+
+  void remove(String stopId) {
+    _setCurrentStops(
+      state.currentStops
+          .where((stop) => stop.id != stopId)
+          .toList(growable: false),
+    );
+  }
+
+  void _setCurrentStops(List<PlanItineraryStop> stops) {
+    state = state.copyWith(
+      stopsByDay: Map<int, List<PlanItineraryStop>>.unmodifiable({
+        ...state.stopsByDay,
+        state.selectedDay: List<PlanItineraryStop>.unmodifiable(stops),
+      }),
+    );
+  }
+}
+
+String _timeForIndex(int index) {
+  final totalMinutes = 9 * 60 + index * 120;
+  final hour = (totalMinutes ~/ 60).clamp(0, 23);
+  final minute = totalMinutes % 60;
+  return '${hour.toString().padLeft(2, '0')}:'
+      '${minute.toString().padLeft(2, '0')}';
+}
+
+class PlanActions {
+  PlanActions(this._ref);
+
+  final Ref _ref;
+
+  bool addPlace(String value) {
+    final place = value.trim();
+    if (place.isEmpty) return false;
+    final places = _ref.read(selectedPlacesProvider);
+    if (places.contains(place)) return false;
+
+    _ref.read(selectedPlacesProvider.notifier).state =
+        List.unmodifiable([...places, place]);
+    resetOptimization();
+    return true;
+  }
+
+  void removePlace(String place) {
+    final places = _ref.read(selectedPlacesProvider);
+    _ref.read(selectedPlacesProvider.notifier).state = List.unmodifiable(
+      places.where((item) => item != place),
+    );
+    resetOptimization();
+  }
+
+  void updateTheme(TravelTheme theme, bool selected) {
+    final preference = _ref.read(travelPreferenceProvider);
+    final nextThemes = {...preference.themes};
+    if (selected) {
+      nextThemes.add(theme);
+    } else if (nextThemes.length > 1) {
+      nextThemes.remove(theme);
+    }
+    _ref.read(travelPreferenceProvider.notifier).state =
+        preference.copyWith(themes: nextThemes);
+    resetOptimization();
+  }
+
+  void updatePace(TravelPace pace) {
+    final preference = _ref.read(travelPreferenceProvider);
+    _ref.read(travelPreferenceProvider.notifier).state =
+        preference.copyWith(pace: pace);
+    resetOptimization();
+  }
+
+  Future<void> optimizeRoute() {
+    return _ref.read(routeOptimizationProvider.notifier).optimize();
+  }
+
+  void resetOptimization() {
+    _ref.read(routeOptimizationProvider.notifier).reset();
+    _ref.read(planItineraryProvider.notifier).clearCurrentDay();
+  }
+}
+
+class RouteOptimizationController
+    extends StateNotifier<RouteOptimizationState> {
+  RouteOptimizationController(this._ref)
+      : super(const RouteOptimizationState.idle());
+
+  final Ref _ref;
+  int _requestVersion = 0;
+
+  Future<void> optimize() async {
+    final requestVersion = ++_requestVersion;
+    final places = _ref.read(selectedPlacesProvider);
+    final preference = _ref.read(travelPreferenceProvider);
+
+    state = const RouteOptimizationState.pending();
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (requestVersion != _requestVersion) return;
+    state = const RouteOptimizationState.running();
+
+    try {
+      final routePlaces = await _ref
+          .read(planRepositoryProvider)
+          .optimizeRoute(places, preference);
+      if (requestVersion != _requestVersion) return;
+      state = RouteOptimizationState.done(List.unmodifiable(routePlaces));
+      _ref.read(planItineraryProvider.notifier).replaceCurrentDay(routePlaces);
+    } catch (_) {
+      if (requestVersion != _requestVersion) return;
+      state = const RouteOptimizationState.failed(
+        '경로 최적화에 실패했어요. 다시 시도해 주세요.',
+      );
+    }
+  }
+
+  void reset() {
+    _requestVersion += 1;
+    state = const RouteOptimizationState.idle();
+  }
+}
