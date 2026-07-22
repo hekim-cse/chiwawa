@@ -10,7 +10,7 @@ class RecommendationPolicy:
 
     minimum_stay_minutes: int
     maximum_one_way_travel_minutes: int
-    maximum_distance_meters: int
+    maximum_one_way_distance_meters: int
     candidate_limit: int
 
     # 초기화 이후 정책 값 검증
@@ -24,8 +24,8 @@ class RecommendationPolicy:
             "maximum_one_way_travel_minutes",
         )
         self._validate_non_negative_integer(
-            self.maximum_distance_meters,
-            "maximum_distance_meters",
+            self.maximum_one_way_distance_meters,
+            "maximum_one_way_distance_meters",
         )
         self._validate_positive_integer(
             self.candidate_limit,

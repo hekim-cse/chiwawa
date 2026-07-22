@@ -59,7 +59,7 @@ def make_policy(
         maximum_one_way_travel_minutes=(
             maximum_one_way_travel_minutes
         ),
-        maximum_distance_meters=3000,
+        maximum_one_way_distance_meters=3000,
         candidate_limit=10,
     )
 
