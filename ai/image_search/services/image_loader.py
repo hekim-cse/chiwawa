@@ -4,6 +4,7 @@
 # 검증 로직(validate_*)은 순수 함수로 분리해 네트워크·파일 없이 테스트한다.
 import ipaddress
 import socket
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -18,6 +19,9 @@ class ImageLoadError(ValueError):
 
 
 _ALLOWED_SCHEMES = {"http", "https"}
+# URL 다운로드 기본 상한 (Vision/Gemini 한도 근처) 및 전체 wall-clock 데드라인
+_MAX_IMAGE_BYTES = 20 * 1024 * 1024  # 20MB
+_DOWNLOAD_DEADLINE_SECONDS = 30.0
 
 
 # URL 을 SSRF 관점에서 검증한다 (문제 없으면 반환값 없음, 위험하면 ImageLoadError).
@@ -104,6 +108,8 @@ def load_image_bytes(
     allowed_base_dir: Path | None = None,
     timeout_seconds: float = 10.0,
     transport: httpx.BaseTransport | None = None,
+    max_bytes: int = _MAX_IMAGE_BYTES,
+    deadline_seconds: float = _DOWNLOAD_DEADLINE_SECONDS,
 ) -> bytes:
     if request.image_path:
         if allowed_base_dir is None:
@@ -117,14 +123,41 @@ def load_image_bytes(
     # 클라이언트 호출 전에 SSRF 가드를 먼저 통과시킨다(내부/사설 주소 차단)
     validate_image_url(url)
     # 리다이렉트로 SSRF 우회를 막기 위해 follow_redirects=False
-    # 네트워크·HTTP 오류는 ImageLoadError(ValueError 계열)로 감싸,
-    # 호출자가 이미지 로딩 실패를 한 종류의 예외로 처리하게 한다
+    # 스트리밍으로 받으며 크기 상한·전체 데드라인을 강제해 메모리 고갈/느린 전송을 막는다.
+    # 네트워크·HTTP 오류는 ImageLoadError(ValueError 계열)로 감싼다.
     try:
         with httpx.Client(
             timeout=timeout_seconds, follow_redirects=False, transport=transport
         ) as client:
-            response = client.get(url)
-            response.raise_for_status()
-            return response.content
+            with client.stream("GET", url) as response:
+                response.raise_for_status()
+                _reject_if_declared_too_large(response, url, max_bytes)
+                return _read_capped(response, url, max_bytes, deadline_seconds)
     except httpx.HTTPError as exc:
         raise ImageLoadError(f"이미지 다운로드에 실패했습니다: {url} ({exc})") from exc
+
+
+# Content-Length 헤더가 상한을 넘으면 본문을 받기 전에 거부한다
+def _reject_if_declared_too_large(response, url: str, max_bytes: int) -> None:
+    declared = response.headers.get("Content-Length")
+    if declared is not None and declared.isdigit() and int(declared) > max_bytes:
+        raise ImageLoadError(
+            f"이미지가 너무 큽니다: {declared} bytes (상한 {max_bytes}): {url}"
+        )
+
+
+# 청크 단위로 받으며 누적 크기 상한과 전체 데드라인을 강제한다
+def _read_capped(response, url: str, max_bytes: int, deadline_seconds: float) -> bytes:
+    deadline = time.monotonic() + deadline_seconds
+    chunks = bytearray()
+    for chunk in response.iter_bytes():
+        chunks.extend(chunk)
+        if len(chunks) > max_bytes:
+            raise ImageLoadError(
+                f"이미지가 크기 상한({max_bytes} bytes)을 초과했습니다: {url}"
+            )
+        if time.monotonic() > deadline:
+            raise ImageLoadError(
+                f"이미지 다운로드가 시간 제한({deadline_seconds}s)을 초과했습니다: {url}"
+            )
+    return bytes(chunks)
