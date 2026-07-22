@@ -73,7 +73,7 @@ class PlacesProvider:
         )
 
         if not results:
-            raise ValueError(f"No Google Places result found for: {place_name}")
+            raise ValueError(f"Google Places 검색 결과가 없습니다: {place_name}")
 
         return results[0]
 
@@ -148,7 +148,7 @@ class PlacesProvider:
         # API 요청 실패 시 상태 코드와 응답 본문을 함께 알린다
         if response.status_code >= 400:
             raise RuntimeError(
-                "Google Places API request failed: "
+                "Google Places API 요청 실패: "
                 f"status={response.status_code}, body={response.text}"
             )
 
@@ -167,7 +167,7 @@ class PlacesProvider:
         lng = location.get("longitude")
 
         if not place_id or not name or lat is None or lng is None:
-            raise ValueError(f"Invalid Google Places response: {place}")
+            raise ValueError(f"유효하지 않은 Google Places 응답입니다: {place}")
 
         city, country = self._parse_address_components(
             place.get("addressComponents", [])

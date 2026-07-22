@@ -64,6 +64,9 @@ class PlaceRecognizerConfig:
 
 
 class PlaceRecognizer:
+    # Places searchNearby 의 결과 개수 상한
+    _NEARBY_API_MAX = 20
+
     # provider 3종을 Protocol 로 주입 (테스트에서 가짜 provider, 실제 사용 시 구체 provider)
     # image_loader: 이미지 로딩 함수 주입용 (테스트에서 가짜, 실제 사용 시 load_image_bytes)
     def __init__(
@@ -153,9 +156,6 @@ class PlaceRecognizer:
         if llm.place_name_guess == failed_name:
             return None
         return llm.place_name_guess, llm.confidence, CandidateSource.LLM, llm.reason
-
-    # Places searchNearby 의 결과 개수 상한
-    _NEARBY_API_MAX = 20
 
     # 근처 후보 리스트 생성 (confidence 순차 감소)
     # 검색 중심이 식별 장소 좌표라 자기 자신이 섞여 올 수 있어,

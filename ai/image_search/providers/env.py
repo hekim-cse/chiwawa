@@ -23,7 +23,7 @@ def _require_env(var_name: str) -> str:
 
     if not value:
         raise ValueError(
-            f"{var_name} is required. Check ai/image_search/.env"
+            f"{var_name} 환경변수가 필요합니다. ai/image_search/.env 를 확인하세요."
         )
 
     return value
