@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     google_oauth_cookie_secure: bool = False
     google_oauth_state_ttl_seconds: int = Field(default=600, ge=60, le=3600)
     jwt_secret: SecretStr | None = None
+    cors_allow_origins: str = "http://localhost:8080"
+
+    def allowed_origins(self) -> list[str]:
+        return [
+            origin.strip()
+            for origin in self.cors_allow_origins.split(",")
+            if origin.strip()
+        ]
 
     def require_google_oauth(self) -> GoogleOAuthConfig:
         client_id = self.google_client_id
