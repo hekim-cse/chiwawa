@@ -11,6 +11,9 @@ from ai.free_time_recommender.domain.models import (
     DayAvailability,
     ScheduleBoundary,
 )
+from ai.free_time_recommender.domain.recommendation_budget import (
+    RecommendationTimeWindow,
+)
 from ai.route_planner.domain.trip_schemas import (
     RouteStopType,
     TimelineDTO,
@@ -168,6 +171,48 @@ class RoutePlannerTimelineAdapter:
             start_at=planned_start_at,
             end_at=planned_end_at,
             busy_intervals=busy_intervals,
+        )
+
+    def to_recommendation_time_window(
+        self,
+        timeline: TimelineDTO,
+    ) -> RecommendationTimeWindow:
+        """마지막 방문지와 최종 도착지 사이의 추천 삽입 범위를 만든다."""
+
+        # 기존 변환 경로와 같은 Timeline 정합성 검증
+        self.to_day_availability(timeline)
+
+        planned_end_at = self._parse_datetime(
+            value=timeline.planned_end_at,
+            field_name="TimelineDTO.planned_end_at",
+        )
+        previous_stop = timeline.timeline_stops[-2]
+        next_stop = timeline.timeline_stops[-1]
+        window_start_at = self._parse_datetime(
+            value=previous_stop.departure_at,
+            field_name=(
+                "TimelineDTO.timeline_stops[-2].departure_at"
+            ),
+        )
+
+        if window_start_at >= planned_end_at:
+            raise RoutePlannerTimelineAdapterError(
+                "마지막 방문지 출발 시각은 계획 종료 시각보다 "
+                "빨라야 합니다."
+            )
+
+        available_minutes = int(
+            (planned_end_at - window_start_at).total_seconds()
+            // 60
+        )
+
+        return RecommendationTimeWindow(
+            day_index=timeline.day_index,
+            start_at=window_start_at,
+            end_at=planned_end_at,
+            available_minutes=available_minutes,
+            previous_place_id=previous_stop.place_id,
+            next_place_id=next_stop.place_id,
         )
 
     def _validate_summary_times(
