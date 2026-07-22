@@ -153,7 +153,15 @@ class PlacesProvider:
             )
 
         data = response.json()
-        return [self._parse_place(place) for place in data.get("places", [])]
+        # 불량 항목(필수값 누락) 하나 때문에 전체를 버리지 않도록 개별 건너뛴다.
+        # (resolve 는 결과가 1건이라, 그게 불량이면 빈 리스트→상위에서 실패로 처리됨)
+        results = []
+        for place in data.get("places", []):
+            try:
+                results.append(self._parse_place(place))
+            except ValueError:
+                continue
+        return results
 
     # Google 응답 dict 하나를 ResolvedPlace 로 변환
     # 예외: 필수값(장소 ID, 이름, 좌표)이 없으면 ValueError

@@ -165,6 +165,66 @@ class TestLoadImageBytes:
         with pytest.raises(ImageLoadError):
             load_image_bytes(req, transport=httpx.MockTransport(handler))
 
+    # 상한 이하 다운로드는 정상 반환한다 (스트리밍 경로 검증)
+    def test_download_within_cap_succeeds(self):
+        def handler(request):
+            return httpx.Response(200, content=b"\xff\xd8\xff" + b"a" * 500)
+
+        req = ImageSearchRequest(image_url="https://93.184.216.34/photo.jpg")
+
+        data = load_image_bytes(
+            req, transport=httpx.MockTransport(handler), max_bytes=1024
+        )
+        assert data == b"\xff\xd8\xff" + b"a" * 500
+
+    # 누적 크기가 상한을 넘으면 거부한다 (헤더 없이도 방어)
+    def test_rejects_oversized_download(self):
+        def handler(request):
+            return httpx.Response(200, content=b"x" * 2048)
+
+        req = ImageSearchRequest(image_url="https://93.184.216.34/photo.jpg")
+
+        with pytest.raises(ImageLoadError):
+            load_image_bytes(
+                req, transport=httpx.MockTransport(handler), max_bytes=1024
+            )
+
+    # Content-Length 헤더가 상한을 넘으면 받기 전에 거부한다
+    def test_rejects_by_content_length_header(self):
+        body = b"x" * 100
+
+        def handler(request):
+            return httpx.Response(
+                200, content=body, headers={"Content-Length": "9999999"}
+            )
+
+        req = ImageSearchRequest(image_url="https://93.184.216.34/photo.jpg")
+
+        with pytest.raises(ImageLoadError):
+            load_image_bytes(
+                req, transport=httpx.MockTransport(handler), max_bytes=1024
+            )
+
+    # 전체 데드라인을 넘기면 거부한다 (느린 전송 차단 — monotonic 모킹)
+    def test_rejects_when_deadline_exceeded(self, monkeypatch):
+        clock = iter([0.0, 1000.0, 1000.0])
+        monkeypatch.setattr(
+            "ai.image_search.services.image_loader.time.monotonic",
+            lambda: next(clock),
+        )
+
+        def handler(request):
+            return httpx.Response(200, content=b"abc")
+
+        req = ImageSearchRequest(image_url="https://93.184.216.34/photo.jpg")
+
+        with pytest.raises(ImageLoadError):
+            load_image_bytes(
+                req,
+                transport=httpx.MockTransport(handler),
+                deadline_seconds=10.0,
+            )
+
     # 내부 주소로의 다운로드는 클라이언트 호출 전에 SSRF 가드가 먼저 막는다
     def test_download_blocks_internal_address_before_request(self):
         def handler(request):  # pragma: no cover - 호출되면 안 됨
