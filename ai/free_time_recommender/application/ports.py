@@ -1,6 +1,10 @@
 # 빈 시간대 추천 Application 계층의 외부 시스템 Port
 from typing import Protocol
 
+from ai.free_time_recommender.domain.candidate_route_metrics import (
+    CandidateRouteMetrics,
+    CandidateRouteMetricsQuery,
+)
 from ai.free_time_recommender.domain.place_candidate import (
     AlongRoutePlaceSearchQuery,
     PlaceCandidate,
@@ -28,4 +32,14 @@ class AlongRoutePlaceProvider(Protocol):
         self,
         query: AlongRoutePlaceSearchQuery,
     ) -> tuple[PlaceCandidate, ...]:
+        ...
+
+
+class CandidateRouteMetricsProvider(Protocol):
+    """추천 후보 경유 전후의 이동시간과 거리 계산 계약."""
+
+    def get_candidate_route_metrics(
+        self,
+        query: CandidateRouteMetricsQuery,
+    ) -> CandidateRouteMetrics:
         ...

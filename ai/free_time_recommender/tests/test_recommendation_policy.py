@@ -10,13 +10,13 @@ def build_policy(
     *,
     minimum_stay_minutes: int = 60,
     maximum_one_way_travel_minutes: int = 20,
-    maximum_distance_meters: int = 3000,
+    maximum_one_way_distance_meters: int = 3000,
     candidate_limit: int = 10,
 ) -> RecommendationPolicy:
     return RecommendationPolicy(
         minimum_stay_minutes=minimum_stay_minutes,
         maximum_one_way_travel_minutes=maximum_one_way_travel_minutes,
-        maximum_distance_meters=maximum_distance_meters,
+        maximum_one_way_distance_meters=maximum_one_way_distance_meters,
         candidate_limit=candidate_limit,
     )
 
@@ -26,7 +26,7 @@ def test_recommendation_policy_accepts_valid_values() -> None:
 
     assert policy.minimum_stay_minutes == 60
     assert policy.maximum_one_way_travel_minutes == 20
-    assert policy.maximum_distance_meters == 3000
+    assert policy.maximum_one_way_distance_meters == 3000
     assert policy.candidate_limit == 10
 
 
@@ -79,7 +79,7 @@ def test_positive_integer_fields_reject_negative_value(
     "field_name",
     [
         "maximum_one_way_travel_minutes",
-        "maximum_distance_meters",
+        "maximum_one_way_distance_meters",
     ],
 )
 def test_non_negative_integer_fields_accept_zero(
@@ -87,7 +87,7 @@ def test_non_negative_integer_fields_accept_zero(
 ) -> None:
     values = {
         "maximum_one_way_travel_minutes": 20,
-        "maximum_distance_meters": 3000,
+        "maximum_one_way_distance_meters": 3000,
     }
     values[field_name] = 0
 
@@ -100,7 +100,7 @@ def test_non_negative_integer_fields_accept_zero(
     "field_name",
     [
         "maximum_one_way_travel_minutes",
-        "maximum_distance_meters",
+        "maximum_one_way_distance_meters",
     ],
 )
 def test_non_negative_integer_fields_reject_negative_value(
@@ -108,7 +108,7 @@ def test_non_negative_integer_fields_reject_negative_value(
 ) -> None:
     values = {
         "maximum_one_way_travel_minutes": 20,
-        "maximum_distance_meters": 3000,
+        "maximum_one_way_distance_meters": 3000,
     }
     values[field_name] = -1
 
@@ -124,7 +124,7 @@ def test_non_negative_integer_fields_reject_negative_value(
     [
         "minimum_stay_minutes",
         "maximum_one_way_travel_minutes",
-        "maximum_distance_meters",
+        "maximum_one_way_distance_meters",
         "candidate_limit",
     ],
 )
@@ -134,7 +134,7 @@ def test_integer_fields_reject_boolean(
     values = {
         "minimum_stay_minutes": 60,
         "maximum_one_way_travel_minutes": 20,
-        "maximum_distance_meters": 3000,
+        "maximum_one_way_distance_meters": 3000,
         "candidate_limit": 10,
     }
     values[field_name] = True
@@ -151,7 +151,7 @@ def test_integer_fields_reject_boolean(
     [
         "minimum_stay_minutes",
         "maximum_one_way_travel_minutes",
-        "maximum_distance_meters",
+        "maximum_one_way_distance_meters",
         "candidate_limit",
     ],
 )
@@ -161,7 +161,7 @@ def test_integer_fields_reject_non_integer(
     values = {
         "minimum_stay_minutes": 60,
         "maximum_one_way_travel_minutes": 20,
-        "maximum_distance_meters": 3000,
+        "maximum_one_way_distance_meters": 3000,
         "candidate_limit": 10,
     }
     values[field_name] = 1.5
