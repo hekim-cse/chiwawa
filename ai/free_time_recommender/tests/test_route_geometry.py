@@ -15,8 +15,8 @@ from ai.free_time_recommender.domain.route_geometry import (
 # 유효한 좌표 생성 헬퍼
 def coordinate() -> GeoCoordinate:
     return GeoCoordinate(
-        latitude=37.5665,
-        longitude=126.9780,
+        latitude=35.6812,
+        longitude=139.7671,
     )
 
 
@@ -32,7 +32,7 @@ def test_route_geometry_query_accepts_valid_values() -> None:
 
     query = RouteGeometryQuery(
         origin=coordinate(),
-        destination=GeoCoordinate(37.5700, 126.9900),
+        destination=GeoCoordinate(35.6895, 139.6917),
         travel_mode=RouteTravelMode.TRANSIT,
         departure_at=departure_at,
     )
@@ -78,8 +78,8 @@ def test_coordinate_rejects_invalid_values(
     exception_type: type[Exception],
 ) -> None:
     values = {
-        "latitude": 37.5665,
-        "longitude": 126.9780,
+        "latitude": 35.6812,
+        "longitude": 139.7671,
     }
     values[field_name] = cast(float, invalid_value)
 
