@@ -1,7 +1,8 @@
 # Route Planner의 TimelineDTO를
 # 빈 시간 추천 도메인의 DayAvailability로 변환하는 어댑터
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from ai.free_time_recommender.adapters.errors import (
     RoutePlannerTimelineAdapterError,
@@ -274,6 +275,46 @@ class RoutePlannerTimelineAdapter:
             )
 
         return tuple(windows)
+
+    def to_timezone_aware_route_leg_insertion_windows(
+        self,
+        timeline: TimelineDTO,
+        timezone: ZoneInfo,
+    ) -> tuple[RouteLegInsertionWindow, ...]:
+        """모든 삽입 구간 시각을 명시적인 여행 시간대로 변환한다."""
+
+        if not isinstance(timezone, ZoneInfo):
+            raise TypeError("timezone은 ZoneInfo여야 합니다.")
+
+        windows = self.to_route_leg_insertion_windows(timeline)
+        return tuple(
+            replace(
+                window,
+                previous_departure_at=self._apply_timezone(
+                    window.previous_departure_at,
+                    timezone,
+                ),
+                next_arrival_at=self._apply_timezone(
+                    window.next_arrival_at,
+                    timezone,
+                ),
+                original_timeline_end_at=self._apply_timezone(
+                    window.original_timeline_end_at,
+                    timezone,
+                ),
+                planned_end_at=self._apply_timezone(
+                    window.planned_end_at,
+                    timezone,
+                ),
+            )
+            for window in windows
+        )
+
+    @staticmethod
+    def _apply_timezone(value: datetime, timezone: ZoneInfo) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            return value.replace(tzinfo=timezone)
+        return value.astimezone(timezone)
 
     def _validate_summary_times(
         self,
