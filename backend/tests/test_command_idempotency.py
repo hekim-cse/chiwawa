@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from chiwawa_backend.main import create_app
 from chiwawa_backend.schemas.places import (
     ConfirmedPhotoPlaceRead,
     PhotoPlaceSearchResponse,
@@ -15,11 +14,12 @@ from chiwawa_backend.schemas.travel import (
     FreeTimeRecommendationResponse,
 )
 from chiwawa_backend.schemas.trips import TripRead
+from tests.photo_place_fakes import create_photo_place_test_app
 
 
 @pytest.mark.anyio
 async def test_confirmation_commands_are_idempotent() -> None:
-    app = create_app()
+    app = create_photo_place_test_app()
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -36,7 +36,10 @@ async def test_confirmation_commands_are_idempotent() -> None:
 
         search_response = await client.post(
             f"/api/v1/trips/{trip.id}/photo-places/search",
-            json={"note": "retry-safe photo"},
+            json={
+                "image_url": "https://example.com/retry-safe.jpg",
+                "note": "retry-safe photo",
+            },
         )
         search = PhotoPlaceSearchResponse.model_validate_json(search_response.text)
         confirm_path = f"/api/v1/trips/{trip.id}/photo-places/{search.id}/confirm"
@@ -85,7 +88,7 @@ async def test_confirmation_commands_are_idempotent() -> None:
 
 @pytest.mark.anyio
 async def test_confirm_retry_reflects_updated_wanted_place() -> None:
-    app = create_app()
+    app = create_photo_place_test_app()
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -102,7 +105,10 @@ async def test_confirm_retry_reflects_updated_wanted_place() -> None:
 
         search_response = await client.post(
             f"/api/v1/trips/{trip.id}/photo-places/search",
-            json={"note": "stale snapshot photo"},
+            json={
+                "image_url": "https://example.com/stale-snapshot.jpg",
+                "note": "stale snapshot photo",
+            },
         )
         search = PhotoPlaceSearchResponse.model_validate_json(search_response.text)
         confirm_path = f"/api/v1/trips/{trip.id}/photo-places/{search.id}/confirm"

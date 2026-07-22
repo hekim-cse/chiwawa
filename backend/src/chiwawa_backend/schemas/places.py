@@ -1,6 +1,10 @@
-from pydantic import Field
+from typing import Self
+
+from pydantic import Field, model_validator
 
 from chiwawa_backend.schemas.base import ApiModel, PlaceSource
+
+PHOTO_IMAGE_URL_ERROR = "image_url is required"
 
 
 class PhotoPlaceSearchRequest(ApiModel):
@@ -8,6 +12,12 @@ class PhotoPlaceSearchRequest(ApiModel):
     note: str | None = Field(default=None, min_length=1)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
+
+    @model_validator(mode="after")
+    def require_image_url(self) -> Self:
+        if self.image_url is None:
+            raise ValueError(PHOTO_IMAGE_URL_ERROR)
+        return self
 
 
 class PhotoPlaceCandidateRead(ApiModel):

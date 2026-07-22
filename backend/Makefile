@@ -21,4 +21,4 @@ test:
 check: format-check lint type test
 
 run:
-	uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.1 --port 8000
+	PYTHONPATH=..:src uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.1 --port 8000
