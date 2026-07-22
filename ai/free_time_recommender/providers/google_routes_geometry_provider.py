@@ -88,6 +88,10 @@ class GoogleRoutesGeometryProvider:
                 .isoformat()
                 .replace("+00:00", "Z")
             )
+            # DRIVE에서 출발시각을 사용하려면 Google Routes의 기본값인
+            # TRAFFIC_UNAWARE 대신 교통량을 반영하는 설정을 명시해야 한다.
+            if query.travel_mode.value == "DRIVE":
+                payload["routingPreference"] = "TRAFFIC_AWARE"
 
         try:
             with httpx.Client(

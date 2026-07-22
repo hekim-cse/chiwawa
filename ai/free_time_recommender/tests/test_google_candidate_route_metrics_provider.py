@@ -87,6 +87,49 @@ def test_get_metrics_requests_two_time_ordered_routes() -> None:
     )
 
 
+def test_get_metrics_uses_traffic_aware_routing_for_drive() -> None:
+    """DRIVE 출발시각과 Google의 교통량 설정을 함께 전달한다."""
+
+    requests: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "routes": [
+                    {
+                        "legs": [
+                            {"duration": "300s", "distanceMeters": 800}
+                        ]
+                    }
+                ]
+            },
+        )
+
+    provider = GoogleCandidateRouteMetricsProvider(
+        api_key="test-key",
+        transport=httpx.MockTransport(handler),
+    )
+    query = make_query()
+    provider.get_candidate_route_metrics(
+        CandidateRouteMetricsQuery(
+            previous_place_id=query.previous_place_id,
+            candidate_place_id=query.candidate_place_id,
+            next_place_id=query.next_place_id,
+            previous_departure_at=query.previous_departure_at,
+            stay_minutes=query.stay_minutes,
+            travel_mode=RouteTravelMode.DRIVE,
+        )
+    )
+
+    assert len(requests) == 2
+    assert all(
+        request["routingPreference"] == "TRAFFIC_AWARE"
+        for request in requests
+    )
+
+
 @pytest.mark.parametrize(
     "response",
     [
