@@ -9,7 +9,12 @@ from ai.route_planner.domain.schemas import (
 )
 from ai.route_planner.modal_app import (
     plan_trip_payload,
+    plan_trip_with_recommendations_payload,
 )
+from ai.free_time_recommender.application.generate_route_option_recommendations import (
+    RouteOptionRecommendationResult,
+)
+from ai.free_time_recommender.config import FreeTimeRecommendationSettings
 from ai.route_planner.tests.test_route_option_solver import (
     make_request_payload,
 )
@@ -85,6 +90,18 @@ class FakeRoutesProviderWithTransitMissing:
         )
 
 
+class FakeRecommendationGenerator:
+    def execute(self, *, route_options, timezone, policy):
+        return tuple(
+            RouteOptionRecommendationResult(option, (), ())
+            for option in route_options
+        )
+
+
+def recommendation_settings() -> FreeTimeRecommendationSettings:
+    return FreeTimeRecommendationSettings(30, 20, 3000, 3, 2, 20)
+
+
 # 정상 payload가 전체 여행 일정 응답으로 변환되는지 검증
 def test_plan_trip_payload_returns_complete_response():
     request_payload = make_request_payload()
@@ -150,6 +167,28 @@ def test_plan_trip_payload_preserves_complete_modes():
 
     assert transit_option["timeline"] is None
     assert transit_option["missing_segments"]
+
+
+# 기존 계획 응답 필드를 유지하면서 옵션별 추천 결과를 추가하는지 검증
+def test_plan_trip_with_recommendations_payload_extends_response():
+    payload = make_request_payload()
+    payload["include_recommendations"] = True
+
+    response = plan_trip_with_recommendations_payload(
+        payload=payload,
+        routes_provider=FakeRoutesProvider(),
+        recommendation_generator=FakeRecommendationGenerator(),
+        settings=recommendation_settings(),
+    )
+
+    assert response["trip_id"] == payload["trip_id"]
+    assert response["day_plans"]
+    assert response["day_recommendations"]
+    statuses = [
+        option["status"]
+        for option in response["day_recommendations"][0]["route_options"]
+    ]
+    assert statuses == ["SUCCESS", "SUCCESS", "SUCCESS"]
 
 
 # 잘못된 요청 payload는 Pydantic ValidationError를 발생시키는지 검증
