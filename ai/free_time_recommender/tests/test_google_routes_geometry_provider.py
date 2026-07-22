@@ -40,8 +40,8 @@ def make_query(
     departure_at: datetime | None = None,
 ) -> RouteGeometryQuery:
     return RouteGeometryQuery(
-        origin=GeoCoordinate(37.5665, 126.9780),
-        destination=GeoCoordinate(37.5700, 126.9900),
+        origin=GeoCoordinate(35.6812, 139.7671),
+        destination=GeoCoordinate(35.6895, 139.6917),
         travel_mode=travel_mode,
         departure_at=departure_at,
     )
@@ -84,16 +84,16 @@ def test_get_route_geometry_sends_expected_request() -> None:
         "origin": {
             "location": {
                 "latLng": {
-                    "latitude": 37.5665,
-                    "longitude": 126.978,
+                    "latitude": 35.6812,
+                    "longitude": 139.7671,
                 }
             }
         },
         "destination": {
             "location": {
                 "latLng": {
-                    "latitude": 37.57,
-                    "longitude": 126.99,
+                    "latitude": 35.6895,
+                    "longitude": 139.6917,
                 }
             }
         },

@@ -61,7 +61,6 @@ def make_policy(
         ),
         maximum_distance_meters=3000,
         candidate_limit=10,
-        allowed_categories=("CAFE",),
     )
 
 
