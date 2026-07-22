@@ -1,8 +1,10 @@
 from collections.abc import Callable
 
 from fastapi import FastAPI, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from chiwawa_backend.config import get_settings
 from chiwawa_backend.dependencies import get_state
 from chiwawa_backend.errors import (
     ConfigurationError,
@@ -34,6 +36,13 @@ def create_app(state: AppState | None = None) -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=get_settings().allowed_origins(),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
     app.add_api_route(
         "/",
