@@ -145,6 +145,35 @@ def test_get_route_geometry_converts_departure_at_to_utc() -> None:
     )
 
 
+# DRIVE 출발시각 요청에 Google 교통량 설정을 함께 전달하는지 검증
+def test_get_route_geometry_uses_traffic_aware_routing_for_drive() -> None:
+    captured_payload: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_payload.update(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={
+                "routes": [
+                    {
+                        "polyline": {
+                            "encodedPolyline": "drive-route",
+                        }
+                    }
+                ]
+            },
+        )
+
+    make_provider(handler).get_route_geometry(
+        make_query(
+            travel_mode=RouteTravelMode.DRIVE,
+            departure_at=datetime(2026, 8, 1, 1, tzinfo=timezone.utc),
+        )
+    )
+
+    assert captured_payload["routingPreference"] == "TRAFFIC_AWARE"
+
+
 # HTTP 오류에서 응답 본문을 노출하지 않는 명시적 오류 검증
 def test_get_route_geometry_maps_http_error() -> None:
     provider = make_provider(
