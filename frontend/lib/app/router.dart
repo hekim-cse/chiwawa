@@ -8,7 +8,17 @@ import '../features/explore/explore_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/memorial/memorial_screen.dart';
 import '../features/mypage/my_page_screen.dart';
+import '../features/mypage/my_page_routes.dart';
+import '../features/mypage/pages/account_settings_screen.dart';
+import '../features/mypage/pages/app_info_screen.dart';
+import '../features/mypage/pages/language_region_screen.dart';
+import '../features/mypage/pages/notification_settings_screen.dart';
+import '../features/mypage/pages/privacy_screen.dart';
+import '../features/mypage/pages/profile_settings_screen.dart';
+import '../features/mypage/pages/support_screen.dart';
+import '../features/mypage/pages/user_guide_screen.dart';
 import '../features/plan/plan_screen.dart';
+import '../features/trips/trip_list_screen.dart';
 import '../shared/widgets/app_viewport.dart';
 import '../shared/widgets/bottom_nav_bar.dart';
 
@@ -72,9 +82,54 @@ final routerProvider = Provider<GoRouter>((ref) {
                 const NoTransitionPage(child: MemorialScreen()),
           ),
           GoRoute(
-            path: '/mypage',
+            path: MyPageRoutes.overview,
             pageBuilder: (context, state) =>
                 const NoTransitionPage(child: MyPageScreen()),
+          ),
+          GoRoute(
+            path: MyPageRoutes.profile,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: ProfileSettingsScreen()),
+          ),
+          GoRoute(
+            path: MyPageRoutes.account,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: AccountSettingsScreen()),
+          ),
+          GoRoute(
+            path: MyPageRoutes.notifications,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: NotificationSettingsScreen()),
+          ),
+          GoRoute(
+            path: MyPageRoutes.languageRegion,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: LanguageRegionScreen()),
+          ),
+          GoRoute(
+            path: MyPageRoutes.appInfo,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: AppInfoScreen()),
+          ),
+          GoRoute(
+            path: MyPageRoutes.support,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: SupportScreen()),
+          ),
+          GoRoute(
+            path: MyPageRoutes.guide,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: UserGuideScreen()),
+          ),
+          GoRoute(
+            path: MyPageRoutes.privacy,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: PrivacyScreen()),
+          ),
+          GoRoute(
+            path: '/trips',
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: TripListScreen()),
           ),
         ],
       ),
