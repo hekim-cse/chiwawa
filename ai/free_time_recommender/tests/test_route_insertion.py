@@ -71,6 +71,8 @@ def evaluate(
     policy: RecommendationPolicy | None = None,
     previous_minutes: int = 10,
     next_minutes: int = 15,
+    previous_distance_meters: int = 1000,
+    next_distance_meters: int = 1000,
     stay_minutes: int = 30,
 ) -> RouteLegInsertionImpact:
     return EvaluateRouteLegInsertionImpact().evaluate(
@@ -81,6 +83,10 @@ def evaluate(
                 previous_to_candidate_minutes=previous_minutes,
                 candidate_to_next_minutes=next_minutes,
             ),
+            previous_to_candidate_distance_meters=(
+                previous_distance_meters
+            ),
+            candidate_to_next_distance_meters=next_distance_meters,
             stay_minutes=stay_minutes,
         ),
     )
@@ -112,6 +118,22 @@ def test_evaluate_accepts_updated_end_equal_to_planned_end() -> None:
     assert result.updated_timeline_end_at == at(17, 35)
     assert result.remaining_minutes == 0
     assert result.is_insertable is True
+
+
+# 양쪽 편도 거리 상한 초과 사유를 각각 반환하는지 검증
+def test_evaluate_rejects_each_one_way_distance_limit() -> None:
+    result = evaluate(
+        previous_distance_meters=3001,
+        next_distance_meters=3001,
+    )
+
+    assert result.is_insertable is False
+    assert result.rejection_reasons == (
+        RouteInsertionRejectionReason
+        .PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED,
+        RouteInsertionRejectionReason
+        .CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED,
+    )
 
 
 # 후보 경유 후 전체 일정이 계획 종료를 초과하는 경우 검증
@@ -179,6 +201,8 @@ def test_candidate_schedule_rejects_invalid_stay_minutes(
                 previous_to_candidate_minutes=10,
                 candidate_to_next_minutes=10,
             ),
+            previous_to_candidate_distance_meters=1000,
+            candidate_to_next_distance_meters=1000,
             stay_minutes=cast(int, invalid_value),
         )
 
