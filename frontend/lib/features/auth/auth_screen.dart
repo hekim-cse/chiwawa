@@ -163,7 +163,11 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                     width: contentWidth,
                     height: constraints.maxHeight,
                     child: ListView(
-                      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+                      padding: AppLayout.pageInsets(
+                        context,
+                        top: 12,
+                        bottom: 32,
+                      ),
                       children: [
                         if (auth.isGuest)
                           Align(
@@ -297,12 +301,18 @@ class _GoogleSignInButton extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  const Text(
-                    'Google로 시작하기',
-                    style: TextStyle(
-                      color: ChiwawaColors.textPrimary,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
+                  const Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        'Google로 시작하기',
+                        maxLines: 1,
+                        style: TextStyle(
+                          color: ChiwawaColors.textPrimary,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
                   ),
                 ],

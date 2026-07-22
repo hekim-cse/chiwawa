@@ -6,7 +6,7 @@ class ChiwawaColors {
   static const secondary = Color(0xFFFFEEF2);
   static const background = Color(0xFFFCFBFC);
   static const card = Colors.white;
-  static const textPrimary = Color(0xFF22191C);
+  static const textPrimary = Color(0xFF5A2F3B);
   static const textSecondary = Color(0xFF7C7074);
   static const textMuted = Color(0xFFC7B9BD);
   static const border = Color(0xFFECE8EA);
@@ -40,14 +40,18 @@ abstract final class ChiwawaRadii {
 
 class ChiwawaTheme {
   static ThemeData light() {
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: ChiwawaColors.primary,
+      primary: ChiwawaColors.primary,
+      secondary: ChiwawaColors.secondary,
+      surface: ChiwawaColors.card,
+    ).copyWith(
+      onSurface: ChiwawaColors.textPrimary,
+      onSurfaceVariant: ChiwawaColors.textSecondary,
+    );
     final base = ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: ChiwawaColors.primary,
-        primary: ChiwawaColors.primary,
-        secondary: ChiwawaColors.secondary,
-        surface: ChiwawaColors.card,
-      ),
+      colorScheme: colorScheme,
       fontFamily: 'Pretendard',
       scaffoldBackgroundColor: ChiwawaColors.background,
     );
