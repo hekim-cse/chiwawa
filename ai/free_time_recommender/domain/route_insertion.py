@@ -135,6 +135,8 @@ class CandidateInsertionSchedule:
     """후보 장소를 경유할 때 적용할 이동시간과 체류시간."""
 
     travel_times: CandidateTravelTimes
+    previous_to_candidate_distance_meters: int
+    candidate_to_next_distance_meters: int
     stay_minutes: int
 
     def __post_init__(self) -> None:
@@ -142,6 +144,17 @@ class CandidateInsertionSchedule:
             raise TypeError(
                 "travel_times는 CandidateTravelTimes여야 합니다."
             )
+
+        _validate_integer(
+            self.previous_to_candidate_distance_meters,
+            "previous_to_candidate_distance_meters",
+            minimum=0,
+        )
+        _validate_integer(
+            self.candidate_to_next_distance_meters,
+            "candidate_to_next_distance_meters",
+            minimum=0,
+        )
 
         _validate_integer(
             self.stay_minutes,
@@ -159,6 +172,12 @@ class RouteInsertionRejectionReason(str, Enum):
     )
     CANDIDATE_TO_NEXT_LIMIT_EXCEEDED = (
         "CANDIDATE_TO_NEXT_LIMIT_EXCEEDED"
+    )
+    PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED = (
+        "PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED"
+    )
+    CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED = (
+        "CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED"
     )
     PLANNED_END_EXCEEDED = "PLANNED_END_EXCEEDED"
 
@@ -241,6 +260,24 @@ class EvaluateRouteLegInsertionImpact:
             reasons.append(
                 RouteInsertionRejectionReason
                 .CANDIDATE_TO_NEXT_LIMIT_EXCEEDED
+            )
+
+        if (
+            candidate_schedule.previous_to_candidate_distance_meters
+            > policy.maximum_one_way_distance_meters
+        ):
+            reasons.append(
+                RouteInsertionRejectionReason
+                .PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED
+            )
+
+        if (
+            candidate_schedule.candidate_to_next_distance_meters
+            > policy.maximum_one_way_distance_meters
+        ):
+            reasons.append(
+                RouteInsertionRejectionReason
+                .CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED
             )
 
         if updated_timeline_end_at > window.planned_end_at:
