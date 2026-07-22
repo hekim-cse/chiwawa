@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from urllib.parse import urlparse
 
+import httpcore
 import httpx
 
 from ai.image_search.domain.search_schemas import ImageSearchRequest
@@ -24,11 +25,12 @@ _MAX_IMAGE_BYTES = 20 * 1024 * 1024  # 20MB
 _DOWNLOAD_DEADLINE_SECONDS = 30.0
 
 
-# URL 을 SSRF 관점에서 검증한다 (문제 없으면 반환값 없음, 위험하면 ImageLoadError).
+# URL 을 SSRF 관점에서 검증하고, 접속을 고정할 공인 IP 를 돌려준다 (위험하면 ImageLoadError).
 # - http/https 만 허용
 # - 호스트를 DNS 해석해, 해석된 모든 주소가 공인(global) IP 인지 확인
 #   (루프백·사설·링크로컬·메타데이터·unspecified 는 차단)
-def validate_image_url(url: str) -> None:
+# - 반환한 IP 로만 접속하게 해 검사↔접속 사이 재해석(DNS 리바인딩)을 차단한다
+def validate_image_url(url: str) -> str:
     parsed = urlparse(url)
 
     if parsed.scheme not in _ALLOWED_SCHEMES:
@@ -38,11 +40,14 @@ def validate_image_url(url: str) -> None:
     if not host:
         raise ImageLoadError("URL 에 호스트가 없습니다.")
 
-    for address in _resolve_addresses(host):
+    addresses = _resolve_addresses(host)
+    for address in addresses:
         if not address.is_global:
             raise ImageLoadError(
                 f"내부/사설 주소로의 요청은 차단됩니다: {host} -> {address}"
             )
+    # 검증한 첫 주소를 접속 고정용으로 돌려준다
+    return str(addresses[0])
 
 
 # 호스트명을 IP 주소 목록으로 해석 (해석 실패도 차단 대상)
@@ -101,6 +106,41 @@ def validate_image_path(path: str, base_dir: Path) -> Path:
 
 # 이미지 소스를 바이트로 로딩한다.
 # image_path 사용 시 allowed_base_dir 를 반드시 지정해야 한다(신뢰 디렉토리 한정).
+# 검증 단계에서 확정한 IP 로만 TCP 접속하도록 강제하는 httpcore 네트워크 백엔드.
+# httpcore 는 접속 후 원 호스트명으로 TLS(SNI·인증서 검증)를 수행하므로 https 는 그대로 동작하고,
+# DNS 를 다시 해석하지 않아 검사↔접속 사이 재해석(리바인딩) 틈이 사라진다.
+class _PinnedIpBackend(httpcore.NetworkBackend):
+    def __init__(self, pinned_ip: str, inner: httpcore.NetworkBackend) -> None:
+        self._pinned_ip = pinned_ip
+        self._inner = inner
+
+    def connect_tcp(
+        self, host, port, timeout=None, local_address=None, socket_options=None
+    ):
+        # host(원 호스트명)는 무시하고 검증된 IP 로 접속한다 (재해석 방지)
+        return self._inner.connect_tcp(
+            self._pinned_ip,
+            port,
+            timeout=timeout,
+            local_address=local_address,
+            socket_options=socket_options,
+        )
+
+    def connect_unix_socket(self, path, timeout=None, socket_options=None):
+        return self._inner.connect_unix_socket(
+            path, timeout=timeout, socket_options=socket_options
+        )
+
+
+# 검증한 IP 로 접속을 고정한 httpx transport 를 만든다 (내부 network backend 만 교체)
+def _build_pinned_transport(pinned_ip: str) -> httpx.HTTPTransport:
+    transport = httpx.HTTPTransport(retries=0)
+    transport._pool._network_backend = _PinnedIpBackend(
+        pinned_ip, transport._pool._network_backend
+    )
+    return transport
+
+
 # recognizer 가 한 곳에서 로딩해 두 식별기에 같은 이미지를 넘긴다.
 # transport: httpx 전송 계층 주입용 (테스트에서 MockTransport, 실제 사용 시 None)
 def load_image_bytes(
@@ -120,8 +160,12 @@ def load_image_bytes(
         return resolved.read_bytes()
 
     url = request.image_url
-    # 클라이언트 호출 전에 SSRF 가드를 먼저 통과시킨다(내부/사설 주소 차단)
-    validate_image_url(url)
+    # SSRF 가드를 통과시키고, 접속을 고정할 공인 IP 를 확보한다(내부/사설 주소 차단)
+    pinned_ip = validate_image_url(url)
+    # transport 미주입(운영)이면 검증한 IP 로만 접속하는 pinned transport 를 쓴다
+    # (검사↔접속 사이 DNS 재해석 방지). 주입 시(테스트)는 그대로 사용.
+    if transport is None:
+        transport = _build_pinned_transport(pinned_ip)
     # 리다이렉트로 SSRF 우회를 막기 위해 follow_redirects=False
     # 스트리밍으로 받으며 크기 상한·전체 데드라인을 강제해 메모리 고갈/느린 전송을 막는다.
     # 네트워크·HTTP 오류는 ImageLoadError(ValueError 계열)로 감싼다.
