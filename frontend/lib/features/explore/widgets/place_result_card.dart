@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
@@ -8,15 +9,19 @@ import '../../../core/models/travel_models.dart';
 class PlaceResultCard extends StatelessWidget {
   const PlaceResultCard({
     required this.result,
-    required this.imageFile,
+    required this.imagePath,
     required this.isSaved,
+    required this.onEdit,
+    required this.onDirections,
     required this.onAddToPlan,
     super.key,
   });
 
   final PhotoSearchResult result;
-  final File? imageFile;
+  final String? imagePath;
   final bool isSaved;
+  final VoidCallback onEdit;
+  final VoidCallback onDirections;
   final VoidCallback onAddToPlan;
 
   @override
@@ -25,7 +30,7 @@ class PlaceResultCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         border: Border.all(color: ChiwawaColors.border),
       ),
       child: Column(
@@ -39,9 +44,21 @@ class PlaceResultCard extends StatelessWidget {
                 child: SizedBox(
                   width: 80,
                   height: 80,
-                  child: imageFile == null
+                  child: imagePath == null
                       ? const _PlaceImagePlaceholder()
-                      : Image.file(imageFile!, fit: BoxFit.cover),
+                      : kIsWeb
+                          ? Image.network(
+                              imagePath!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const _PlaceImagePlaceholder(),
+                            )
+                          : Image.file(
+                              File(imagePath!),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const _PlaceImagePlaceholder(),
+                            ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -80,7 +97,7 @@ class PlaceResultCard extends StatelessWidget {
                             style: const TextStyle(
                               color: ChiwawaColors.primary,
                               fontSize: 11,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                             ),
                           ),
                         ),
@@ -94,47 +111,62 @@ class PlaceResultCard extends StatelessWidget {
                         fontSize: 13,
                       ),
                     ),
+                    if (result.confidence != null) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.verified_rounded,
+                            color: ChiwawaColors.success,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            '사진 일치도 ${(result.confidence! * 100).round()}%',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(color: ChiwawaColors.success),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
-          Container(
-            height: 120,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: ChiwawaColors.background,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: ChiwawaColors.border),
-            ),
-            child: const Text(
-              '지도',
-              style: TextStyle(
-                color: ChiwawaColors.textMuted,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ),
-          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.navigation, size: 18),
-                  label: const Text('경로 안내'),
+                child: OutlinedButton.icon(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit_location_alt_rounded, size: 18),
+                  label: const Text('장소 수정'),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onAddToPlan,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('일정에 추가'),
+                child: FilledButton.icon(
+                  onPressed: onDirections,
+                  icon: const Icon(Icons.navigation, size: 18),
+                  label: const Text('길찾기'),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: onAddToPlan,
+              icon: Icon(
+                isSaved ? Icons.check_rounded : Icons.add_rounded,
+                size: 18,
+              ),
+              label: const Text('일정에 추가'),
+            ),
           ),
         ],
       ),
