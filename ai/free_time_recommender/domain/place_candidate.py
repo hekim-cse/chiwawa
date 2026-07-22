@@ -164,3 +164,58 @@ class CategoryPlaceCandidates:
     category: RecommendationCategory
     display_name: str
     candidates: tuple[PlaceCandidate, ...]
+
+
+@dataclass(frozen=True)
+class RouteLegPlaceCandidate:
+    """검색된 장소와 해당 장소를 발견한 최적화 경로 구간."""
+
+    candidate: PlaceCandidate
+    day_index: int
+    leg_index: int
+    origin_place_id: str
+    destination_place_id: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate, PlaceCandidate):
+            raise TypeError("candidate는 PlaceCandidate여야 합니다.")
+        for name, value, minimum in (
+            ("day_index", self.day_index, 1),
+            ("leg_index", self.leg_index, 0),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise TypeError(f"{name}는 정수여야 합니다.")
+            if value < minimum:
+                raise ValueError(f"{name}는 {minimum} 이상이어야 합니다.")
+        _validate_non_empty_string(self.origin_place_id, "origin_place_id")
+        _validate_non_empty_string(
+            self.destination_place_id,
+            "destination_place_id",
+        )
+        if self.origin_place_id == self.destination_place_id:
+            raise ValueError("출발 장소와 도착 장소는 달라야 합니다.")
+
+
+@dataclass(frozen=True)
+class CategoryRouteLegPlaceCandidates:
+    """카테고리별 구간 식별 정보가 포함된 장소 후보 묶음."""
+
+    category: RecommendationCategory
+    display_name: str
+    candidates: tuple[RouteLegPlaceCandidate, ...]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.category, RecommendationCategory):
+            raise TypeError("category는 RecommendationCategory여야 합니다.")
+        _validate_non_empty_string(self.display_name, "display_name")
+        if not isinstance(self.candidates, tuple):
+            raise TypeError("candidates는 tuple이어야 합니다.")
+        for candidate in self.candidates:
+            if not isinstance(candidate, RouteLegPlaceCandidate):
+                raise TypeError(
+                    "candidates는 RouteLegPlaceCandidate만 포함해야 합니다."
+                )
+            if candidate.candidate.category is not self.category:
+                raise ValueError(
+                    "후보 카테고리가 그룹 카테고리와 일치하지 않습니다."
+                )
