@@ -51,9 +51,10 @@ class PlacesResolver(Protocol):
         self,
         latitude: float,
         longitude: float,
+        *,
         category: PlaceCategory | None = None,
-        radius_m: float = 1500,
-        max_result_count: int = 5,
+        radius_m: float,
+        max_result_count: int,
         language_code: str = "ko",
         region_code: str = "JP",
     ) -> list[ResolvedPlace]: ...
