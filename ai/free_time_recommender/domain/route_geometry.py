@@ -116,3 +116,76 @@ class RouteLegGeometry:
             raise ValueError(
                 "encoded_polyline은 비어 있을 수 없습니다."
             )
+
+
+@dataclass(frozen=True)
+class OptimizedRouteLegGeometryQuery:
+    """최적화 방문 순서의 한 구간 geometry 조회 조건."""
+
+    day_index: int
+    leg_index: int
+    origin_place_id: str
+    destination_place_id: str
+    geometry_query: RouteGeometryQuery
+
+    def __post_init__(self) -> None:
+        _validate_optimized_route_leg(
+            day_index=self.day_index,
+            leg_index=self.leg_index,
+            origin_place_id=self.origin_place_id,
+            destination_place_id=self.destination_place_id,
+        )
+        if not isinstance(self.geometry_query, RouteGeometryQuery):
+            raise TypeError("geometry_query는 RouteGeometryQuery여야 합니다.")
+
+
+@dataclass(frozen=True)
+class OptimizedRouteLegGeometry:
+    """최적화 경로 구간 식별 정보와 조회된 polyline."""
+
+    day_index: int
+    leg_index: int
+    origin_place_id: str
+    destination_place_id: str
+    geometry: RouteLegGeometry
+
+    def __post_init__(self) -> None:
+        _validate_optimized_route_leg(
+            day_index=self.day_index,
+            leg_index=self.leg_index,
+            origin_place_id=self.origin_place_id,
+            destination_place_id=self.destination_place_id,
+        )
+        if not isinstance(self.geometry, RouteLegGeometry):
+            raise TypeError("geometry는 RouteLegGeometry여야 합니다.")
+
+
+def _validate_optimized_route_leg(
+    *,
+    day_index: int,
+    leg_index: int,
+    origin_place_id: str,
+    destination_place_id: str,
+) -> None:
+    """최적화 경로 구간에 공통으로 필요한 식별 정보를 검증한다."""
+
+    if isinstance(day_index, bool) or not isinstance(day_index, int):
+        raise TypeError("day_index는 정수여야 합니다.")
+    if day_index < 1:
+        raise ValueError("day_index는 1 이상이어야 합니다.")
+    if isinstance(leg_index, bool) or not isinstance(leg_index, int):
+        raise TypeError("leg_index는 정수여야 합니다.")
+    if leg_index < 0:
+        raise ValueError("leg_index는 0 이상이어야 합니다.")
+
+    for field_name, place_id in (
+        ("origin_place_id", origin_place_id),
+        ("destination_place_id", destination_place_id),
+    ):
+        if not isinstance(place_id, str):
+            raise TypeError(f"{field_name}는 문자열이어야 합니다.")
+        if not place_id.strip():
+            raise ValueError(f"{field_name}는 비어 있을 수 없습니다.")
+
+    if origin_place_id == destination_place_id:
+        raise ValueError("출발 장소와 도착 장소는 달라야 합니다.")
