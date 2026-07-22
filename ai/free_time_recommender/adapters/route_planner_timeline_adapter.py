@@ -14,6 +14,9 @@ from ai.free_time_recommender.domain.models import (
 from ai.free_time_recommender.domain.recommendation_budget import (
     RecommendationTimeWindow,
 )
+from ai.free_time_recommender.domain.route_insertion import (
+    RouteLegInsertionWindow,
+)
 from ai.route_planner.domain.trip_schemas import (
     RouteStopType,
     TimelineDTO,
@@ -214,6 +217,63 @@ class RoutePlannerTimelineAdapter:
             previous_place_id=previous_stop.place_id,
             next_place_id=next_stop.place_id,
         )
+
+    def to_route_leg_insertion_windows(
+        self,
+        timeline: TimelineDTO,
+    ) -> tuple[RouteLegInsertionWindow, ...]:
+        """Timeline의 모든 이동 구간을 추천 삽입 범위로 변환한다."""
+
+        # 기존 변환과 동일한 Timeline 계약 검증
+        self.to_day_availability(timeline)
+
+        original_timeline_end_at = self._parse_datetime(
+            value=timeline.actual_end_at,
+            field_name="TimelineDTO.actual_end_at",
+        )
+        planned_end_at = self._parse_datetime(
+            value=timeline.planned_end_at,
+            field_name="TimelineDTO.planned_end_at",
+        )
+        parsed_stops = tuple(
+            self._parse_stop(stop=stop, index=index)
+            for index, stop in enumerate(timeline.timeline_stops)
+        )
+
+        windows: list[RouteLegInsertionWindow] = []
+        for leg_index, (previous_stop, next_stop) in enumerate(
+            zip(parsed_stops, parsed_stops[1:])
+        ):
+            original_travel_minutes = int(
+                (
+                    next_stop.arrival_at
+                    - previous_stop.departure_at
+                ).total_seconds()
+                // 60
+            )
+            windows.append(
+                RouteLegInsertionWindow(
+                    day_index=timeline.day_index,
+                    leg_index=leg_index,
+                    previous_place_id=(
+                        previous_stop.source.place_id
+                    ),
+                    next_place_id=next_stop.source.place_id,
+                    previous_departure_at=(
+                        previous_stop.departure_at
+                    ),
+                    next_arrival_at=next_stop.arrival_at,
+                    original_travel_minutes=(
+                        original_travel_minutes
+                    ),
+                    original_timeline_end_at=(
+                        original_timeline_end_at
+                    ),
+                    planned_end_at=planned_end_at,
+                )
+            )
+
+        return tuple(windows)
 
     def _validate_summary_times(
         self,
