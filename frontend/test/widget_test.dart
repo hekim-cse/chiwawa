@@ -271,7 +271,11 @@ void main() {
     expect(find.byKey(const ValueKey('select-saved-place-아사쿠사 센소지')),
         findsOneWidget);
 
-    await tester.tap(find.byKey(const ValueKey('select-saved-place-아사쿠사 센소지')));
+    final savedPlace =
+        find.byKey(const ValueKey('select-saved-place-아사쿠사 센소지'));
+    await tester.ensureVisible(savedPlace);
+    await tester.pumpAndSettle();
+    await tester.tap(savedPlace);
     await tester.pump(const Duration(milliseconds: 250));
 
     expect(find.widgetWithText(InputChip, '아사쿠사 센소지'), findsOneWidget);

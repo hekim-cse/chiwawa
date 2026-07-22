@@ -71,9 +71,12 @@ class _PlaceInputFieldState extends State<PlaceInputField> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final place in widget.places)
+              for (var index = 0; index < widget.places.length; index++)
                 InputChip(
-                  label: Text(place),
+                  key: ValueKey(
+                    'selected-place-${widget.places[index]}-$index',
+                  ),
+                  label: Text(widget.places[index]),
                   selected: true,
                   selectedColor: ChiwawaColors.secondary,
                   checkmarkColor: ChiwawaColors.primary,
@@ -82,7 +85,7 @@ class _PlaceInputFieldState extends State<PlaceInputField> {
                     color: ChiwawaColors.primary,
                     fontWeight: FontWeight.w800,
                   ),
-                  onDeleted: () => widget.onRemove(place),
+                  onDeleted: () => widget.onRemove(widget.places[index]),
                 ),
             ],
           ),
