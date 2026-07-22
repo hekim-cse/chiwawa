@@ -6,7 +6,10 @@ import pytest
 from pydantic import ValidationError
 
 from ai.image_search.domain.schemas import PlaceCategory
-from ai.image_search.providers.vision_llm_provider import VisionLlmProvider
+from ai.image_search.providers.vision_llm_provider import (
+    VisionLlmProvider,
+    _NOTE_PROMPT_MAX_CHARS,
+)
 
 
 # --- 가짜 genai client (client.models.generate_content 만 흉내) ---
@@ -99,6 +102,17 @@ class TestIdentify:
 
         prompt_texts = [p for p in capture["contents"] if isinstance(p, str)]
         assert any("한적한 골목 카페" in t for t in prompt_texts)
+
+    # 과도하게 긴 note는 상한까지만 프롬프트에 실린다 (주입·비대화 표면 축소)
+    def test_long_note_is_truncated_in_prompt(self):
+        provider, capture = make_provider(valid_response())
+        long_note = "가" * (_NOTE_PROMPT_MAX_CHARS + 100)
+
+        provider.identify(image_bytes=b"x", note=long_note)
+
+        joined = "\n".join(p for p in capture["contents"] if isinstance(p, str))
+        assert "가" * _NOTE_PROMPT_MAX_CHARS in joined  # 상한까지는 실림
+        assert "가" * (_NOTE_PROMPT_MAX_CHARS + 1) not in joined  # 초과분은 잘림
 
     # LLM 이 범위 밖 confidence 를 주면 방어적으로 거부한다 (재검증)
     def test_rejects_out_of_range_confidence_from_llm(self):
