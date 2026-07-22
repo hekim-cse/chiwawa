@@ -1,0 +1,31 @@
+# 빌드 컨텍스트 = 레포 루트. 백엔드 실행에 불필요한 것 제외.
+
+# 프론트엔드(Flutter) 전체 — 백엔드 이미지에 불필요
+frontend/
+
+# 파이썬 캐시/가상환경/빌드 산출물
+**/__pycache__/
+**/*.pyc
+**/.venv/
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/build/
+**/dist/
+**/*.egg-info/
+
+# 테스트 (런타임 불필요)
+backend/tests/
+ai/**/tests/
+
+# 개발 도구/문서/버전관리
+.git/
+.github/
+.claude/
+**/*.md
+**/docs/
+
+# 로컬 환경/시크릿 — 절대 이미지에 넣지 않는다
+.env
+**/.env
+**/*.db
