@@ -171,6 +171,79 @@ def test_adapter_output_detects_remaining_free_time():
     assert slot.next_place_id is None
 
 
+# 마지막 방문지와 등록된 도착지 사이의 추천 삽입 범위 변환 검증
+def test_adapter_builds_recommendation_window_before_end_place():
+    window = (
+        RoutePlannerTimelineAdapter()
+        .to_recommendation_time_window(make_timeline())
+    )
+
+    assert window.day_index == 1
+    assert window.start_at.isoformat() == "2026-08-01T14:35:00"
+    assert window.end_at.isoformat() == "2026-08-01T20:00:00"
+    assert window.available_minutes == 325
+    assert window.previous_place_id == "poi-c"
+    assert window.next_place_id == "end"
+
+
+# 방문 POI가 없으면 출발지와 도착지 사이의 추천 삽입 범위 변환 검증
+def test_adapter_builds_recommendation_window_between_start_and_end():
+    timeline = make_timeline().model_copy(
+        update={
+            "actual_end_at": "2026-08-01T10:30",
+            "total_travel_minutes": 30,
+            "total_stay_minutes": 0,
+            "timeline_stops": [
+                make_stop(
+                    RouteStopType.START,
+                    "start",
+                    "출발지",
+                    "2026-08-01T10:00",
+                    "2026-08-01T10:00",
+                    0,
+                ),
+                make_stop(
+                    RouteStopType.END,
+                    "end",
+                    "도착지",
+                    "2026-08-01T10:30",
+                    "2026-08-01T10:30",
+                    0,
+                ),
+            ],
+        }
+    )
+
+    window = (
+        RoutePlannerTimelineAdapter()
+        .to_recommendation_time_window(timeline)
+    )
+
+    assert window.start_at.isoformat() == "2026-08-01T10:00:00"
+    assert window.available_minutes == 600
+    assert window.previous_place_id == "start"
+    assert window.next_place_id == "end"
+
+
+# 마지막 방문지 출발이 계획 종료보다 늦으면 추천 범위 생성 실패 검증
+def test_adapter_rejects_window_without_positive_time_budget():
+    timeline = make_timeline().model_copy(
+        update={
+            "planned_end_at": "2026-08-01T14:30",
+            "exceeds_planned_end": True,
+        }
+    )
+
+    with pytest.raises(
+        RoutePlannerTimelineAdapterError,
+        match="마지막 방문지 출발 시각",
+    ):
+        (
+            RoutePlannerTimelineAdapter()
+            .to_recommendation_time_window(timeline)
+        )
+
+
 # 계획 종료를 초과한 Timeline은 계획 범위 전체를 점유하는지 검증
 def test_to_day_availability_caps_busy_time_at_planned_end():
     timeline = make_timeline().model_copy(
