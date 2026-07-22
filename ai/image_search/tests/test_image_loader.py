@@ -6,6 +6,7 @@ import pytest
 from ai.image_search.domain.search_schemas import ImageSearchRequest
 from ai.image_search.services.image_loader import (
     ImageLoadError,
+    detect_image_mime_type,
     load_image_bytes,
     validate_image_path,
     validate_image_url,
@@ -73,6 +74,32 @@ class TestValidateImageUrl:
         )
         with pytest.raises(ImageLoadError):
             validate_image_url("https://nonexistent.invalid/a.jpg")
+
+
+class TestDetectImageMimeType:
+    # 매직 바이트로 대표 이미지 포맷을 식별한다
+    @pytest.mark.parametrize(
+        "data,expected",
+        [
+            (b"\xff\xd8\xff\xe0\x00\x10JFIF", "image/jpeg"),
+            (b"\x89PNG\r\n\x1a\n\x00\x00\x00", "image/png"),
+            (b"GIF89a\x01\x00\x01\x00", "image/gif"),
+            (b"GIF87a\x01\x00\x01\x00", "image/gif"),
+            (b"RIFF\x24\x00\x00\x00WEBPVP8 ", "image/webp"),
+            (b"\x00\x00\x00\x18ftypheic\x00\x00\x00\x00", "image/heic"),
+        ],
+    )
+    def test_detects_known_formats(self, data, expected):
+        assert detect_image_mime_type(data) == expected
+
+    # 형식을 알 수 없으면 기본값(jpeg)으로 둔다
+    def test_unknown_defaults_to_jpeg(self):
+        assert detect_image_mime_type(b"not-an-image-header") == "image/jpeg"
+
+    # 매우 짧은 바이트에도 예외 없이 기본값을 돌려준다
+    def test_short_bytes_do_not_raise(self):
+        assert detect_image_mime_type(b"") == "image/jpeg"
+        assert detect_image_mime_type(b"\xff") == "image/jpeg"
 
 
 class TestValidateImagePath:

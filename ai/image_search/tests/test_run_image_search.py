@@ -47,8 +47,10 @@ class FakePlaces:
     def __init__(self, resolved=None, nearby=None):
         self.resolved = resolved
         self.nearby = nearby if nearby is not None else []
+        self.resolve_calls = []
 
     def resolve_place(self, place_name, language_code="ko", region_code="JP"):
+        self.resolve_calls.append(place_name)
         if self.resolved is None:
             raise ValueError(f"No Google Places result found for: {place_name}")
         return self.resolved
@@ -174,6 +176,26 @@ class TestRunDebug:
 
         assert report["places_resolve"]["ok"] is True
         assert report["places_resolve"]["result"]["name"] == "센소지"
+
+    # 약한 랜드마크(score<임계값)면 debug 도 캐스케이드처럼 LLM 추정을 시드로 쓴다
+    # (debug 가 캐스케이드 정책을 재사용해 드리프트하지 않는지 검증)
+    def test_debug_weak_landmark_uses_llm_seed(self, photo):
+        request = build_request(
+            image_path=str(photo), image_url=None, note=None, max_candidates=2
+        )
+        places = FakePlaces(resolved=resolved_place(name="블루보틀"))
+
+        report = run_debug(
+            request,
+            image_path=photo,
+            landmark=FakeLandmark(landmark_det(name="닮은건물", score=0.4)),
+            vision_llm=FakeVision(vision_id(guess="블루보틀")),
+            places=places,
+        )
+
+        # 약한 랜드마크 이름이 아니라 LLM 추정으로 좌표 확정을 시도해야 한다
+        assert places.resolve_calls == ["블루보틀"]
+        assert report["seed"]["source"] == "LLM"
 
 
 class TestMain:
