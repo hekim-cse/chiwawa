@@ -6,13 +6,24 @@ on:
       - main
     paths:
       - "ai/route_planner/**"
+      - "ai/free_time_recommender/**"
+      - "ai/route_planner/requirements.txt"
       - ".github/workflows/modal-route-planner-deploy.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: modal-route-planner-production
+  cancel-in-progress: false
+
 jobs:
   deploy:
-    name: Deploy route planner to Modal
+    name: Test and deploy route planner to Modal
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     env:
       MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
@@ -30,8 +41,15 @@ jobs:
       - name: Install route planner dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r ai/route_planner/requirements.txt
+          python -m pip install \
+            -r ai/route_planner/requirements.txt
+
+      - name: Run deployment regression tests
+        run: |
+          python -m pytest \
+            ai/route_planner/tests \
+            ai/free_time_recommender/tests
 
       - name: Deploy Modal route planner app
         run: |
-          modal deploy -m ai.route_planner.modal_experiments.route_api
+          modal deploy ai/route_planner/modal_app.py
