@@ -3,7 +3,8 @@
 #   - PhotoPlaceCandidateRead (응답 후보)
 #   - PhotoPlaceSearchRequest (검색 요청)
 # 백엔드를 import 하지 않고(패키지 결합 금지) 계약 필드를 스냅샷으로 고정한다.
-# 어느 쪽 스키마가 바뀌면 이 테스트가 먼저 실패해 드리프트를 조기에 알린다.
+# AI 쪽 스키마가 이 스냅샷에서 벗어나면 테스트가 실패해 알린다.
+# (백엔드 스키마 자체는 import 하지 않아 여기서 직접 감지하지 못하며, 수동 동기화 대상이다.)
 import pytest
 from pydantic import ValidationError
 

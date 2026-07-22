@@ -28,6 +28,10 @@ _INSTRUCTION = """너는 여행 사진에서 장소를 추정하는 전문가다
 - confidence: 실제 확신도를 정직하게 매겨라. 대략 — 0.9 이상: 간판·형태로 장소가 분명함 / 0.6~0.8: 근거는 있으나 확실치 않음 / 0.4~0.6: 카테고리는 확실하나 특정 장소는 불명(이때 place_name_guess는 보통 null) / 0.2 이하: 거의 추측. place_name_guess가 null이면 낮은 값이어야 한다."""
 
 
+# 프롬프트에 싣는 사용자 메모의 최대 길이. 과도한 입력이 프롬프트를 비대화하거나 주입 표면이 되는 것을 막는다.
+_NOTE_PROMPT_MAX_CHARS = 500
+
+
 # Gemini 를 감싸 사진 -> VisionIdentification 으로 변환하는 Provider
 class VisionLlmProvider:
     # 비전 지원 저비용 모델. 실제 응답 검증(step 7 CLI)에서 조정 가능.
@@ -90,9 +94,10 @@ class VisionLlmProvider:
             f"finish_reason={finish_reason}, prompt_feedback={prompt_feedback}"
         )
 
-    # 지시문에 사용자 메모를 힌트로 덧붙인다
+    # 지시문에 사용자 메모를 힌트로 덧붙인다 (과도한 길이는 잘라 프롬프트 비대화·주입 표면을 막는다)
     @staticmethod
     def _build_prompt(note: str | None) -> str:
         if note:
-            return f"{_INSTRUCTION}\n\n참고 - 사용자 메모: {note}"
+            trimmed = note[:_NOTE_PROMPT_MAX_CHARS]
+            return f"{_INSTRUCTION}\n\n참고 - 사용자 메모: {trimmed}"
         return _INSTRUCTION
