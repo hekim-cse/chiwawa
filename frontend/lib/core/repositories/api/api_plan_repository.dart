@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../api/api_exception.dart';
+import '../../models/route_planning_models.dart';
 import '../../models/transport_mode.dart';
 import '../../models/travel_models.dart';
 import '../../services/trip_session_service.dart';
@@ -24,33 +25,42 @@ class ApiPlanRepository implements PlanRepository {
   List<String> get defaultSelectedPlaces => const [];
 
   @override
-  Future<List<RoutePlace>> optimizeRoute(
-    List<String> places,
-    TravelPreference preference,
-    TransportMode transportMode,
+  Future<WantedPlaceRecord> saveWantedPlace(
+    PlanRoutePlaceInput place,
   ) async {
-    await tripIdStore.restoreCompleted;
-    final tripId = tripIdStore.tripId;
-    if (tripId == null || tripId.isEmpty) {
-      throw const ApiException('여행 정보가 없어요. 여행을 먼저 만들어 주세요.');
+    final tripId = await _requireTripId();
+    try {
+      final response = await dio.post<Map<String, Object?>>(
+        '/api/v1/trips/$tripId/wanted-places',
+        data: {
+          'name': place.name,
+          if (place.latitude != null) 'latitude': place.latitude,
+          if (place.longitude != null) 'longitude': place.longitude,
+        },
+      );
+      return WantedPlaceRecord.fromJson(response.data ?? const {});
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
     }
+  }
 
-    // 백엔드는 트립에 등록된 장소(wanted-places/schedule)를 대상으로 최적화한다.
-    // 요청 바디에 전달 가능한 값은 start_place, transport_mode 두 가지뿐이다.
-    //
-    // NOTE(A9-협의): 화면에서 고른 `places`는 백엔드 계약상 요청에 실리지 않는다.
-    //   선택 장소를 먼저 `wanted-places`로 등록하는 흐름이 있어야 최적화 대상에
-    //   포함된다(현재 FE 미구현). 등록 흐름/대상 정의를 백엔드와 확정해야 한다.
-    // NOTE(A6-협의): `preference`(테마·취향)는 요청 필드가 없어 전달 불가.
+  @override
+  Future<List<RoutePlace>> optimizeRoute(
+    RouteOptimizationRequest request,
+  ) async {
+    final tripId = await _requireTripId();
+
+    // 선택 장소는 이 호출 전에 wanted-place로 저장하고 반환 ID를 보존한다.
+    // 선택 ID 목록과 days[]는 Swagger가 확정될 때 요청 바디에 연결한다.
     try {
       final response = await dio.post<Map<String, Object?>>(
         '/api/v1/trips/$tripId/route-optimizations',
-        data: {'transport_mode': transportMode.backendCode},
+        data: {'transport_mode': request.transportMode.backendCode},
       );
       final json = response.data ?? const {};
       final responseMode = TransportModeMapping.fromBackendCode(
         json['transport_mode'] as String?,
-        fallback: transportMode,
+        fallback: request.transportMode,
       );
       final stops = json['stops'] as List<Object?>? ?? const [];
       return [
@@ -65,12 +75,22 @@ class ApiPlanRepository implements PlanRepository {
     }
   }
 
+  Future<String> _requireTripId() async {
+    await tripIdStore.restoreCompleted;
+    final tripId = tripIdStore.tripId;
+    if (tripId == null || tripId.isEmpty) {
+      throw const ApiException('여행 정보가 없어요. 여행을 먼저 만들어 주세요.');
+    }
+    return tripId;
+  }
+
   RoutePlace _stopToRoutePlace(
     Map<String, Object?> json,
     TransportMode transportMode,
   ) {
     final travelMinutes = (json['estimated_travel_minutes'] as num?)?.toInt();
     return RoutePlace(
+      placeId: json['place_id']?.toString() ?? '',
       name: json['name'] as String? ?? '',
       // NOTE(협의): 백엔드 stop은 이동시간만 제공하며 체류시간(stay)은 없다.
       duration: '',

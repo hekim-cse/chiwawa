@@ -345,9 +345,11 @@ class RoutePlace {
     required this.duration,
     required this.transport,
     required this.category,
+    this.placeId = '',
     this.travelCost = '',
   });
 
+  final String placeId;
   final String name;
   final String duration;
   final String transport;
@@ -356,6 +358,7 @@ class RoutePlace {
 
   factory RoutePlace.fromJson(Map<String, Object?> json) {
     return RoutePlace(
+      placeId: json['place_id']?.toString() ?? json['id']?.toString() ?? '',
       name: json['name'] as String? ?? '',
       duration: json['duration'] as String? ??
           '${json['stay_minutes'] ?? json['expected_stay_minutes'] ?? ''}분',
@@ -370,6 +373,7 @@ class RoutePlace {
 
   Map<String, Object?> toJson() {
     return {
+      'place_id': placeId,
       'name': name,
       'duration': duration,
       'transport': transport,
@@ -380,8 +384,10 @@ class RoutePlace {
 }
 
 extension RoutePlaceIdentity on RoutePlace {
-  String get identityKey =>
-      [name, duration, transport, category, travelCost].join('|');
+  String get identityKey {
+    if (placeId.trim().isNotEmpty) return placeId;
+    return [name, duration, transport, category, travelCost].join('|');
+  }
 }
 
 class RouteOptimizationState {
@@ -456,6 +462,8 @@ class FreeTimeRecommend {
 class PhotoSearchResult {
   const PhotoSearchResult({
     this.id = '',
+    this.searchId = '',
+    this.wantedPlaceId = '',
     required this.name,
     required this.address,
     required this.category,
@@ -466,6 +474,8 @@ class PhotoSearchResult {
   });
 
   final String id;
+  final String searchId;
+  final String wantedPlaceId;
   final String name;
   final String address;
   final String category;
@@ -476,6 +486,8 @@ class PhotoSearchResult {
 
   PhotoSearchResult copyWith({
     String? id,
+    String? searchId,
+    String? wantedPlaceId,
     String? name,
     String? address,
     String? category,
@@ -486,6 +498,8 @@ class PhotoSearchResult {
   }) {
     return PhotoSearchResult(
       id: id ?? this.id,
+      searchId: searchId ?? this.searchId,
+      wantedPlaceId: wantedPlaceId ?? this.wantedPlaceId,
       name: name ?? this.name,
       address: address ?? this.address,
       category: category ?? this.category,
@@ -499,6 +513,8 @@ class PhotoSearchResult {
   factory PhotoSearchResult.fromJson(Map<String, Object?> json) {
     return PhotoSearchResult(
       id: json['place_id']?.toString() ?? json['id']?.toString() ?? '',
+      searchId: json['search_id']?.toString() ?? '',
+      wantedPlaceId: json['wanted_place_id']?.toString() ?? '',
       name: json['name'] as String? ?? '',
       address: json['address'] as String? ?? '',
       category: json['category'] as String? ?? '',
@@ -512,6 +528,8 @@ class PhotoSearchResult {
   Map<String, Object?> toJson() {
     return {
       'place_id': id,
+      'search_id': searchId,
+      'wanted_place_id': wantedPlaceId,
       'name': name,
       'address': address,
       'category': category,

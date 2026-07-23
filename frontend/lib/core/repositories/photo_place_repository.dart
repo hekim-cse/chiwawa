@@ -4,6 +4,7 @@ import '../api/dio_client.dart';
 import '../auth/auth_controller.dart';
 import '../env.dart';
 import '../mock_data.dart' as mock;
+import '../models/photo_upload.dart';
 import '../models/travel_models.dart';
 import '../services/trip_session_service.dart';
 import 'api/api_photo_place_repository.dart';
@@ -24,8 +25,9 @@ abstract class PhotoPlaceRepository {
   PhotoSearchResult get defaultResult;
 
   Future<List<PhotoSearchResult>> fetchRecentSearches();
-  Future<PhotoSearchResult> analyzePhoto(String imagePath);
-  Future<List<PhotoSearchResult>> analyzePhotoCandidates(String imagePath);
+  Future<PhotoSearchResult> analyzePhoto(PhotoUpload upload);
+  Future<List<PhotoSearchResult>> analyzePhotoCandidates(PhotoUpload upload);
+  Future<PhotoSearchResult> confirmPhotoPlace(PhotoSearchResult candidate);
 }
 
 class MockPhotoPlaceRepository implements PhotoPlaceRepository {
@@ -39,16 +41,34 @@ class MockPhotoPlaceRepository implements PhotoPlaceRepository {
       Future.value(mock.recentSearches);
 
   @override
-  Future<PhotoSearchResult> analyzePhoto(String imagePath) async {
-    await Future<void>.delayed(const Duration(milliseconds: 850));
-    return mock.photoSearchResult;
+  Future<PhotoSearchResult> analyzePhoto(PhotoUpload upload) async {
+    final candidates = await analyzePhotoCandidates(upload);
+    return candidates.first;
   }
 
   @override
   Future<List<PhotoSearchResult>> analyzePhotoCandidates(
-    String imagePath,
+    PhotoUpload upload,
   ) async {
     await Future<void>.delayed(const Duration(milliseconds: 850));
-    return mock.photoSearchCandidates;
+    return [
+      for (final candidate in mock.photoSearchCandidates)
+        candidate.copyWith(
+          searchId: 'mock-photo-search',
+          imagePath: upload.previewPath,
+        ),
+    ];
+  }
+
+  @override
+  Future<PhotoSearchResult> confirmPhotoPlace(
+    PhotoSearchResult candidate,
+  ) async {
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    return candidate.copyWith(
+      wantedPlaceId: candidate.wantedPlaceId.isNotEmpty
+          ? candidate.wantedPlaceId
+          : 'mock-wanted-${candidate.identityKey}',
+    );
   }
 }

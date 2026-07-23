@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../app/theme.dart';
+import '../../core/models/photo_upload.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/saved_photo_places.dart';
@@ -21,7 +22,9 @@ import 'widgets/recent_searches_section.dart';
 export 'explore_controller.dart'
     show
         exploreImagePathProvider,
+        explorePhotoUploadProvider,
         exploreAnalyzingProvider,
+        exploreSavingPlaceProvider,
         exploreResultVisibleProvider,
         exploreAnalysisErrorProvider,
         exploreSelectedResultProvider,
@@ -42,6 +45,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   Widget build(BuildContext context) {
     final imagePath = ref.watch(exploreImagePathProvider);
     final isAnalyzing = ref.watch(exploreAnalyzingProvider);
+    final isSavingPlace = ref.watch(exploreSavingPlaceProvider);
     final showResult = ref.watch(exploreResultVisibleProvider);
     final analysisError = ref.watch(exploreAnalysisErrorProvider);
     final selectedResult = ref.watch(exploreSelectedResultProvider);
@@ -92,6 +96,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
               result: selectedResult,
               imagePath: imagePath,
               isSaved: selectedResultSaved,
+              isSaving: isSavingPlace,
               onEdit: () => _editSelectedPlace(selectedResult),
               onDirections: () => _openDirections(selectedResult),
               onAddToPlan: () => _savePlaceToPlan(selectedResult),
@@ -108,8 +113,20 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     );
   }
 
-  void _savePlaceToPlan(PhotoSearchResult result) {
-    final added = ref.read(savedPhotoPlacesProvider.notifier).addPlace(result);
+  Future<void> _savePlaceToPlan(PhotoSearchResult result) async {
+    final confirmed =
+        await ref.read(exploreControllerProvider).confirmPhotoPlace(result);
+    if (!mounted) return;
+    if (confirmed == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('장소를 서버에 저장하지 못했어요. 다시 시도해 주세요.')),
+        );
+      return;
+    }
+    final added =
+        ref.read(savedPhotoPlacesProvider.notifier).addPlace(confirmed);
     final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
@@ -138,8 +155,15 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final picked = await _picker.pickImage(source: source, imageQuality: 80);
     if (!mounted || picked == null) return;
 
+    final upload = PhotoUpload(
+      bytes: await picked.readAsBytes(),
+      fileName: picked.name,
+      mimeType: picked.mimeType ?? _mimeTypeFor(picked.name),
+      previewPath: picked.path,
+    );
+    if (!mounted) return;
     final succeeded =
-        await ref.read(exploreControllerProvider).analyzePhoto(picked.path);
+        await ref.read(exploreControllerProvider).analyzePhoto(upload);
     if (!mounted || succeeded) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('사진 분석에 실패했어요. 다시 시도해 주세요.')),
@@ -147,13 +171,13 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
   }
 
   Future<void> _retryAnalysis() async {
-    final imagePath = ref.read(exploreImagePathProvider);
-    if (imagePath == null) {
+    final upload = ref.read(explorePhotoUploadProvider);
+    if (upload == null) {
       await _pickAndAnalyzePhoto();
       return;
     }
 
-    await ref.read(exploreControllerProvider).analyzePhoto(imagePath);
+    await ref.read(exploreControllerProvider).analyzePhoto(upload);
   }
 
   Future<void> _openDirections(PhotoSearchResult result) async {
@@ -175,4 +199,14 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
       const SnackBar(content: Text('외부 지도를 열지 못했어요.')),
     );
   }
+}
+
+String _mimeTypeFor(String fileName) {
+  final extension = fileName.split('.').last.toLowerCase();
+  return switch (extension) {
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'heic' || 'heif' => 'image/heic',
+    _ => 'image/jpeg',
+  };
 }
