@@ -4,6 +4,11 @@ import httpx
 
 from ai.image_search.domain.schemas import PlaceCategory, ResolvedPlace
 from ai.image_search.providers.env import get_google_maps_api_key
+from ai.image_search.providers.errors import (
+    ProviderHttpError,
+    ProviderTimeoutError,
+    ProviderTransportError,
+)
 
 
 # 우리 카테고리 -> Google Places includedTypes 매핑 (근처 검색 필터용)
@@ -142,15 +147,21 @@ class PlacesProvider:
             ),
         }
 
-        with self._client() as client:
-            response = client.post(url, headers=headers, json=payload)
+        try:
+            with self._client() as client:
+                response = client.post(url, headers=headers, json=payload)
+        except httpx.TimeoutException as error:
+            raise ProviderTimeoutError(
+                "Google Places 요청이 시간 제한을 초과했습니다."
+            ) from error
+        except httpx.TransportError as error:
+            raise ProviderTransportError(
+                f"Google Places 전송에 실패했습니다: {error}"
+            ) from error
 
-        # API 요청 실패 시 상태 코드와 응답 본문을 함께 알린다
+        # API 요청 실패 시 상태 코드를 명시적 타입으로 알린다
         if response.status_code >= 400:
-            raise RuntimeError(
-                "Google Places API 요청 실패: "
-                f"status={response.status_code}, body={response.text}"
-            )
+            raise ProviderHttpError("Google Places", response.status_code)
 
         data = response.json()
         # 불량 항목(필수값 누락) 하나 때문에 전체를 버리지 않도록 개별 건너뛴다.

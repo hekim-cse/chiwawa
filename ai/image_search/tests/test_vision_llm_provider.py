@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from ai.image_search.domain.schemas import PlaceCategory
+from ai.image_search.providers.errors import InvalidProviderResponseError
 from ai.image_search.providers.vision_llm_provider import (
     VisionLlmProvider,
     _NOTE_PROMPT_MAX_CHARS,
@@ -139,7 +140,7 @@ class TestIdentify:
         assert result.place_name_guess is None
         assert result.category is PlaceCategory.CAFE
 
-    # 빈 응답(text=None)은 진단 정보를 담은 RuntimeError 로 알린다
+    # 빈 응답(text=None)은 진단 정보를 담은 InvalidProviderResponseError 로 알린다
     # (안전 차단·토큰 초과 시 SDK 가 None 을 주는데, 그대로 파싱하면 원인 불명 오류가 됨)
     def test_empty_response_raises_diagnosable_error(self):
         provider, _ = make_provider(
@@ -148,7 +149,7 @@ class TestIdentify:
             candidates=[_FakeCandidate(finish_reason="SAFETY")],
         )
 
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(InvalidProviderResponseError) as exc_info:
             provider.identify(image_bytes=b"x")
 
         message = str(exc_info.value)
