@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     google_cloud_vision_api_key: SecretStr | None = None
     gemini_api_key: SecretStr | None = None
     cors_allow_origins: str = "http://localhost:8080"
+    # 데모 모드: 토큰 없이(게스트) 접근 시 고정 데모 유저로 처리한다.
+    # 시연에서 로그인 없이 메모리얼 앨범을 보여주기 위한 용도. 기본값 off.
+    memorial_demo_mode: bool = False
+    memorial_demo_user_id: int = 1
 
     def allowed_origins(self) -> list[str]:
         return [
