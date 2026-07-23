@@ -29,6 +29,11 @@ def get_current_user_id(
         Depends(security),
     ],
 ) -> int:
+    # 데모 모드에서는 토큰 없이 접근하면 고정 데모 유저로 처리한다.
+    # (시연에서 로그인 없이 메모리얼 앨범을 보여주기 위한 우회로. 기본값 off.)
+    settings = get_settings()
+    if credentials is None and settings.memorial_demo_mode:
+        return settings.memorial_demo_user_id
     claims = get_current_user_from_credentials(credentials)
     subject = claims.sub
     if not subject.isdigit():
