@@ -6,7 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:chiwawa/core/confirmed_route.dart';
 import 'package:chiwawa/core/auth/auth_controller.dart';
-import 'package:chiwawa/core/models/transport_mode.dart';
+import 'package:chiwawa/core/models/route_planning_models.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
 import 'package:chiwawa/core/repositories/plan_repository.dart';
 import 'package:chiwawa/core/saved_photo_places.dart';
@@ -21,10 +21,15 @@ class _FailingPlanRepository implements PlanRepository {
   List<String> get defaultSelectedPlaces => const ['아사쿠사 센소지', '도쿄 타워'];
 
   @override
+  Future<WantedPlaceRecord> saveWantedPlace(
+    PlanRoutePlaceInput place,
+  ) async {
+    return WantedPlaceRecord(id: 'wanted-${place.localId}', name: place.name);
+  }
+
+  @override
   Future<List<RoutePlace>> optimizeRoute(
-    List<String> places,
-    TravelPreference preference,
-    TransportMode transportMode,
+    RouteOptimizationRequest request,
   ) async {
     throw StateError('mock failure');
   }
@@ -37,10 +42,15 @@ class _ControlledPlanRepository implements PlanRepository {
   List<String> get defaultSelectedPlaces => const ['첫 장소', '두 번째 장소'];
 
   @override
+  Future<WantedPlaceRecord> saveWantedPlace(
+    PlanRoutePlaceInput place,
+  ) async {
+    return WantedPlaceRecord(id: 'wanted-${place.localId}', name: place.name);
+  }
+
+  @override
   Future<List<RoutePlace>> optimizeRoute(
-    List<String> places,
-    TravelPreference preference,
-    TransportMode transportMode,
+    RouteOptimizationRequest request,
   ) {
     return completer.future;
   }
@@ -585,12 +595,22 @@ void main() {
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
 
-    expect(find.text('사진으로 저장한 장소'), findsOneWidget);
-    expect(find.byKey(const ValueKey('select-saved-place-place-sensoji')),
-        findsOneWidget);
+    expect(
+      find.text('사진으로 저장한 장소', skipOffstage: false),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(
+        const ValueKey('select-saved-place-place-sensoji'),
+        skipOffstage: false,
+      ),
+      findsOneWidget,
+    );
 
-    final savedPlace =
-        find.byKey(const ValueKey('select-saved-place-place-sensoji'));
+    final savedPlace = find.byKey(
+      const ValueKey('select-saved-place-place-sensoji'),
+      skipOffstage: false,
+    );
     await tester.ensureVisible(savedPlace);
     await tester.pumpAndSettle();
     await tester.tap(savedPlace);
@@ -623,8 +643,12 @@ void main() {
 
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
-    final removeSavedPlaceButton =
-        find.byKey(const ValueKey('remove-saved-place-place-sensoji')).last;
+    final removeSavedPlaceButton = find
+        .byKey(
+          const ValueKey('remove-saved-place-place-sensoji'),
+          skipOffstage: false,
+        )
+        .last;
     await tester.ensureVisible(removeSavedPlaceButton);
     await tester.pumpAndSettle();
     final removeButtonSize = tester.getSize(removeSavedPlaceButton);
@@ -647,10 +671,13 @@ void main() {
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
 
-    await tester
-        .ensureVisible(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    final optimizeButton = find.byKey(
+      const ValueKey('plan-optimize-route'),
+      skipOffstage: false,
+    );
+    await tester.ensureVisible(optimizeButton);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    await tester.tap(optimizeButton);
     await tester.pumpAndSettle();
 
     final container = ProviderScope.containerOf(
@@ -673,6 +700,97 @@ void main() {
       find.byKey(const ValueKey('itinerary-summary-cost')),
       findsOneWidget,
     );
+  });
+
+  testWidgets('plan day constraints stay isolated and block invalid time',
+      (tester) async {
+    useNarrowTestSurface(tester);
+    await pumpAppAsGuest(tester);
+
+    await tester.tap(find.bySemanticsLabel('일정'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('하루 시작과 마무리'), findsOneWidget);
+    expect(find.text('09:00'), findsOneWidget);
+    expect(find.text('20:00'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('plan-max-place-count-1')),
+      findsOneWidget,
+    );
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChiwawaApp)),
+    );
+    container
+        .read(planDayConstraintsProvider.notifier)
+        .updateEndTime(1, '08:00');
+    await tester.pumpAndSettle();
+
+    expect(find.text('도착 시간은 출발 시간보다 늦어야 해요.'), findsOneWidget);
+    final optimizeButton = tester.widget<ElevatedButton>(
+      find.byKey(
+        const ValueKey('plan-optimize-route'),
+        skipOffstage: false,
+      ),
+    );
+    expect(optimizeButton.onPressed, isNull);
+
+    container
+        .read(planDayConstraintsProvider.notifier)
+        .updateEndTime(1, '20:00');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('plan-day-2')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('plan-start-place-2')),
+      '도쿄역',
+    );
+    await tester.pump();
+
+    expect(
+      container.read(planDayConstraintsProvider).forDay(2).startPlace,
+      '도쿄역',
+    );
+    expect(
+      container.read(planDayConstraintsProvider).forDay(1).startPlace,
+      '숙소',
+    );
+  });
+
+  testWidgets('mock optimization follows start time and max place count',
+      (tester) async {
+    useMobileTestSurface(tester);
+    await pumpAppAsGuest(tester);
+
+    await tester.tap(find.text('일정'));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChiwawaApp)),
+    );
+    container
+        .read(planDayConstraintsProvider.notifier)
+        .updateStartTime(1, '10:30');
+    container
+        .read(planDayConstraintsProvider.notifier)
+        .updateMaxPlaceCount(1, 2);
+    await tester.pump();
+
+    await tester.ensureVisible(
+      find.byKey(
+        const ValueKey('plan-optimize-route'),
+        skipOffstage: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('plan-optimize-route')));
+    await tester.pumpAndSettle();
+
+    final itinerary = container.read(planItineraryProvider).currentStops;
+    expect(container.read(routeOptimizationProvider).places, hasLength(2));
+    expect(itinerary, hasLength(2));
+    expect(itinerary.first.startTime, '10:30');
+    expect(find.text('대중교통 · 2곳'), findsOneWidget);
   });
 
   testWidgets('changing preferences ignores stale optimization result',
@@ -739,10 +857,13 @@ void main() {
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
 
-    await tester
-        .ensureVisible(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    final optimizeButton = find.byKey(
+      const ValueKey('plan-optimize-route'),
+      skipOffstage: false,
+    );
+    await tester.ensureVisible(optimizeButton);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    await tester.tap(optimizeButton);
     await tester.pumpAndSettle();
 
     final container = ProviderScope.containerOf(
@@ -786,10 +907,13 @@ void main() {
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
 
-    await tester
-        .ensureVisible(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    final optimizeButton = find.byKey(
+      const ValueKey('plan-optimize-route'),
+      skipOffstage: false,
+    );
+    await tester.ensureVisible(optimizeButton);
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
+    await tester.tap(optimizeButton);
     await tester.pump(const Duration(milliseconds: 500));
 
     expect(find.text('경로 최적화에 실패했어요. 다시 시도해 주세요.'), findsOneWidget);

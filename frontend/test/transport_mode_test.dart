@@ -1,3 +1,4 @@
+import 'package:chiwawa/core/models/route_planning_models.dart';
 import 'package:chiwawa/core/models/transport_mode.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
 import 'package:chiwawa/core/repositories/plan_repository.dart';
@@ -28,23 +29,44 @@ void main() {
   test('mock repository returns different route details by transport',
       () async {
     const repository = MockPlanRepository();
-    const places = ['메이지 신궁', '시부야 스크램블'];
+    const places = [
+      PlanRoutePlaceInput(localId: 'place-1', name: '메이지 신궁'),
+      PlanRoutePlaceInput(localId: 'place-2', name: '시부야 스크램블'),
+    ];
     const preference = TravelPreference();
 
     final walk = await repository.optimizeRoute(
-      places,
-      preference,
-      TransportMode.walk,
+      const RouteOptimizationRequest(
+        places: places,
+        preference: preference,
+        transportMode: TransportMode.walk,
+        dayIndex: 1,
+        plannedStartTime: '09:00',
+        plannedEndTime: '20:00',
+        maxPlaceCount: 4,
+      ),
     );
     final drive = await repository.optimizeRoute(
-      places,
-      preference,
-      TransportMode.drive,
+      const RouteOptimizationRequest(
+        places: places,
+        preference: preference,
+        transportMode: TransportMode.drive,
+        dayIndex: 1,
+        plannedStartTime: '09:00',
+        plannedEndTime: '20:00',
+        maxPlaceCount: 4,
+      ),
     );
     final transit = await repository.optimizeRoute(
-      places,
-      preference,
-      TransportMode.transit,
+      const RouteOptimizationRequest(
+        places: places,
+        preference: preference,
+        transportMode: TransportMode.transit,
+        dayIndex: 1,
+        plannedStartTime: '09:00',
+        plannedEndTime: '20:00',
+        maxPlaceCount: 4,
+      ),
     );
 
     expect(walk[1].transport, '도보 14분');

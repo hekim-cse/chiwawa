@@ -5,6 +5,7 @@ import 'package:chiwawa/core/api/dio_client.dart';
 import 'package:chiwawa/core/auth/auth_controller.dart';
 import 'package:chiwawa/core/auth/deep_link_service.dart';
 import 'package:chiwawa/core/confirmed_route.dart';
+import 'package:chiwawa/core/models/route_planning_models.dart';
 import 'package:chiwawa/core/repositories/api/api_plan_repository.dart';
 import 'package:chiwawa/core/models/transport_mode.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
@@ -255,9 +256,18 @@ void main() {
     );
 
     await repository.optimizeRoute(
-      const ['장소 A', '장소 B'],
-      const TravelPreference(),
-      TransportMode.drive,
+      const RouteOptimizationRequest(
+        places: [
+          PlanRoutePlaceInput(localId: 'a', name: '장소 A'),
+          PlanRoutePlaceInput(localId: 'b', name: '장소 B'),
+        ],
+        preference: TravelPreference(),
+        transportMode: TransportMode.drive,
+        dayIndex: 1,
+        plannedStartTime: '09:00',
+        plannedEndTime: '20:00',
+        maxPlaceCount: 4,
+      ),
     );
 
     expect(adapter.requests, hasLength(1));

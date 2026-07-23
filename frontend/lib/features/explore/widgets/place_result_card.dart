@@ -11,6 +11,7 @@ class PlaceResultCard extends StatelessWidget {
     required this.result,
     required this.imagePath,
     required this.isSaved,
+    required this.isSaving,
     required this.onEdit,
     required this.onDirections,
     required this.onAddToPlan,
@@ -20,6 +21,7 @@ class PlaceResultCard extends StatelessWidget {
   final PhotoSearchResult result;
   final String? imagePath;
   final bool isSaved;
+  final bool isSaving;
   final VoidCallback onEdit;
   final VoidCallback onDirections;
   final VoidCallback onAddToPlan;
@@ -161,12 +163,16 @@ class PlaceResultCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: OutlinedButton.icon(
-              onPressed: onAddToPlan,
+              onPressed: isSaving ? null : onAddToPlan,
               icon: Icon(
-                isSaved ? Icons.check_rounded : Icons.add_rounded,
+                isSaving
+                    ? Icons.sync_rounded
+                    : isSaved
+                        ? Icons.check_rounded
+                        : Icons.add_rounded,
                 size: 18,
               ),
-              label: const Text('일정에 추가'),
+              label: Text(isSaving ? '장소 저장 중' : '일정에 추가'),
             ),
           ),
         ],

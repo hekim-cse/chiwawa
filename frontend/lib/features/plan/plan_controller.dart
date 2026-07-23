@@ -3,12 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/models/route_planning_models.dart';
 import '../../core/models/transport_mode.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/repositories/plan_repository.dart';
 import '../../core/services/trip_session_service.dart';
 import 'models/plan_itinerary.dart';
 import 'models/plan_place_selection.dart';
+import 'plan_day_constraints_controller.dart';
 
 final selectedPlacesProvider = StateProvider<List<PlanPlaceSelection>>((ref) {
   ref.watch(currentTripRevisionProvider);
@@ -62,12 +64,15 @@ class PlanItineraryController extends StateNotifier<PlanItineraryState> {
     state = state.copyWith(selectedDay: day);
   }
 
-  void replaceCurrentDay(List<RoutePlace> places) {
+  void replaceCurrentDay(
+    List<RoutePlace> places, {
+    String startTime = '09:00',
+  }) {
     final stops = <PlanItineraryStop>[
       for (var index = 0; index < places.length; index++)
         PlanItineraryStop(
           id: '${places[index].identityKey}-$index',
-          startTime: _timeForIndex(index),
+          startTime: _timeForIndex(index, startTime),
           place: places[index],
         ),
     ];
@@ -115,8 +120,11 @@ class PlanItineraryController extends StateNotifier<PlanItineraryState> {
   }
 }
 
-String _timeForIndex(int index) {
-  final totalMinutes = 9 * 60 + index * 120;
+String _timeForIndex(int index, String startTime) {
+  final parts = startTime.split(':');
+  final startHour = int.tryParse(parts.first) ?? 9;
+  final startMinute = parts.length > 1 ? int.tryParse(parts[1]) ?? 0 : 0;
+  final totalMinutes = startHour * 60 + startMinute + index * 120;
   final hour = (totalMinutes ~/ 60).clamp(0, 23);
   final minute = totalMinutes % 60;
   return '${hour.toString().padLeft(2, '0')}:'
@@ -128,6 +136,7 @@ class PlanActions {
 
   final Ref _ref;
   int _selectionSequence = 0;
+  final Set<String> _pendingPlaceNames = {};
 
   bool addPlace(
     String value, {
@@ -146,6 +155,30 @@ class PlanActions {
 
   bool addSavedPlace(PhotoSearchResult place) {
     return _addSelection(PlanPlaceSelection.fromPhoto(place));
+  }
+
+  Future<bool> saveAndAddPlace(String value) async {
+    final name = value.trim();
+    if (name.isEmpty || !_pendingPlaceNames.add(name)) return false;
+    final localId = 'manual:${_selectionSequence++}';
+    try {
+      final record = await _ref.read(planRepositoryProvider).saveWantedPlace(
+            PlanRoutePlaceInput(localId: localId, name: name),
+          );
+      return _addSelection(
+        PlanPlaceSelection(
+          id: localId,
+          name: record.name.isEmpty ? name : record.name,
+          address: record.address,
+          source: PlanPlaceSource.manual,
+          serverPlaceId: record.id,
+          latitude: record.latitude,
+          longitude: record.longitude,
+        ),
+      );
+    } finally {
+      _pendingPlaceNames.remove(name);
+    }
   }
 
   bool _addSelection(PlanPlaceSelection selection) {
@@ -220,10 +253,13 @@ class RouteOptimizationController
 
   Future<void> optimize(TransportMode transportMode) async {
     final requestVersion = ++_requestVersion;
-    final selections = _ref.read(selectedPlacesProvider);
-    final places = List<String>.unmodifiable(
-      selections.map((selection) => selection.name),
-    );
+    final selectedDay = _ref.read(planItineraryProvider).selectedDay;
+    final dayConstraint =
+        _ref.read(planDayConstraintsProvider).forDay(selectedDay);
+    if (!dayConstraint.isValid) {
+      state = const RouteOptimizationState.idle();
+      return;
+    }
     final preference = _ref.read(travelPreferenceProvider);
 
     state = const RouteOptimizationState.pending();
@@ -232,18 +268,82 @@ class RouteOptimizationController
     state = const RouteOptimizationState.running();
 
     try {
-      final routePlaces = await _ref
-          .read(planRepositoryProvider)
-          .optimizeRoute(places, preference, transportMode);
+      final selections = await _persistSelections(
+        _ref.read(selectedPlacesProvider),
+      );
       if (requestVersion != _requestVersion) return;
-      state = RouteOptimizationState.done(List.unmodifiable(routePlaces));
-      _ref.read(planItineraryProvider.notifier).replaceCurrentDay(routePlaces);
+      _ref.read(selectedPlacesProvider.notifier).state =
+          List.unmodifiable(selections);
+      final routePlaces = await _ref.read(planRepositoryProvider).optimizeRoute(
+            RouteOptimizationRequest(
+              places: [
+                for (final selection in selections)
+                  PlanRoutePlaceInput(
+                    localId: selection.id,
+                    serverPlaceId: selection.serverPlaceId,
+                    name: selection.name,
+                    address: selection.address,
+                    latitude: selection.latitude,
+                    longitude: selection.longitude,
+                  ),
+              ],
+              preference: preference,
+              transportMode: transportMode,
+              dayIndex: selectedDay,
+              plannedStartTime: dayConstraint.startTime,
+              plannedEndTime: dayConstraint.endTime,
+              maxPlaceCount: dayConstraint.maxPlaceCount,
+            ),
+          );
+      if (requestVersion != _requestVersion) return;
+      final limitedPlaces =
+          routePlaces.take(dayConstraint.maxPlaceCount).toList(growable: false);
+      state = RouteOptimizationState.done(List.unmodifiable(limitedPlaces));
+      _ref.read(planItineraryProvider.notifier).replaceCurrentDay(
+            limitedPlaces,
+            startTime: dayConstraint.startTime,
+          );
     } catch (_) {
       if (requestVersion != _requestVersion) return;
       state = const RouteOptimizationState.failed(
         '경로 최적화에 실패했어요. 다시 시도해 주세요.',
       );
     }
+  }
+
+  Future<List<PlanPlaceSelection>> _persistSelections(
+    List<PlanPlaceSelection> selections,
+  ) async {
+    final repository = _ref.read(planRepositoryProvider);
+    final persisted = <PlanPlaceSelection>[];
+    for (final selection in selections) {
+      if (selection.isPersisted) {
+        persisted.add(selection);
+        continue;
+      }
+      final record = await repository.saveWantedPlace(
+        PlanRoutePlaceInput(
+          localId: selection.id,
+          name: selection.name,
+          address: selection.address,
+          latitude: selection.latitude,
+          longitude: selection.longitude,
+        ),
+      );
+      final savedSelection = selection.copyWith(serverPlaceId: record.id);
+      persisted.add(savedSelection);
+      _retainPersistedSelection(savedSelection);
+    }
+    return persisted;
+  }
+
+  void _retainPersistedSelection(PlanPlaceSelection savedSelection) {
+    final current = _ref.read(selectedPlacesProvider);
+    if (!current.any((selection) => selection.id == savedSelection.id)) return;
+    _ref.read(selectedPlacesProvider.notifier).state = List.unmodifiable([
+      for (final selection in current)
+        if (selection.id == savedSelection.id) savedSelection else selection,
+    ]);
   }
 
   void reset() {
