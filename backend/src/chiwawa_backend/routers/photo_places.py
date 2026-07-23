@@ -1,7 +1,6 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from fastapi.concurrency import run_in_threadpool
 
 from chiwawa_backend.dependencies import (
     get_current_user_id,
@@ -42,8 +41,7 @@ async def search_photo_places(
     recognizer: RecognizerDep,
 ) -> PhotoPlaceSearchResponse:
     _ = user_id
-    return await run_in_threadpool(
-        photo_place_service.search_photo_places,
+    return await photo_place_service.search_photo_places(
         state,
         PhotoPlaceSearchContext(
             trip_id=trip_id,
