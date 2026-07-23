@@ -40,8 +40,9 @@ _GEMINI_TIMEOUT_MS = 30000
 
 # Gemini 를 감싸 사진 -> VisionIdentification 으로 변환하는 Provider
 class VisionLlmProvider:
-    # 비전 지원 저비용 모델. 실제 응답 검증(step 7 CLI)에서 조정 가능.
-    DEFAULT_MODEL = "gemini-2.5-flash"
+    # 비전(멀티모달) 지원 flash 모델. 실사진 검증으로 확정.
+    # (gemini-2.5-flash 는 신규 사용자 제공이 종료돼 404 가 나므로 최신 flash 로 둔다.)
+    DEFAULT_MODEL = "gemini-3.6-flash"
 
     # api_key: Gemini API 키 (없으면 환경변수에서 가져옴)
     # model: 사용할 Gemini 모델명
