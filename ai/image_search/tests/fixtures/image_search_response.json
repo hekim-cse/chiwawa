@@ -1,0 +1,66 @@
+{
+  "identified": {
+    "name": "센소지",
+    "city": "Tokyo",
+    "country": "Japan",
+    "latitude": 35.7148,
+    "longitude": 139.7967,
+    "confidence": 0.94,
+    "reason": "붉은 등롱과 호조몬이 뚜렷한 대표 사찰",
+    "category": "TEMPLE_SHRINE",
+    "source": "LANDMARK",
+    "place_id": "ChIJ8T1GpMGOGGARDYGSgpooDWw",
+    "rating": 4.5
+  },
+  "candidates": [
+    {
+      "name": "센소지",
+      "city": "Tokyo",
+      "country": "Japan",
+      "latitude": 35.7148,
+      "longitude": 139.7967,
+      "confidence": 0.94,
+      "reason": "붉은 등롱과 호조몬이 뚜렷한 대표 사찰",
+      "category": "TEMPLE_SHRINE",
+      "source": "LANDMARK",
+      "place_id": "ChIJ8T1GpMGOGGARDYGSgpooDWw",
+      "rating": 4.5
+    },
+    {
+      "name": "나카미세도리 상점가",
+      "city": "Tokyo",
+      "country": "Japan",
+      "latitude": 35.7112,
+      "longitude": 139.7963,
+      "confidence": 0.79,
+      "reason": "센소지 참배로에 이어진 전통 상점가",
+      "category": "SHOPPING",
+      "source": "NEARBY",
+      "place_id": "ChIJl2HKQMGOGGARZ1p2b0_5nxk",
+      "rating": 4.3
+    }
+  ],
+  "status": "SUCCESS",
+  "signals": {
+    "landmark": {
+      "name": "Sensō-ji",
+      "latitude": 35.7148,
+      "longitude": 139.7967,
+      "score": 0.92
+    },
+    "llm": {
+      "place_name_guess": "센소지",
+      "category": "TEMPLE_SHRINE",
+      "vibe_keywords": [
+        "전통",
+        "붉은등",
+        "참배로"
+      ],
+      "reason": "붉은 등롱과 카미나리몬 간판이 보임",
+      "confidence": 0.9,
+      "visible_text": [
+        "雷門"
+      ]
+    }
+  }
+}

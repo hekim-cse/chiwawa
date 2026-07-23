@@ -6,6 +6,11 @@ import httpx
 import pytest
 
 from ai.image_search.domain.schemas import PlaceCategory
+from ai.image_search.providers.errors import (
+    ProviderHttpError,
+    ProviderTimeoutError,
+    ProviderTransportError,
+)
 from ai.image_search.providers.places_provider import (
     CATEGORY_INCLUDED_TYPES,
     PlacesProvider,
@@ -289,3 +294,35 @@ class TestSearchNearby:
         provider = make_provider(handler)
         with pytest.raises(RuntimeError):
             provider.search_nearby(latitude=35.0, longitude=139.0)
+
+
+# 외부 연동 오류가 명시적 타입으로 구분되는지 검증 (모두 RuntimeError 하위)
+class TestTypedErrors:
+    # HTTP 오류는 provider 이름과 status_code 를 담은 ProviderHttpError
+    def test_http_error_is_provider_http_error(self):
+        provider = make_provider(
+            lambda request: httpx.Response(500, json={"error": "INTERNAL"})
+        )
+        with pytest.raises(ProviderHttpError) as exc_info:
+            provider.resolve_place("센소지")
+
+        assert exc_info.value.provider == "Google Places"
+        assert exc_info.value.status_code == 500
+
+    # 시간 초과는 ProviderTimeoutError
+    def test_timeout_is_provider_timeout_error(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ReadTimeout("timeout", request=request)
+
+        provider = make_provider(handler)
+        with pytest.raises(ProviderTimeoutError):
+            provider.resolve_place("센소지")
+
+    # 네트워크 전송 실패는 ProviderTransportError
+    def test_transport_failure_is_provider_transport_error(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("connection failed", request=request)
+
+        provider = make_provider(handler)
+        with pytest.raises(ProviderTransportError):
+            provider.resolve_place("센소지")

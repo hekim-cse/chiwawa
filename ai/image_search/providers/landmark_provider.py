@@ -6,6 +6,12 @@ import httpx
 
 from ai.image_search.domain.schemas import LandmarkDetection
 from ai.image_search.providers.env import get_google_cloud_vision_api_key
+from ai.image_search.providers.errors import (
+    InvalidProviderResponseError,
+    ProviderHttpError,
+    ProviderTimeoutError,
+    ProviderTransportError,
+)
 
 
 # Cloud Vision 랜드마크 감지를 감싸 사진 -> LandmarkDetection 으로 변환하는 Provider
@@ -36,7 +42,9 @@ class LandmarkProvider:
     # 입력: image_bytes(로컬 파일 내용) 또는 image_url(호스팅 이미지) 중 하나 필수
     # 반환: 가장 신뢰도 높은 유효(좌표 보유) 랜드마크 / 감지 없으면 None
     #   - "랜드마크 아님"은 정상 상황이며(카페·골목 등) 캐스케이드가 LLM 으로 폴백할 근거다
-    # 예외: HTTP 오류 또는 Vision 응답 내 error 객체 → RuntimeError
+    # 예외: 시간초과 → ProviderTimeoutError, 전송실패 → ProviderTransportError,
+    #       HTTP 오류 → ProviderHttpError, 응답 내 error → InvalidProviderResponseError
+    #       (모두 RuntimeError 하위라 modal_app 은 502, recognizer 는 우아한 저하)
     def detect(
         self,
         image_bytes: bytes | None = None,
@@ -63,15 +71,21 @@ class LandmarkProvider:
             "X-Goog-Api-Key": self.api_key,
         }
 
-        with self._client() as client:
-            response = client.post(self.ANNOTATE_URL, headers=headers, json=payload)
+        try:
+            with self._client() as client:
+                response = client.post(self.ANNOTATE_URL, headers=headers, json=payload)
+        except httpx.TimeoutException as error:
+            raise ProviderTimeoutError(
+                "Cloud Vision 요청이 시간 제한을 초과했습니다."
+            ) from error
+        except httpx.TransportError as error:
+            raise ProviderTransportError(
+                f"Cloud Vision 전송에 실패했습니다: {error}"
+            ) from error
 
-        # API 요청 실패 시 상태 코드와 응답 본문을 함께 알린다
+        # API 요청 실패 시 상태 코드를 명시적 타입으로 알린다
         if response.status_code >= 400:
-            raise RuntimeError(
-                "Cloud Vision API 요청 실패: "
-                f"status={response.status_code}, body={response.text}"
-            )
+            raise ProviderHttpError("Cloud Vision", response.status_code)
 
         return self._parse_response(response.json())
 
@@ -98,7 +112,7 @@ class LandmarkProvider:
 
         error = entry.get("error")
         if error:
-            raise RuntimeError(f"Cloud Vision API 오류 응답: {error}")
+            raise InvalidProviderResponseError(f"Cloud Vision API 오류 응답: {error}")
 
         for annotation in entry.get("landmarkAnnotations", []):
             detection = self._parse_annotation(annotation)
