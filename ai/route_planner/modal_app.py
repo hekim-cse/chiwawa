@@ -3,16 +3,18 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import modal
-from pydantic import TypeAdapter, ValidationError
+from pydantic import ValidationError
 
 from ai.free_time_recommender.application.factory import (
     build_route_option_recommendation_generator,
 )
+from ai.free_time_recommender.adapters.modal_response import (
+    to_free_time_recommendations_response,
+    to_trip_planning_with_recommendations_response,
+)
 from ai.free_time_recommender.application.plan_trip_with_recommendations import (
     GenerateRouteOptionRecommendationOutcomes,
     PlanTripWithRecommendations,
-    RouteOptionRecommendationOutcome,
-    TripPlanWithRecommendations,
 )
 from ai.free_time_recommender.config import FreeTimeRecommendationSettings
 from ai.route_planner.providers.env import get_google_maps_api_key
@@ -113,14 +115,8 @@ def plan_trip_with_recommendations_payload(
         trip_planner=planner,
         recommendation_generator=recommendation_generator,
     ).execute(request=request, policy=settings.policy)
-    encoded = TypeAdapter(TripPlanWithRecommendations).dump_python(
-        result,
-        mode="json",
-    )
-    return {
-        **encoded["planning"],
-        "day_recommendations": encoded["day_recommendations"],
-    }
+    response = to_trip_planning_with_recommendations_response(result)
+    return response.model_dump(mode="json")
 
 
 def free_time_recommendations_payload(
@@ -154,14 +150,8 @@ def free_time_recommendations_payload(
         timezone=timezone,
         policy=settings.policy,
     )
-    return {
-        "route_options": TypeAdapter(
-            tuple[RouteOptionRecommendationOutcome, ...]
-        ).dump_python(
-            outcomes,
-            mode="json",
-        )
-    }
+    response = to_free_time_recommendations_response(outcomes)
+    return response.model_dump(mode="json")
 
 
 # Modal HTTP Web Function

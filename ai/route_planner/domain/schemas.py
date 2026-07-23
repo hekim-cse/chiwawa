@@ -1,5 +1,6 @@
 # 데이터 구조 정의 파일
 from enum import Enum
+import math
 from typing import Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
@@ -38,14 +39,17 @@ class TravelTimeElement(BaseModel):
     duration_seconds: Optional[int] = None  # 이동 시간 (초)
     distance_meters: Optional[int] = None  # 이동 거리 (미터)
     status: Optional[str] = None  # API 응답 상태 코드 또는 오류 상태
-    condition: Optional[str] = None  # 경로 계산 조건 상태 (예: ROUTE_EXISTS, ROUTE_NOT_FOUND 등)
+    # 경로 계산 조건 상태 (예: ROUTE_EXISTS, ROUTE_NOT_FOUND)
+    condition: Optional[str] = None
 
     @property
     def duration_minutes(self) -> Optional[int]:
         if self.duration_seconds is None:
             return None
 
-        return round(self.duration_seconds / 60)
+        # 실제보다 짧은 분 단위 값이 Solver에 전달되지 않도록
+        # 남은 초가 있으면 다음 분으로 올림한다.
+        return math.ceil(self.duration_seconds / 60)
 
 
 # 이동 시간 행렬 타입
@@ -61,7 +65,8 @@ class TravelTimeMatrixResult(BaseModel):
 
 
 # 이동 시간 행렬과 장소 정보를 함께 담는 데이터 구조
-# Provider의 최종 반환 데이터 = 경로 최적화 알고리즘에 넘길 입력 데이터
+# Provider의 최종 반환 데이터
+# = 경로 최적화 알고리즘에 넘길 입력 데이터
 class RouteData(BaseModel):
     locations: List[Location]
     travel_time_matrix_result: TravelTimeMatrixResult

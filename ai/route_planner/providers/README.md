@@ -19,7 +19,7 @@ Provider는 정확 경로를 직접 계산하지 않습니다.
 6. [📊 Route Matrix 요청](#-route-matrix-요청)
 7. [⏱️ 이동시간 변환](#-이동시간-변환)
 8. [🚨 누락 구간 처리](#-누락-구간-처리)
-9. [🕒 TRANSIT 출발시각](#-transit-출발시각)
+9. [🕒 DRIVE 및 TRANSIT 출발시각](#-drive-및-transit-출발시각)
 10. [🔐 API Key와 환경변수](#-api-key와-환경변수)
 11. [✅ 입력과 응답 검증](#-입력과-응답-검증)
 12. [🚨 오류 처리](#-오류-처리)
@@ -239,10 +239,11 @@ element_count
 = len(locations) × len(locations)
 ```
 
-최대 허용값:
+이동수단별 최대 허용값:
 
 ```text
-625
+DRIVE, WALK: 625
+TRANSIT: 100
 ```
 
 초과 시 API를 호출하지 않고 ValueError를 발생시킵니다.
@@ -252,10 +253,11 @@ Too many matrix elements
 → 장소 수를 줄이거나 요청 분할 필요
 ```
 
-625는 정사각 Matrix 기준 최대 25개 Location에 해당합니다.
+정사각 Matrix 기준 최대 Location 수는 다음과 같습니다.
 
 ```text
-25 × 25 = 625
+DRIVE, WALK: 25 × 25 = 625
+TRANSIT: 10 × 10 = 100
 ```
 
 ### 요청 Header
@@ -285,6 +287,7 @@ condition
 origins
 destinations
 travelMode
+routingPreference
 departureTime
 ```
 
@@ -298,7 +301,8 @@ departureTime
 }
 ```
 
-`departureTime`은 TRANSIT 조건에서만 선택적으로 추가됩니다.
+DRIVE에는 `TRAFFIC_AWARE`를 적용하고, 출발시각이 있으면 DRIVE와
+TRANSIT 요청에 `departureTime`을 추가합니다.
 
 <br>
 
@@ -382,33 +386,34 @@ Provider는 정규표현식으로 초 단위 값을 파싱합니다.
 → 420 seconds
 ```
 
-예상하지 못한 형식이면 ValueError가 발생합니다.
+예상하지 못한 형식이면 Provider 응답 계약 오류가 발생합니다.
 
 ```text
 "7m"
-"420.5s"
 "PT7M"
 → Invalid duration format
 ```
+
+소수 초 형식은 허용하며 실제 시간보다 짧아지지 않게 초 단위로
+먼저 올림합니다.
 
 ### 분 단위 변환
 
 `TravelTimeElement.duration_minutes`는 다음 방식으로 계산됩니다.
 
 ```text
-round(duration_seconds / 60)
+ceil(duration_seconds / 60)
 ```
 
 예:
 
 ```text
 420초 → 7분
-90초  → round(1.5)
+90초  → 2분
 ```
 
-Python `round()` 규칙을 사용하므로 일반적인 항상 올림 방식과 다릅니다.
-
-따라서 매우 짧은 이동시간이나 `.5` 경계에서 기대하는 값과 다를 수 있습니다.
+Solver가 실제 이동시간보다 짧은 비용을 사용하지 않도록 남은 초가 있으면
+다음 분으로 올립니다.
 
 <br>
 
@@ -489,22 +494,28 @@ TravelTimeElement
 
 <br>
 
-## 🕒 TRANSIT 출발시각
+## 🕒 DRIVE 및 TRANSIT 출발시각
 
-현재 `departure_time`은 TRANSIT 요청에서만 Payload에 포함됩니다.
+`departure_time`은 DRIVE와 TRANSIT 요청에 사용됩니다.
 
 ```text
-travel_mode == TRANSIT
+travel_mode == DRIVE 또는 TRANSIT
 AND
 departure_time is not None
 → departureTime 전송
 ```
 
-DRIVE와 WALK에서는 전달된 `departure_time`을 Payload에 포함하지 않습니다.
+DRIVE 요청에는 다음 교통량 설정을 함께 전달합니다.
+
+```text
+routingPreference = TRAFFIC_AWARE
+```
+
+WALK 요청에는 출발시각과 교통량 설정을 전달하지 않습니다.
 
 ### timezone-aware 검증
 
-TRANSIT 출발시각은 timezone-aware datetime이어야 합니다.
+DRIVE와 TRANSIT 출발시각은 timezone-aware datetime이어야 합니다.
 
 다음은 거부됩니다.
 
@@ -545,7 +556,7 @@ timezone 정보가 없으면 ValueError가 발생합니다.
 → 2026-07-23T00:30:00Z
 ```
 
-### departure_time이 없는 TRANSIT
+### departure_time이 없는 요청
 
 `departure_time`이 `None`이면 Payload에 `departureTime`을 넣지 않습니다.
 
@@ -607,7 +618,8 @@ GoogleRoutesProvider(
 민감한 Google API 오류 응답
 ```
 
-현재 Provider는 HTTP 오류 응답 본문 전체를 예외 메시지에 포함하므로, 운영 로그에 민감한 정보가 포함되지 않는지 확인해야 합니다.
+HTTP 오류는 상태 코드만 Provider 오류에 포함하며 Google 응답 본문은
+예외 메시지나 운영 로그에 포함하지 않습니다.
 
 <br>
 
@@ -618,8 +630,9 @@ GoogleRoutesProvider(
 Provider는 다음을 직접 검증합니다.
 
 - Location이 최소 2개 이상
-- Matrix element 수가 625 이하
-- TRANSIT 출발시각이 timezone-aware
+- DRIVE와 WALK Matrix element 수가 625 이하
+- TRANSIT Matrix element 수가 100 이하
+- DRIVE와 TRANSIT 출발시각이 timezone-aware
 - duration 문자열이 예상 형식인지
 
 ### Domain 모델 검증
@@ -640,11 +653,9 @@ originIndex
 destinationIndex
 ```
 
-필드가 없으면 KeyError가 발생합니다.
-
-또한 index가 `locations` 범위를 벗어나면 IndexError가 발생합니다.
-
-현재 Provider는 이 오류들을 별도 도메인 예외로 변환하지 않습니다.
+필드 누락, 잘못된 타입과 범위를 벗어난 index는 명시적인 Provider 응답
+계약 오류로 변환합니다. 중복 구간이나 전체 Matrix에서 누락된 구간도
+응답 계약 오류로 처리합니다.
 
 ### status 파싱
 
@@ -655,7 +666,7 @@ status = {"code": ...}
 → code 저장
 
 status가 dict 아님
-→ None
+→ Provider 응답 계약 오류
 ```
 
 ### condition 파싱
@@ -681,51 +692,52 @@ duration이 존재하는가
 
 ## 🚨 오류 처리
 
-### ValueError
+### 입력 오류
 
 다음 사례에서 발생할 수 있습니다.
 
 - Location이 2개 미만
-- Matrix element 수가 625 초과
-- TRANSIT 출발시각이 timezone-naive
+- 이동수단별 Matrix element 제한 초과
+- DRIVE 또는 TRANSIT 출발시각이 timezone-naive
 - 잘못된 duration 형식
 - API Key 누락
 
-### RuntimeError
+### Provider 전용 오류
 
-Google Routes API가 400 이상의 HTTP 상태를 반환하면 RuntimeError가 발생합니다.
+Google Routes API가 400 이상의 HTTP 상태를 반환하면
+`GoogleRoutesHttpError`가 발생합니다.
 
 예외 메시지에는 다음이 포함됩니다.
 
 ```text
 HTTP status
-응답 body
 ```
 
 Provider는 HTTP 오류를 빈 Matrix로 바꾸지 않습니다.
 
 ```text
 Google API 오류
-→ RuntimeError
+→ GoogleRoutesHttpError
 → Application으로 전파
 ```
 
-### httpx 예외
+응답 본문은 오류 메시지에 포함하지 않습니다.
 
-다음 네트워크 오류는 별도 변환 없이 전파될 수 있습니다.
+### 네트워크 오류
 
-- Timeout
-- 연결 실패
-- DNS 오류
-- TLS 오류
+네트워크 오류는 다음 Provider 전용 오류로 변환합니다.
+
+- Timeout → `GoogleRoutesTimeoutError`
+- 연결, DNS, TLS 오류 → `GoogleRoutesTransportError`
 
 ### JSON 파싱 오류
 
-응답 본문이 JSON이 아니면 `response.json()` 단계의 예외가 전파됩니다.
+응답 본문이 JSON이 아니면 `InvalidGoogleRoutesResponseError`로 변환합니다.
 
 ### 응답 구조 오류
 
-필수 index 필드 누락이나 잘못된 index는 KeyError 또는 IndexError로 전파될 수 있습니다.
+필수 필드 누락, 잘못된 index, 중복 및 불완전 Matrix는
+`InvalidGoogleRoutesResponseError`로 변환합니다.
 
 ### 누락 구간은 예외가 아님
 
@@ -754,8 +766,8 @@ Google API 오류
 - Location 0개
 - Location 1개
 - Location 2개
-- 정확히 625 element
-- 625 초과
+- DRIVE와 WALK의 625 element 제한
+- TRANSIT의 100 element 제한
 - 좌표 범위 오류
 
 ### 요청 Header
@@ -770,17 +782,17 @@ Google API 오류
 - origins 변환
 - destinations 변환
 - travelMode
-- DRIVE에서 departureTime 미포함
+- DRIVE에서 `TRAFFIC_AWARE`와 departureTime 포함
 - WALK에서 departureTime 미포함
 - TRANSIT에서 departureTime 포함
-- TRANSIT departure_time이 None인 경우
+- DRIVE와 TRANSIT departure_time이 None인 경우
 
 ### timezone
 
 - Asia/Seoul 출발시각의 UTC 변환
 - UTC 출발시각
 - DST 적용 timezone
-- timezone-naive TRANSIT 출발시각
+- timezone-naive DRIVE 및 TRANSIT 출발시각
 
 ### 응답 파싱
 
@@ -817,16 +829,11 @@ Google API 오류
 ## ⚠️ 현재 한계
 
 - Google Routes API 한 Provider 구현에 직접 의존합니다.
-- Matrix 요청은 자동 분할하지 않고 625 element 초과 시 실패합니다.
+- Matrix 요청은 자동 분할하지 않고 이동수단별 element 제한을 초과하면 실패합니다.
 - 자동 retry, backoff와 circuit breaker가 없습니다.
 - 응답 cache가 없습니다.
 - Rate Limit 대응 정책이 없습니다.
-- DRIVE와 WALK 요청에는 출발시각을 포함하지 않습니다.
 - 누락 여부는 `condition`이나 `status`가 아니라 duration 존재 여부로 판정합니다.
-- duration을 분으로 변환할 때 Python `round()`를 사용합니다.
-- HTTP 오류 응답 본문 전체를 RuntimeError 메시지에 포함합니다.
-- Google 응답 index 범위와 필수 필드에 대한 명시적 방어 검증이 없습니다.
-- 네트워크와 JSON 오류를 Provider 전용 예외로 통일하지 않습니다.
 - `Location.name`이 실제 장소 이름이 아니라 `place_id`로 사용됩니다.
 - 일자 배정 단계의 `missing_elements`는 최종 응답 경고로 직접 보존되지 않습니다.
 - 테스트용 Fake Provider는 현재 이 디렉터리에 별도 구현되어 있지 않습니다.
