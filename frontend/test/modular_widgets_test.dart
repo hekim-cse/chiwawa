@@ -5,9 +5,11 @@ import 'package:chiwawa/features/explore/widgets/candidate_selector.dart';
 import 'package:chiwawa/features/home/widgets/home_quick_actions.dart';
 import 'package:chiwawa/features/plan/widgets/route_optimization_section.dart';
 import 'package:chiwawa/features/plan/models/plan_itinerary.dart';
+import 'package:chiwawa/features/plan/widgets/plan_day_selector.dart';
 import 'package:chiwawa/features/plan/widgets/plan_itinerary_workspace.dart';
 import 'package:chiwawa/features/trips/widgets/trip_list_item.dart';
 import 'package:chiwawa/features/mypage/widgets/my_page_detail_scaffold.dart';
+import 'package:chiwawa/shared/widgets/adaptive_segmented_control.dart';
 import 'package:chiwawa/shared/widgets/app_list_group.dart';
 import 'package:chiwawa/shared/widgets/app_status_view.dart';
 import 'package:flutter/material.dart';
@@ -27,6 +29,65 @@ void main() {
     expect(ChiwawaColors.textPrimary, const Color(0xFF5A2F3B));
     expect(theme.colorScheme.onSurface, ChiwawaColors.textPrimary);
     expect(theme.textTheme.bodyMedium?.color, ChiwawaColors.textPrimary);
+  });
+
+  test('interaction foundation keeps pink states and neutral borders', () {
+    final theme = ChiwawaTheme.light();
+
+    expect(
+      theme.navigationBarTheme.height,
+      ChiwawaControlSizes.navigationBar,
+    );
+    expect(
+      theme.switchTheme.trackColor?.resolve({WidgetState.selected}),
+      ChiwawaColors.primary,
+    );
+    expect(
+      theme.switchTheme.trackColor?.resolve(<WidgetState>{}),
+      ChiwawaColors.border,
+    );
+    expect(
+      theme.outlinedButtonTheme.style?.side?.resolve(<WidgetState>{})?.color,
+      ChiwawaColors.border,
+    );
+  });
+
+  testWidgets('shared selectors use the 48px interaction height',
+      (tester) async {
+    var selected = 1;
+    await tester.pumpWidget(
+      app(
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AdaptiveSegmentedControl<int>(
+              segments: const [
+                AdaptiveSegment(value: 1, label: '첫 번째'),
+                AdaptiveSegment(value: 2, label: '두 번째'),
+              ],
+              selected: selected,
+              onSelected: (value) => selected = value,
+            ),
+            PlanDaySelector(
+              selectedDay: 1,
+              dayCount: 2,
+              onSelected: (value) => selected = value,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(
+      tester.getSize(find.byType(AdaptiveSegmentedControl<int>)).height,
+      ChiwawaControlSizes.minimumInteractive,
+    );
+    expect(
+      tester.getSize(find.byType(PlanDaySelector)).height,
+      ChiwawaControlSizes.minimumInteractive,
+    );
+    await tester.tap(find.text('두 번째'));
+    expect(selected, 2);
   });
 
   testWidgets('quick actions grow to another row and keep callbacks isolated',

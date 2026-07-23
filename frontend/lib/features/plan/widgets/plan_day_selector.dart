@@ -21,7 +21,7 @@ class PlanDaySelector extends StatelessWidget {
         border: Border(bottom: BorderSide(color: ChiwawaColors.border)),
       ),
       child: SizedBox(
-        height: 46,
+        height: ChiwawaControlSizes.minimumInteractive,
         child: Row(
           children: [
             for (var day = 1; day <= dayCount; day++)

@@ -138,7 +138,7 @@ class _TripCreateSheetState extends ConsumerState<TripCreateSheet> {
               const SizedBox(height: 12),
               InkWell(
                 key: const ValueKey('trip-date-range'),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(ChiwawaRadii.control),
                 onTap: _pickDateRange,
                 child: InputDecorator(
                   decoration: const InputDecoration(

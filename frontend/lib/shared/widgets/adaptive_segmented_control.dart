@@ -3,10 +3,15 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 
 class AdaptiveSegment<T> {
-  const AdaptiveSegment({required this.value, required this.label});
+  const AdaptiveSegment({
+    required this.value,
+    required this.label,
+    this.key,
+  });
 
   final T value;
   final String label;
+  final Key? key;
 }
 
 class AdaptiveSegmentedControl<T> extends StatelessWidget {
@@ -24,18 +29,19 @@ class AdaptiveSegmentedControl<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 44,
+      height: ChiwawaControlSizes.minimumInteractive,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(ChiwawaRadii.control),
-        border: Border.all(color: ChiwawaColors.textSecondary),
+        border: Border.all(color: ChiwawaColors.border),
       ),
       child: Row(
         children: [
           for (var index = 0; index < segments.length; index++) ...[
             Expanded(
               child: _SegmentButton<T>(
+                key: segments[index].key,
                 segment: segments[index],
                 selected: segments[index].value == selected,
                 onTap: () => onSelected(segments[index].value),
@@ -45,7 +51,7 @@ class AdaptiveSegmentedControl<T> extends StatelessWidget {
               const VerticalDivider(
                 width: 1,
                 thickness: 1,
-                color: ChiwawaColors.textMuted,
+                color: ChiwawaColors.border,
               ),
           ],
         ],
@@ -59,6 +65,7 @@ class _SegmentButton<T> extends StatelessWidget {
     required this.segment,
     required this.selected,
     required this.onTap,
+    super.key,
   });
 
   final AdaptiveSegment<T> segment;
@@ -71,10 +78,14 @@ class _SegmentButton<T> extends StatelessWidget {
       button: true,
       selected: selected,
       label: segment.label,
+      excludeSemantics: true,
       child: Material(
         color: selected ? ChiwawaColors.secondary : Colors.transparent,
         child: InkWell(
           onTap: onTap,
+          overlayColor: WidgetStateProperty.resolveWith(
+            ChiwawaTheme.primaryStateLayer,
+          ),
           child: Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),

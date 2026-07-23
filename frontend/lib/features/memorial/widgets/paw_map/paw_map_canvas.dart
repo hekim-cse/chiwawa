@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../app/theme.dart';
 import '../../../../core/models/memorial_map_models.dart';
 import '../../../../core/utils/geo_projection.dart';
 import '../../../../shared/widgets/mascot_avatar.dart';
@@ -30,7 +31,7 @@ class PawMapCanvas extends StatelessWidget {
           builder: (context, constraints) {
             final points = _projectedPoints(constraints.biggest);
             return ClipRRect(
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(ChiwawaRadii.card),
               child: DecoratedBox(
                 decoration: const BoxDecoration(
                   gradient: LinearGradient(

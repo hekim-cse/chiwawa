@@ -41,8 +41,8 @@ class PawMarker extends StatelessWidget {
     final shadowBaseAlpha = isCurrent ? 0x33 : 0x1F;
 
     return Positioned(
-      left: position.dx - 22,
-      top: position.dy - 22,
+      left: position.dx - ChiwawaControlSizes.minimumInteractive / 2,
+      top: position.dy - ChiwawaControlSizes.minimumInteractive / 2,
       child: Semantics(
         label: '${cluster.placeName} 발자국, 사진 ${cluster.photoCount}장',
         button: true,
@@ -51,8 +51,8 @@ class PawMarker extends StatelessWidget {
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
           child: SizedBox(
-            width: 44,
-            height: 44,
+            width: ChiwawaControlSizes.minimumInteractive,
+            height: ChiwawaControlSizes.minimumInteractive,
             child: Center(
               child: Transform.scale(
                 scale: scale,

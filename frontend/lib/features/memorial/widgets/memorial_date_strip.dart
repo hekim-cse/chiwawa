@@ -19,7 +19,7 @@ class MemorialDateStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     if (days.isEmpty) {
       return const SizedBox(
-        height: 44,
+        height: ChiwawaControlSizes.minimumInteractive,
         child: Align(
           alignment: Alignment.centerLeft,
           child: Text(
@@ -34,7 +34,7 @@ class MemorialDateStrip extends StatelessWidget {
     }
 
     return SizedBox(
-      height: 44,
+      height: ChiwawaControlSizes.minimumInteractive,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: days.length,

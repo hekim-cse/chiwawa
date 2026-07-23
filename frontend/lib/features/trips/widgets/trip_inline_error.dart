@@ -15,7 +15,7 @@ class TripInlineError extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFFFFF1F4),
         border: Border.all(color: ChiwawaColors.border),
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.control),
       ),
       child: Text(
         message,

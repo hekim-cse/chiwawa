@@ -17,7 +17,9 @@ class BottomSheetBase extends StatelessWidget {
     return DecoratedBox(
       decoration: const BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(ChiwawaRadii.sheet),
+        ),
       ),
       child: Padding(
         padding: padding,
@@ -31,7 +33,7 @@ class BottomSheetBase extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 18),
                 decoration: BoxDecoration(
                   color: ChiwawaColors.border,
-                  borderRadius: BorderRadius.circular(99),
+                  borderRadius: BorderRadius.circular(ChiwawaRadii.round),
                 ),
               ),
             ),
