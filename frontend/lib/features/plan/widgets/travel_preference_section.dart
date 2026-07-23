@@ -22,12 +22,12 @@ class TravelPreferenceSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'AI 추천 조건',
+          '추가 추천 조건',
           style: Theme.of(context).textTheme.titleMedium,
         ),
         const SizedBox(height: 6),
         const Text(
-          '원하는 여행 분위기를 선택지로만 골라요.',
+          '장소를 정한 뒤 취향과 일정 속도를 추가로 알려 주세요.',
           style: TextStyle(
             color: ChiwawaColors.textSecondary,
             fontSize: 12,

@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/models/transport_mode.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/repositories/plan_repository.dart';
 import '../../core/services/trip_session_service.dart';
@@ -27,6 +30,12 @@ final travelPreferenceProvider = StateProvider<TravelPreference>(
     return const TravelPreference();
   },
 );
+
+final transportModeProvider = StateProvider<TransportMode>((ref) {
+  ref.watch(authSessionRevisionProvider);
+  ref.watch(currentTripRevisionProvider);
+  return TransportMode.transit;
+});
 
 final routeOptimizationProvider =
     StateNotifierProvider<RouteOptimizationController, RouteOptimizationState>(
@@ -176,8 +185,23 @@ class PlanActions {
     resetOptimization();
   }
 
-  Future<void> optimizeRoute() {
-    return _ref.read(routeOptimizationProvider.notifier).optimize();
+  void updateTransportMode(TransportMode mode) {
+    final currentMode = _ref.read(transportModeProvider);
+    if (currentMode == mode) return;
+    final routeState = _ref.read(routeOptimizationProvider);
+    final shouldReoptimize =
+        routeState.status == AiJobStatus.done || routeState.isWorking;
+    _ref.read(transportModeProvider.notifier).state = mode;
+    resetOptimization();
+    if (shouldReoptimize) {
+      unawaited(optimizeRoute(mode));
+    }
+  }
+
+  Future<void> optimizeRoute(TransportMode transportMode) {
+    return _ref
+        .read(routeOptimizationProvider.notifier)
+        .optimize(transportMode);
   }
 
   void resetOptimization() {
@@ -194,7 +218,7 @@ class RouteOptimizationController
   final Ref _ref;
   int _requestVersion = 0;
 
-  Future<void> optimize() async {
+  Future<void> optimize(TransportMode transportMode) async {
     final requestVersion = ++_requestVersion;
     final selections = _ref.read(selectedPlacesProvider);
     final places = List<String>.unmodifiable(
@@ -210,7 +234,7 @@ class RouteOptimizationController
     try {
       final routePlaces = await _ref
           .read(planRepositoryProvider)
-          .optimizeRoute(places, preference);
+          .optimizeRoute(places, preference, transportMode);
       if (requestVersion != _requestVersion) return;
       state = RouteOptimizationState.done(List.unmodifiable(routePlaces));
       _ref.read(planItineraryProvider.notifier).replaceCurrentDay(routePlaces);

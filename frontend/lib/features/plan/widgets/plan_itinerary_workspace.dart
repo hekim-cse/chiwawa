@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/models/transport_mode.dart';
 import '../../../shared/widgets/app_section_header.dart';
 import '../models/plan_itinerary.dart';
 import 'route_map_overview.dart';
@@ -9,6 +10,7 @@ class PlanItineraryWorkspace extends StatelessWidget {
   const PlanItineraryWorkspace({
     required this.stops,
     required this.onConfirm,
+    this.transportMode = TransportMode.transit,
     this.onMove,
     this.onEditTime,
     this.onDelete,
@@ -16,6 +18,7 @@ class PlanItineraryWorkspace extends StatelessWidget {
   });
 
   final List<PlanItineraryStop> stops;
+  final TransportMode transportMode;
   final void Function(int fromIndex, int toIndex)? onMove;
   final ValueChanged<PlanItineraryStop>? onEditTime;
   final ValueChanged<PlanItineraryStop>? onDelete;
@@ -30,16 +33,18 @@ class PlanItineraryWorkspace extends StatelessWidget {
           title: '최적 경로 결과',
           description: '지도 번호와 일정 순서가 함께 바뀌어요.',
           trailing: Text(
-            '${stops.length}곳',
+            '${transportMode.label} · ${stops.length}곳',
+            key: const ValueKey('itinerary-selected-transport'),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: ChiwawaColors.textSecondary,
+                  color: ChiwawaColors.primary,
+                  fontWeight: FontWeight.w800,
                 ),
           ),
         ),
         const SizedBox(height: ChiwawaSpacing.sm),
         RouteMapOverview(stops: stops),
         const SizedBox(height: ChiwawaSpacing.sm),
-        _ItinerarySummary(stops: stops),
+        _ItinerarySummary(stops: stops, transportMode: transportMode),
         const SizedBox(height: ChiwawaSpacing.lg),
         const AppSectionHeader(title: '일정 타임라인'),
         const SizedBox(height: ChiwawaSpacing.sm),
@@ -88,9 +93,13 @@ class PlanItineraryWorkspace extends StatelessWidget {
 }
 
 class _ItinerarySummary extends StatelessWidget {
-  const _ItinerarySummary({required this.stops});
+  const _ItinerarySummary({
+    required this.stops,
+    required this.transportMode,
+  });
 
   final List<PlanItineraryStop> stops;
+  final TransportMode transportMode;
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +133,7 @@ class _ItinerarySummary extends StatelessWidget {
           Expanded(
             child: _SummaryItem(
               key: const ValueKey('itinerary-summary-travel-time'),
-              icon: Icons.directions_walk_rounded,
+              icon: _transportIcon(transportMode),
               label: '이동 시간',
               value: travelMinutes == 0 ? '확인 필요' : '약 $travelMinutes분',
             ),
@@ -385,7 +394,7 @@ class _MovementRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final walk = nextStop.place.transport.contains('도보');
+    final transport = nextStop.place.transport;
     final cost = nextStop.place.travelCost.trim();
     return Container(
       height: 42,
@@ -400,7 +409,11 @@ class _MovementRow extends StatelessWidget {
       child: Row(
         children: [
           Icon(
-            walk ? Icons.directions_walk_rounded : Icons.train_rounded,
+            transport.contains('도보')
+                ? Icons.directions_walk_rounded
+                : transport.contains('자동차')
+                    ? Icons.directions_car_filled_rounded
+                    : Icons.train_rounded,
             size: 17,
             color: ChiwawaColors.movement,
           ),
@@ -448,4 +461,12 @@ class _MenuLabel extends StatelessWidget {
       ],
     );
   }
+}
+
+IconData _transportIcon(TransportMode mode) {
+  return switch (mode) {
+    TransportMode.walk => Icons.directions_walk_rounded,
+    TransportMode.drive => Icons.directions_car_filled_rounded,
+    TransportMode.transit => Icons.train_rounded,
+  };
 }

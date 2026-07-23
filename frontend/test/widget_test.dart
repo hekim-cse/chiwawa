@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:chiwawa/core/confirmed_route.dart';
 import 'package:chiwawa/core/auth/auth_controller.dart';
+import 'package:chiwawa/core/models/transport_mode.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
 import 'package:chiwawa/core/repositories/plan_repository.dart';
 import 'package:chiwawa/core/saved_photo_places.dart';
@@ -23,6 +24,7 @@ class _FailingPlanRepository implements PlanRepository {
   Future<List<RoutePlace>> optimizeRoute(
     List<String> places,
     TravelPreference preference,
+    TransportMode transportMode,
   ) async {
     throw StateError('mock failure');
   }
@@ -38,6 +40,7 @@ class _ControlledPlanRepository implements PlanRepository {
   Future<List<RoutePlace>> optimizeRoute(
     List<String> places,
     TravelPreference preference,
+    TransportMode transportMode,
   ) {
     return completer.future;
   }
@@ -333,6 +336,12 @@ void main() {
     await tester.tap(find.bySemanticsLabel('일정'));
     await tester.pumpAndSettle();
 
+    await tester.dragUntilVisible(
+      find.text('적당히'),
+      find.byKey(const ValueKey('plan-scroll')),
+      const Offset(0, -260),
+    );
+    await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(tester.getSize(find.text('적당히')).height, lessThan(24));
   });
@@ -684,8 +693,21 @@ void main() {
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(
+      find.byKey(
+        const ValueKey('plan-optimize-route'),
+        skipOffstage: false,
+      ),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('plan-optimize-route')));
     await tester.pump(const Duration(milliseconds: 250));
+    await tester.dragUntilVisible(
+      find.widgetWithText(FilterChip, '맛집'),
+      find.byKey(const ValueKey('plan-scroll')),
+      const Offset(0, -260),
+    );
+    await tester.pump();
     await tester.tap(find.widgetWithText(FilterChip, '맛집'));
     await tester.pump();
 
@@ -781,7 +803,11 @@ void main() {
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('맛집'));
+    await tester.dragUntilVisible(
+      find.widgetWithText(FilterChip, '맛집'),
+      find.byKey(const ValueKey('plan-scroll')),
+      const Offset(0, -260),
+    );
     await tester.pumpAndSettle();
     await tester.tap(find.text('맛집'));
     await tester.pumpAndSettle();

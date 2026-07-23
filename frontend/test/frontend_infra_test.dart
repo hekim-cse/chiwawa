@@ -5,6 +5,8 @@ import 'package:chiwawa/core/api/dio_client.dart';
 import 'package:chiwawa/core/auth/auth_controller.dart';
 import 'package:chiwawa/core/auth/deep_link_service.dart';
 import 'package:chiwawa/core/confirmed_route.dart';
+import 'package:chiwawa/core/repositories/api/api_plan_repository.dart';
+import 'package:chiwawa/core/models/transport_mode.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
 import 'package:chiwawa/core/saved_photo_places.dart';
 import 'package:chiwawa/core/services/trip_session_service.dart';
@@ -238,6 +240,31 @@ void main() {
 
     expect(container.read(savedPhotoPlacesProvider), isEmpty);
     expect(container.read(confirmedRouteProvider), isEmpty);
+  });
+
+  test('ApiPlanRepository forwards the selected transport mode', () async {
+    SharedPreferences.setMockInitialValues({});
+    final tripIdStore = TripIdStore();
+    await tripIdStore.save('trip-transport-test');
+    final dio = Dio();
+    final adapter = RecordingHttpClientAdapter();
+    dio.httpClientAdapter = adapter;
+    final repository = ApiPlanRepository(
+      dio: dio,
+      tripIdStore: tripIdStore,
+    );
+
+    await repository.optimizeRoute(
+      const ['장소 A', '장소 B'],
+      const TravelPreference(),
+      TransportMode.drive,
+    );
+
+    expect(adapter.requests, hasLength(1));
+    expect(
+      adapter.requests.single.data,
+      containsPair('transport_mode', 'drive'),
+    );
   });
 }
 
