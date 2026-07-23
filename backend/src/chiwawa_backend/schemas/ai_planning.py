@@ -31,6 +31,28 @@ class RecommendationStatus(StrEnum):
     UNAVAILABLE = "UNAVAILABLE"
 
 
+# AI 계약과 동일 값 (직접 import 하지 않고 백엔드에 복제 정의).
+class RecommendationCategory(StrEnum):
+    LANDMARK = "LANDMARK"
+    CAFE = "CAFE"
+    CULTURE = "CULTURE"
+    PARK = "PARK"
+    RESTAURANT = "RESTAURANT"
+
+
+class RouteInsertionRejectionReason(StrEnum):
+    STAY_DURATION_BELOW_MINIMUM = "STAY_DURATION_BELOW_MINIMUM"
+    PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED = "PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED"
+    CANDIDATE_TO_NEXT_LIMIT_EXCEEDED = "CANDIDATE_TO_NEXT_LIMIT_EXCEEDED"
+    PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED = (
+        "PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED"
+    )
+    CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED = (
+        "CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED"
+    )
+    PLANNED_END_EXCEEDED = "PLANNED_END_EXCEEDED"
+
+
 class TripPlanningPlace(ApiModel):
     place_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -175,7 +197,7 @@ class CandidatePlace(ApiModel):
     place_id: str = Field(min_length=1)
     name: str = Field(min_length=1)
     coordinate: Coordinate
-    category: str = Field(min_length=1)
+    category: RecommendationCategory
     formatted_address: str | None = None
     rating: float | None = Field(default=None, ge=0, le=5)
     user_rating_count: int | None = Field(default=None, ge=0)
@@ -186,11 +208,11 @@ class RecommendationWindow(ApiModel):
     leg_index: int = Field(ge=0)
     previous_place_id: str = Field(min_length=1)
     next_place_id: str = Field(min_length=1)
-    previous_departure_at: str = Field(min_length=1)
-    next_arrival_at: str = Field(min_length=1)
+    previous_departure_at: dt.datetime
+    next_arrival_at: dt.datetime
     original_travel_minutes: int = Field(ge=0)
-    original_timeline_end_at: str = Field(min_length=1)
-    planned_end_at: str = Field(min_length=1)
+    original_timeline_end_at: dt.datetime
+    planned_end_at: dt.datetime
 
 
 class TravelMetric(ApiModel):
@@ -201,19 +223,21 @@ class TravelMetric(ApiModel):
 class RouteMetrics(ApiModel):
     previous_to_candidate: TravelMetric
     candidate_to_next: TravelMetric
-    candidate_arrival_at: str = Field(min_length=1)
-    candidate_departure_at: str = Field(min_length=1)
-    next_arrival_at: str = Field(min_length=1)
+    candidate_arrival_at: dt.datetime
+    candidate_departure_at: dt.datetime
+    next_arrival_at: dt.datetime
 
 
 class InsertionImpact(ApiModel):
     replacement_travel_minutes: int
     replacement_total_minutes: int
     additional_minutes: int
-    updated_next_arrival_at: str = Field(min_length=1)
-    updated_timeline_end_at: str = Field(min_length=1)
+    updated_next_arrival_at: dt.datetime
+    updated_timeline_end_at: dt.datetime
     remaining_minutes: int
-    rejection_reasons: list[str] = Field(default_factory=list)
+    rejection_reasons: list[RouteInsertionRejectionReason] = Field(
+        default_factory=list,
+    )
 
 
 class CandidateRecommendationRead(ApiModel):
@@ -224,14 +248,28 @@ class CandidateRecommendationRead(ApiModel):
 
 
 class RecommendationGroupRead(ApiModel):
-    category: str = Field(min_length=1)
+    category: RecommendationCategory
     display_name: str = Field(min_length=1)
     recommendations: list[CandidateRecommendationRead]
 
 
+class RouteLegGeometryRead(ApiModel):
+    encoded_polyline: str = Field(min_length=1)
+
+
+class OptimizedRouteLegGeometryRead(ApiModel):
+    day_index: int = Field(ge=1)
+    leg_index: int = Field(ge=0)
+    origin_place_id: str = Field(min_length=1)
+    destination_place_id: str = Field(min_length=1)
+    geometry: RouteLegGeometryRead
+
+
 class RecommendationRead(ApiModel):
     route_option: RouteOptionRead
-    route_leg_geometries: list[dict[str, object]] = Field(default_factory=list)
+    route_leg_geometries: list[OptimizedRouteLegGeometryRead] = Field(
+        default_factory=list,
+    )
     recommendation_groups: list[RecommendationGroupRead]
 
 
