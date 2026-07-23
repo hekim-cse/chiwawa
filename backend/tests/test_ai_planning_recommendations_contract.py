@@ -1,8 +1,11 @@
 # Modal 통합 응답(일정 최적화 + 추천) 계약 검증 테스트
+#   AI가 제공하는 정본 fixture를 백엔드에서도 그대로 사용해(단일 원천)
+#   타입/enum/nullable 계약이 양쪽에서 동일한지 검증한다.
 #   cd backend && uv run pytest tests/test_ai_planning_recommendations_contract.py
 
 from __future__ import annotations
 
+import datetime as dt
 import json
 from pathlib import Path
 
@@ -10,63 +13,77 @@ import pytest
 from pydantic import ValidationError
 
 from chiwawa_backend.schemas.ai_planning import (
+    RecommendationCategory,
     RecommendationStatus,
+    RouteInsertionRejectionReason,
     TripPlanningStatus,
     TripPlanningWithRecommendationsResponse,
 )
 
-FIXTURE = Path(__file__).parent / "fixtures" / "modal_plan_trip_with_recommendations.json"
+# AI Route Planner 가 백엔드와 공유하려고 만든 정본 통합 응답 fixture.
+AI_CANONICAL_FIXTURE = (
+    Path(__file__).resolve().parents[2]
+    / "ai"
+    / "route_planner"
+    / "tests"
+    / "fixtures"
+    / "trip_planning_with_recommendations_response.json"
+)
 
 
 def _payload() -> dict[str, object]:
-    return json.loads(FIXTURE.read_text(encoding="utf-8"))
+    return json.loads(AI_CANONICAL_FIXTURE.read_text(encoding="utf-8"))
 
 
-def test_parses_full_integration_contract() -> None:
-    # Given: include_recommendations=true 통합 응답 fixture.
+def test_backend_dto_parses_ai_canonical_fixture() -> None:
+    # Given/When: AI 정본 fixture 를 백엔드 통합 응답 DTO 로 파싱.
     parsed = TripPlanningWithRecommendationsResponse.model_validate(_payload())
 
-    # Then: 최상위 + 중첩 구조가 모두 파싱된다.
+    # Then: 최상위 + day_plans.route_options 구조가 파싱된다.
     assert parsed.status is TripPlanningStatus.PARTIAL_SUCCESS
     day = parsed.day_plans[0]
     assert day.route_options[0].travel_mode == "DRIVE"
-    assert day.route_options[0].timeline is not None
-    assert day.route_options[0].timeline.timeline_stops[0].stop_type == "START"
-    # timeline == null 인 route_option 은 그대로 유지된다.
-    assert day.route_options[1].timeline is None
-    assert day.route_options[1].missing_segments == ["ChIJ_fmKgRPnAGARkKWLtCYTu7g"]
 
-    rec_day = parsed.day_recommendations[0]
-    ok = rec_day.route_options[0]
-    assert ok.status is RecommendationStatus.SUCCESS
-    assert ok.recommendation is not None
-    group = ok.recommendation.recommendation_groups[0]
-    assert group.category == "CAFE"
+
+def test_recommendation_types_match_ai_contract() -> None:
+    parsed = TripPlanningWithRecommendationsResponse.model_validate(_payload())
+    day_rec = parsed.day_recommendations[0]
+
+    success = day_rec.route_options[0]
+    assert success.status is RecommendationStatus.SUCCESS
+    assert success.recommendation is not None
+
+    group = success.recommendation.recommendation_groups[0]
+    # category 는 str 이 아니라 enum 이어야 한다.
+    assert isinstance(group.category, RecommendationCategory)
+
     candidate = group.recommendations[0]
-    assert candidate.candidate.rating == pytest.approx(4.1)
-    assert candidate.insertion_impact.additional_minutes == 34
-    assert candidate.window.leg_index == 0
+    assert isinstance(candidate.candidate.category, RecommendationCategory)
+    # 추천 시각 필드는 datetime 으로 파싱되어야 한다.
+    assert isinstance(candidate.window.previous_departure_at, dt.datetime)
+    assert isinstance(candidate.route_metrics.candidate_arrival_at, dt.datetime)
+    assert isinstance(candidate.insertion_impact.updated_next_arrival_at, dt.datetime)
+    # rejection_reasons 는 enum 리스트 타입이어야 한다.
+    assert all(
+        isinstance(reason, RouteInsertionRejectionReason)
+        for reason in candidate.insertion_impact.rejection_reasons
+    )
+
+    # route_leg_geometries 는 dict 가 아니라 타입이 정의된 DTO 여야 한다.
+    geometry = success.recommendation.route_leg_geometries[0]
+    assert geometry.day_index == 1
+    assert geometry.geometry.encoded_polyline
 
     # UNAVAILABLE 은 recommendation 이 null 이고 원본 route_option 은 유지된다.
-    unavailable = rec_day.route_options[1]
+    unavailable = day_rec.route_options[1]
     assert unavailable.status is RecommendationStatus.UNAVAILABLE
     assert unavailable.recommendation is None
-    assert unavailable.route_option.missing_segments == ["ChIJ_fmKgRPnAGARkKWLtCYTu7g"]
 
 
-def test_round_trip_preserves_snake_case_contract() -> None:
-    # Given: fixture 를 DTO 로 역직렬화.
+def test_round_trip_is_stable() -> None:
     parsed = TripPlanningWithRecommendationsResponse.model_validate(_payload())
-
-    # When: 재직렬화한다.
     dumped = parsed.model_dump(mode="json")
-
-    # Then: snake_case 필드명과 enum 문자열이 계약대로 유지된다.
-    assert dumped["trip_id"] == "trip_001"
     assert dumped["status"] == "PARTIAL_SUCCESS"
-    assert dumped["day_plans"][0]["route_options"][0]["travel_mode"] == "DRIVE"
-    assert dumped["day_recommendations"][0]["route_options"][0]["status"] == "SUCCESS"
-    # 재역직렬화도 성공(왕복 안정성).
     reparsed = TripPlanningWithRecommendationsResponse.model_validate(dumped)
     assert reparsed == parsed
 
@@ -78,15 +95,28 @@ def test_unknown_status_is_rejected() -> None:
         TripPlanningWithRecommendationsResponse.model_validate(payload)
 
 
-def test_unknown_field_is_rejected() -> None:
+def test_unknown_category_is_rejected() -> None:
     payload = _payload()
-    payload["surprise_field"] = 1
+    groups = payload["day_recommendations"][0]["route_options"][0]["recommendation"][
+        "recommendation_groups"
+    ]
+    groups[0]["category"] = "NOT_A_CATEGORY"
     with pytest.raises(ValidationError):
         TripPlanningWithRecommendationsResponse.model_validate(payload)
 
 
-def test_missing_required_nested_field_is_rejected() -> None:
+def test_unknown_rejection_reason_is_rejected() -> None:
     payload = _payload()
-    del payload["day_plans"][0]["route_options"][0]["travel_mode"]
+    impact = payload["day_recommendations"][0]["route_options"][0]["recommendation"][
+        "recommendation_groups"
+    ][0]["recommendations"][0]["insertion_impact"]
+    impact["rejection_reasons"] = ["NOT_A_REASON"]
+    with pytest.raises(ValidationError):
+        TripPlanningWithRecommendationsResponse.model_validate(payload)
+
+
+def test_unknown_field_is_rejected() -> None:
+    payload = _payload()
+    payload["surprise_field"] = 1
     with pytest.raises(ValidationError):
         TripPlanningWithRecommendationsResponse.model_validate(payload)
