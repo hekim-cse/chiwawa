@@ -8,6 +8,7 @@ from ai.route_planner.domain.schemas import (
     TravelTimeMatrixResult,
 )
 from ai.route_planner.modal_app import (
+    free_time_recommendations_payload,
     plan_trip_payload,
     plan_trip_with_recommendations_payload,
 )
@@ -169,7 +170,8 @@ def test_plan_trip_payload_preserves_complete_modes():
     assert transit_option["missing_segments"]
 
 
-# 기존 계획 응답 필드를 유지하면서 옵션별 추천 결과를 추가하는지 검증
+# 기존 계획 응답 필드를 유지하면서
+# 옵션별 추천 결과를 추가하는지 검증
 def test_plan_trip_with_recommendations_payload_extends_response():
     payload = make_request_payload()
     payload["include_recommendations"] = True
@@ -189,6 +191,41 @@ def test_plan_trip_with_recommendations_payload_extends_response():
         for option in response["day_recommendations"][0]["route_options"]
     ]
     assert statuses == ["SUCCESS", "SUCCESS", "SUCCESS"]
+    recommendations = response["day_recommendations"][0]["route_options"]
+    assert all(
+        outcome["recommendation"]["route_option"]
+        == outcome["route_option"]
+        for outcome in recommendations
+    )
+
+
+# 독립 추천 Endpoint도 통합 응답과
+# 동일한 옵션 계약을 사용하는지 검증
+def test_free_time_recommendations_payload_uses_response_contract():
+    planning = plan_trip_payload(
+        payload=make_request_payload(),
+        routes_provider=FakeRoutesProvider(),
+    )
+
+    response = free_time_recommendations_payload(
+        payload={
+            "timezone": "Asia/Tokyo",
+            "route_options": planning["day_plans"][0]["route_options"],
+        },
+        recommendation_generator=FakeRecommendationGenerator(),
+        settings=recommendation_settings(),
+    )
+
+    assert [outcome["status"] for outcome in response["route_options"]] == [
+        "SUCCESS",
+        "SUCCESS",
+        "SUCCESS",
+    ]
+    assert all(
+        outcome["recommendation"]["route_option"]
+        == outcome["route_option"]
+        for outcome in response["route_options"]
+    )
 
 
 # 잘못된 요청 payload는 Pydantic ValidationError를 발생시키는지 검증

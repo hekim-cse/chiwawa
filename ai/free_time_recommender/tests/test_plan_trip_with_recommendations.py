@@ -1,6 +1,8 @@
 # 경로 최적화와 날짜별 옵션 추천을 연결하는 Application Facade 테스트
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from ai.free_time_recommender.application.generate_route_option_recommendations import (
     RouteOptionRecommendationResult,
 )
@@ -126,3 +128,34 @@ def test_execute_preserves_unavailable_route_option() -> None:
     )
     assert outcomes[1].recommendation is None
     assert generator.calls[0][0] == (available,)
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid_value"),
+    [
+        ("route_options", []),
+        ("timezone", "Asia/Tokyo"),
+        ("policy", object()),
+    ],
+)
+def test_outcome_generator_rejects_invalid_boundary_input(
+    field: str,
+    invalid_value: object,
+) -> None:
+    """잘못된 오케스트레이션 입력을 Provider 호출 전에 차단한다."""
+
+    from ai.free_time_recommender.application.plan_trip_with_recommendations import (
+        GenerateRouteOptionRecommendationOutcomes,
+    )
+
+    arguments = {
+        "route_options": (make_route_option(),),
+        "timezone": ZoneInfo("Asia/Tokyo"),
+        "policy": RecommendationPolicy(30, 30, 3000, 2),
+    }
+    arguments[field] = invalid_value
+
+    with pytest.raises(TypeError):
+        GenerateRouteOptionRecommendationOutcomes(
+            StubRecommendationGenerator()
+        ).execute(**arguments)
