@@ -5,10 +5,19 @@ import '../../core/models/travel_models.dart';
 import '../../core/repositories/plan_repository.dart';
 import '../../core/services/trip_session_service.dart';
 import 'models/plan_itinerary.dart';
+import 'models/plan_place_selection.dart';
 
-final selectedPlacesProvider = StateProvider<List<String>>((ref) {
+final selectedPlacesProvider = StateProvider<List<PlanPlaceSelection>>((ref) {
   ref.watch(currentTripRevisionProvider);
-  return ref.watch(planRepositoryProvider).defaultSelectedPlaces;
+  final names = ref.watch(planRepositoryProvider).defaultSelectedPlaces;
+  return List.unmodifiable([
+    for (var index = 0; index < names.length; index++)
+      PlanPlaceSelection(
+        id: 'seed:$index',
+        name: names[index],
+        source: PlanPlaceSource.seed,
+      ),
+  ]);
 });
 
 final travelPreferenceProvider = StateProvider<TravelPreference>(
@@ -109,23 +118,40 @@ class PlanActions {
   PlanActions(this._ref);
 
   final Ref _ref;
+  int _selectionSequence = 0;
 
-  bool addPlace(String value) {
+  bool addPlace(
+    String value, {
+    PlanPlaceSource source = PlanPlaceSource.manual,
+  }) {
     final place = value.trim();
     if (place.isEmpty) return false;
-    final places = _ref.read(selectedPlacesProvider);
-    if (places.contains(place)) return false;
+    return _addSelection(
+      PlanPlaceSelection(
+        id: '${source.name}:${_selectionSequence++}',
+        name: place,
+        source: source,
+      ),
+    );
+  }
 
+  bool addSavedPlace(PhotoSearchResult place) {
+    return _addSelection(PlanPlaceSelection.fromPhoto(place));
+  }
+
+  bool _addSelection(PlanPlaceSelection selection) {
+    final places = _ref.read(selectedPlacesProvider);
+    if (places.any((place) => place.id == selection.id)) return false;
     _ref.read(selectedPlacesProvider.notifier).state =
-        List.unmodifiable([...places, place]);
+        List.unmodifiable([...places, selection]);
     resetOptimization();
     return true;
   }
 
-  void removePlace(String place) {
+  void removePlace(PlanPlaceSelection place) {
     final places = _ref.read(selectedPlacesProvider);
     _ref.read(selectedPlacesProvider.notifier).state = List.unmodifiable(
-      places.where((item) => item != place),
+      places.where((item) => item.id != place.id),
     );
     resetOptimization();
   }
@@ -170,7 +196,10 @@ class RouteOptimizationController
 
   Future<void> optimize() async {
     final requestVersion = ++_requestVersion;
-    final places = _ref.read(selectedPlacesProvider);
+    final selections = _ref.read(selectedPlacesProvider);
+    final places = List<String>.unmodifiable(
+      selections.map((selection) => selection.name),
+    );
     final preference = _ref.read(travelPreferenceProvider);
 
     state = const RouteOptimizationState.pending();

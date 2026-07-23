@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
+import '../models/plan_place_selection.dart';
 
 class PlaceInputField extends StatefulWidget {
   const PlaceInputField({
@@ -10,9 +11,9 @@ class PlaceInputField extends StatefulWidget {
     super.key,
   });
 
-  final List<String> places;
+  final List<PlanPlaceSelection> places;
   final ValueChanged<String> onAdd;
-  final ValueChanged<String> onRemove;
+  final ValueChanged<PlanPlaceSelection> onRemove;
 
   @override
   State<PlaceInputField> createState() => _PlaceInputFieldState();
@@ -40,7 +41,7 @@ class _PlaceInputFieldState extends State<PlaceInputField> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         border: Border.all(color: ChiwawaColors.border),
       ),
       child: Column(
@@ -61,7 +62,7 @@ class _PlaceInputFieldState extends State<PlaceInputField> {
               filled: true,
               fillColor: ChiwawaColors.background,
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(ChiwawaRadii.control),
                 borderSide: BorderSide.none,
               ),
             ),
@@ -74,9 +75,9 @@ class _PlaceInputFieldState extends State<PlaceInputField> {
               for (var index = 0; index < widget.places.length; index++)
                 InputChip(
                   key: ValueKey(
-                    'selected-place-${widget.places[index]}-$index',
+                    'selected-place-${widget.places[index].id}',
                   ),
-                  label: Text(widget.places[index]),
+                  label: Text(widget.places[index].name),
                   selected: true,
                   selectedColor: ChiwawaColors.secondary,
                   checkmarkColor: ChiwawaColors.primary,
@@ -85,6 +86,7 @@ class _PlaceInputFieldState extends State<PlaceInputField> {
                     color: ChiwawaColors.primary,
                     fontWeight: FontWeight.w800,
                   ),
+                  deleteButtonTooltipMessage: '${widget.places[index].name} 삭제',
                   onDeleted: () => widget.onRemove(widget.places[index]),
                 ),
             ],

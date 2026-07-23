@@ -6,6 +6,7 @@ import '../../../core/models/travel_models.dart';
 import '../../../core/providers/data_providers.dart';
 import '../../../shared/widgets/async_value_view.dart';
 import '../../../shared/widgets/bottom_sheet_base.dart';
+import '../../plan/models/plan_place_selection.dart';
 import '../../plan/plan_controller.dart';
 
 void showFreeTimeRecommendSheet(BuildContext context) {
@@ -54,7 +55,10 @@ class FreeTimeRecommendSheet extends ConsumerWidget {
                           _RecommendCard(
                             item: item,
                             onAdd: () {
-                              ref.read(planActionsProvider).addPlace(item.name);
+                              ref.read(planActionsProvider).addPlace(
+                                    item.name,
+                                    source: PlanPlaceSource.freeTime,
+                                  );
                               final messenger = ScaffoldMessenger.of(context);
                               Navigator.of(context).pop();
                               messenger.showSnackBar(
@@ -97,7 +101,7 @@ class _RecommendCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         border: Border.all(color: ChiwawaColors.border),
       ),
       child: Column(
@@ -153,7 +157,7 @@ class _InfoChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: ChiwawaColors.background,
-        borderRadius: BorderRadius.circular(99),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.round),
         border: Border.all(color: ChiwawaColors.border),
       ),
       child: Text(
