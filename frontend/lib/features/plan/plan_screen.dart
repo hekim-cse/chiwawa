@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,6 +16,8 @@ import '../../shared/widgets/app_section_header.dart';
 import '../../shared/widgets/app_viewport.dart';
 import 'models/plan_itinerary.dart';
 import 'plan_controller.dart';
+import 'plan_day_constraints_controller.dart';
+import 'widgets/plan_day_constraint_section.dart';
 import 'widgets/plan_day_selector.dart';
 import 'widgets/plan_transport_mode_section.dart';
 import 'widgets/place_input_field.dart';
@@ -29,6 +33,7 @@ export 'plan_controller.dart'
         routeOptimizationProvider,
         planItineraryProvider,
         planActionsProvider;
+export 'plan_day_constraints_controller.dart' show planDayConstraintsProvider;
 
 class PlanScreen extends ConsumerWidget {
   const PlanScreen({super.key});
@@ -39,6 +44,8 @@ class PlanScreen extends ConsumerWidget {
     final savedPhotoPlaces = ref.watch(savedPhotoPlacesProvider);
     final routeState = ref.watch(routeOptimizationProvider);
     final itinerary = ref.watch(planItineraryProvider);
+    final dayConstraints = ref.watch(planDayConstraintsProvider);
+    final dayConstraint = dayConstraints.forDay(itinerary.selectedDay);
     final preference = ref.watch(travelPreferenceProvider);
     final transportMode = ref.watch(transportModeProvider);
     final actions = ref.read(planActionsProvider);
@@ -78,6 +85,46 @@ class PlanScreen extends ConsumerWidget {
             onSelected: (day) => _selectDay(ref, day),
           ),
           const SizedBox(height: ChiwawaSpacing.lg),
+          PlanDayConstraintSection(
+            key: ValueKey('plan-day-constraint-${itinerary.selectedDay}'),
+            day: itinerary.selectedDay,
+            constraint: dayConstraint,
+            onStartPlaceChanged: (value) => _updateDayConstraint(
+              ref,
+              (controller) => controller.updateStartPlace(
+                itinerary.selectedDay,
+                value,
+              ),
+            ),
+            onStartTimeChanged: (value) => _updateDayConstraint(
+              ref,
+              (controller) => controller.updateStartTime(
+                itinerary.selectedDay,
+                value,
+              ),
+            ),
+            onEndPlaceChanged: (value) => _updateDayConstraint(
+              ref,
+              (controller) => controller.updateEndPlace(
+                itinerary.selectedDay,
+                value,
+              ),
+            ),
+            onEndTimeChanged: (value) => _updateDayConstraint(
+              ref,
+              (controller) => controller.updateEndTime(
+                itinerary.selectedDay,
+                value,
+              ),
+            ),
+            onMaxPlaceCountChanged: (value) => _updateDayConstraint(
+              ref,
+              (controller) => controller.updateMaxPlaceCount(
+                itinerary.selectedDay,
+                value,
+              ),
+            ),
+          ),
           const SizedBox(height: ChiwawaSpacing.section),
           AppSectionHeader(
             title: '등록 장소',
@@ -93,7 +140,9 @@ class PlanScreen extends ConsumerWidget {
           const SizedBox(height: ChiwawaSpacing.sm),
           PlaceInputField(
             places: places,
-            onAdd: actions.addPlace,
+            onAdd: (value) => unawaited(
+              _saveManualPlace(context, actions, value),
+            ),
             onRemove: actions.removePlace,
           ),
           if (savedPhotoPlaces.isNotEmpty) ...[
@@ -117,7 +166,7 @@ class PlanScreen extends ConsumerWidget {
           const SizedBox(height: ChiwawaSpacing.md),
           RouteOptimizationSection(
             state: routeState,
-            canOptimize: places.length >= 2,
+            canOptimize: places.length >= 2 && dayConstraint.isValid,
             onOptimize: () => actions.optimizeRoute(transportMode),
             transportMode: transportMode,
             itinerary: itinerary.currentStops,
@@ -147,6 +196,40 @@ class PlanScreen extends ConsumerWidget {
     ref.read(routeOptimizationProvider.notifier).reset();
   }
 
+  void _updateDayConstraint(
+    WidgetRef ref,
+    void Function(PlanDayConstraintsController controller) update,
+  ) {
+    update(ref.read(planDayConstraintsProvider.notifier));
+    ref.read(planActionsProvider).resetOptimization();
+  }
+
+  Future<void> _saveManualPlace(
+    BuildContext context,
+    PlanActions actions,
+    String value,
+  ) async {
+    try {
+      final added = await actions.saveAndAddPlace(value);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              added ? '$value 서버에 저장했어요.' : '$value 이미 저장 중이거나 일정에 있어요.',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('장소를 저장하지 못했어요. 다시 시도해 주세요.')),
+        );
+    }
+  }
 
   Future<void> _editTime(
     BuildContext context,

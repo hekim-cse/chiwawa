@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/models/photo_upload.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/repositories/photo_place_repository.dart';
 
@@ -9,7 +10,17 @@ final exploreImagePathProvider = StateProvider<String?>((ref) {
   return null;
 });
 
+final explorePhotoUploadProvider = StateProvider<PhotoUpload?>((ref) {
+  ref.watch(authSessionRevisionProvider);
+  return null;
+});
+
 final exploreAnalyzingProvider = StateProvider<bool>((ref) {
+  ref.watch(authSessionRevisionProvider);
+  return false;
+});
+
+final exploreSavingPlaceProvider = StateProvider<bool>((ref) {
   ref.watch(authSessionRevisionProvider);
   return false;
 });
@@ -64,14 +75,16 @@ class ExploreController {
     _ref.read(exploreSelectedResultProvider.notifier).state = result;
     _ref.read(exploreCandidatesProvider.notifier).state = [result];
     _ref.read(exploreImagePathProvider.notifier).state = null;
+    _ref.read(explorePhotoUploadProvider.notifier).state = null;
     _ref.read(exploreAnalyzingProvider.notifier).state = false;
     _ref.read(exploreResultVisibleProvider.notifier).state = true;
     _ref.read(exploreAnalysisErrorProvider.notifier).state = null;
   }
 
-  Future<bool> analyzePhoto(String imagePath) async {
+  Future<bool> analyzePhoto(PhotoUpload upload) async {
     final requestVersion = ++_analysisVersion;
-    _ref.read(exploreImagePathProvider.notifier).state = imagePath;
+    _ref.read(exploreImagePathProvider.notifier).state = upload.previewPath;
+    _ref.read(explorePhotoUploadProvider.notifier).state = upload;
     _ref.read(exploreAnalyzingProvider.notifier).state = true;
     _ref.read(exploreResultVisibleProvider.notifier).state = false;
     _ref.read(exploreAnalysisErrorProvider.notifier).state = null;
@@ -79,7 +92,7 @@ class ExploreController {
     try {
       final candidates = await _ref
           .read(photoPlaceRepositoryProvider)
-          .analyzePhotoCandidates(imagePath);
+          .analyzePhotoCandidates(upload);
       if (requestVersion != _analysisVersion) return false;
 
       final uniqueCandidates = _deduplicateCandidates(candidates);
@@ -104,6 +117,24 @@ class ExploreController {
       if (requestVersion == _analysisVersion) {
         _ref.read(exploreAnalyzingProvider.notifier).state = false;
       }
+    }
+  }
+
+  Future<PhotoSearchResult?> confirmPhotoPlace(
+    PhotoSearchResult candidate,
+  ) async {
+    if (_ref.read(exploreSavingPlaceProvider)) return null;
+    _ref.read(exploreSavingPlaceProvider.notifier).state = true;
+    try {
+      final confirmed = await _ref
+          .read(photoPlaceRepositoryProvider)
+          .confirmPhotoPlace(candidate);
+      replaceSelectedCandidate(confirmed);
+      return confirmed;
+    } catch (_) {
+      return null;
+    } finally {
+      _ref.read(exploreSavingPlaceProvider.notifier).state = false;
     }
   }
 
