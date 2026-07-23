@@ -10,6 +10,7 @@ from chiwawa_backend.errors import (
     ConfigurationError,
     DomainValidationError,
     NotFoundError,
+    UpstreamServiceError,
 )
 from chiwawa_backend.routers import (
     assistant,
@@ -122,12 +123,19 @@ def _register_exception_handlers(app: FastAPI) -> None:
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     content=error.model_dump(),
                 )
+            case UpstreamServiceError() as upstream_error:
+                error = ErrorResponse(detail=str(upstream_error))
+                return JSONResponse(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    content=error.model_dump(),
+                )
             case _:
                 raise exc
 
     app.add_exception_handler(NotFoundError, not_found_handler)
     app.add_exception_handler(DomainValidationError, not_found_handler)
     app.add_exception_handler(ConfigurationError, not_found_handler)
+    app.add_exception_handler(UpstreamServiceError, not_found_handler)
 
 
 app = create_app()
