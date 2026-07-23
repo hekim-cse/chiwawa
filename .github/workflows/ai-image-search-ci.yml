@@ -1,0 +1,54 @@
+name: AI Image Search CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+      - main
+    paths:
+      - "ai/image_search/**"
+      - ".github/workflows/ai-image-search-ci.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-image-search-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Image Search 테스트 (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 = Modal 배포 런타임, 3.13 = 백엔드 in-process 런타임.
+        # 같은 코드가 두 런타임에서 돌므로 양쪽 모두에서 테스트해 문법/동작 스큐를 막는다.
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - name: 저장소 Checkout
+        uses: actions/checkout@v4
+
+      - name: Python ${{ matrix.python-version }} 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: ai/image_search/requirements.txt
+
+      - name: 의존성 설치
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            -r ai/image_search/requirements.txt
+
+      - name: Image Search 전체 테스트
+        run: |
+          python -m pytest \
+            ai/image_search/tests

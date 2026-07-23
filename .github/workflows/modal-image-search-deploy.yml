@@ -1,0 +1,53 @@
+name: Deploy Modal Image Search
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "ai/image_search/**"
+      - "ai/image_search/requirements.txt"
+      - ".github/workflows/modal-image-search-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: modal-image-search-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Test and deploy image search to Modal
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+      MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install image search dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install \
+            -r ai/image_search/requirements.txt
+
+      - name: Run deployment regression tests
+        run: |
+          python -m pytest \
+            ai/image_search/tests
+
+      - name: Deploy Modal image search app
+        run: |
+          modal deploy ai/image_search/modal_app.py
