@@ -5,6 +5,7 @@ from google.genai import types
 
 from ai.image_search.domain.schemas import VisionIdentification
 from ai.image_search.providers.env import get_gemini_api_key
+from ai.image_search.providers.errors import InvalidProviderResponseError
 
 
 # Gemini 에게 보내는 지시. 구조화 출력(JSON 스키마)이 형식을 강제하므로 여기선 '무엇을' 판단할지만 지시한다.
@@ -85,7 +86,7 @@ class VisionLlmProvider:
         # 빈 응답(안전 차단·빈 후보 등)은 원인을 드러내는 예외로 알린다
         # (None 을 그대로 파싱하면 원인 불명의 ValidationError 가 되어 진단 불가)
         if response.text is None:
-            raise RuntimeError(self._describe_empty_response(response))
+            raise InvalidProviderResponseError(self._describe_empty_response(response))
 
         # LLM 출력을 그대로 믿지 않고 pydantic 으로 재검증 (범위·카테고리 폐집합 강제)
         return VisionIdentification.model_validate_json(response.text)

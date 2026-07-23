@@ -1,0 +1,278 @@
+{
+  "$defs": {
+    "CandidateSource": {
+      "enum": [
+        "LANDMARK",
+        "LLM",
+        "NEARBY"
+      ],
+      "title": "CandidateSource",
+      "type": "string"
+    },
+    "LandmarkDetection": {
+      "properties": {
+        "latitude": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Latitude",
+          "type": "number"
+        },
+        "longitude": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Longitude",
+          "type": "number"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "score": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "latitude",
+        "longitude",
+        "score"
+      ],
+      "title": "LandmarkDetection",
+      "type": "object"
+    },
+    "PlaceCandidate": {
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/PlaceCategory"
+        },
+        "city": {
+          "title": "City",
+          "type": "string"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "country": {
+          "title": "Country",
+          "type": "string"
+        },
+        "latitude": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Latitude",
+          "type": "number"
+        },
+        "longitude": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Longitude",
+          "type": "number"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "place_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Place Id"
+        },
+        "rating": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rating"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/CandidateSource"
+        }
+      },
+      "required": [
+        "name",
+        "city",
+        "country",
+        "latitude",
+        "longitude",
+        "confidence",
+        "reason",
+        "category",
+        "source"
+      ],
+      "title": "PlaceCandidate",
+      "type": "object"
+    },
+    "PlaceCategory": {
+      "enum": [
+        "LANDMARK",
+        "TEMPLE_SHRINE",
+        "HISTORIC",
+        "MUSEUM",
+        "GALLERY",
+        "ARCHITECTURE",
+        "NATURE",
+        "PARK",
+        "GARDEN",
+        "BEACH",
+        "VIEWPOINT",
+        "NIGHTVIEW",
+        "ONSEN",
+        "CAFE",
+        "RESTAURANT",
+        "DESSERT",
+        "BAR",
+        "MARKET",
+        "SHOPPING",
+        "STREET",
+        "THEME_PARK",
+        "AQUARIUM_ZOO",
+        "ETC"
+      ],
+      "title": "PlaceCategory",
+      "type": "string"
+    },
+    "RecognitionSignals": {
+      "properties": {
+        "landmark": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LandmarkDetection"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "llm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VisionIdentification"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "RecognitionSignals",
+      "type": "object"
+    },
+    "RecognitionStatus": {
+      "enum": [
+        "SUCCESS",
+        "PARTIAL",
+        "FAILED"
+      ],
+      "title": "RecognitionStatus",
+      "type": "string"
+    },
+    "VisionIdentification": {
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/PlaceCategory"
+        },
+        "confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "place_name_guess": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Place Name Guess"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        },
+        "vibe_keywords": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Vibe Keywords",
+          "type": "array"
+        },
+        "visible_text": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Visible Text",
+          "type": "array"
+        }
+      },
+      "required": [
+        "category",
+        "reason",
+        "confidence"
+      ],
+      "title": "VisionIdentification",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/PlaceCandidate"
+      },
+      "title": "Candidates",
+      "type": "array"
+    },
+    "identified": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PlaceCandidate"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "signals": {
+      "$ref": "#/$defs/RecognitionSignals"
+    },
+    "status": {
+      "$ref": "#/$defs/RecognitionStatus"
+    }
+  },
+  "required": [
+    "identified",
+    "status",
+    "signals"
+  ],
+  "title": "ImageSearchResult",
+  "type": "object"
+}
