@@ -577,11 +577,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('사진으로 저장한 장소'), findsOneWidget);
-    expect(find.byKey(const ValueKey('select-saved-place-아사쿠사 센소지')),
+    expect(find.byKey(const ValueKey('select-saved-place-place-sensoji')),
         findsOneWidget);
 
     final savedPlace =
-        find.byKey(const ValueKey('select-saved-place-아사쿠사 센소지'));
+        find.byKey(const ValueKey('select-saved-place-place-sensoji'));
     await tester.ensureVisible(savedPlace);
     await tester.pumpAndSettle();
     await tester.tap(savedPlace);
@@ -615,7 +615,7 @@ void main() {
     await tester.tap(find.text('일정'));
     await tester.pumpAndSettle();
     final removeSavedPlaceButton =
-        find.byKey(const ValueKey('remove-saved-place-아사쿠사 센소지')).last;
+        find.byKey(const ValueKey('remove-saved-place-place-sensoji')).last;
     await tester.ensureVisible(removeSavedPlaceButton);
     await tester.pumpAndSettle();
     final removeButtonSize = tester.getSize(removeSavedPlaceButton);

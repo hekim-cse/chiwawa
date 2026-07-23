@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
 import '../../../core/models/travel_models.dart';
+import '../models/plan_place_selection.dart';
 
 class SavedPhotoPlacesSection extends StatelessWidget {
   const SavedPhotoPlacesSection({
@@ -13,7 +14,7 @@ class SavedPhotoPlacesSection extends StatelessWidget {
   });
 
   final List<PhotoSearchResult> places;
-  final List<String> selectedPlaces;
+  final List<PlanPlaceSelection> selectedPlaces;
   final ValueChanged<PhotoSearchResult> onSelect;
   final ValueChanged<PhotoSearchResult> onRemove;
 
@@ -23,7 +24,7 @@ class SavedPhotoPlacesSection extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         border: Border.all(color: ChiwawaColors.border),
       ),
       child: Column(
@@ -64,7 +65,10 @@ class SavedPhotoPlacesSection extends StatelessWidget {
                 _SavedPhotoPlaceChip(
                   key: ValueKey('saved-photo-place-${place.identityKey}'),
                   place: place,
-                  selected: selectedPlaces.contains(place.name),
+                  selected: selectedPlaces.any(
+                    (selection) =>
+                        selection.id == PlanPlaceSelection.photoIdentity(place),
+                  ),
                   onSelect: () => onSelect(place),
                   onRemove: () => onRemove(place),
                 ),
@@ -95,7 +99,7 @@ class _SavedPhotoPlaceChip extends StatelessWidget {
     return Material(
       color: ChiwawaColors.secondary,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(99),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.round),
         side: const BorderSide(color: ChiwawaColors.border),
       ),
       clipBehavior: Clip.antiAlias,
@@ -103,7 +107,7 @@ class _SavedPhotoPlaceChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           InkWell(
-            key: ValueKey('select-saved-place-${place.name}'),
+            key: ValueKey('select-saved-place-${place.identityKey}'),
             onTap: onSelect,
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 44),
@@ -140,11 +144,11 @@ class _SavedPhotoPlaceChip extends StatelessWidget {
           Tooltip(
             message: '${place.name} 저장 목록에서 삭제',
             child: InkWell(
-              key: ValueKey('remove-saved-place-${place.name}'),
+              key: ValueKey('remove-saved-place-${place.identityKey}'),
               onTap: onRemove,
               child: const SizedBox(
-                width: 44,
-                height: 44,
+                width: ChiwawaControlSizes.minimumInteractive,
+                height: ChiwawaControlSizes.minimumInteractive,
                 child: Icon(
                   Icons.close_rounded,
                   color: ChiwawaColors.primary,

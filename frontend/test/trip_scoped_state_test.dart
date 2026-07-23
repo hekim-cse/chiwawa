@@ -4,6 +4,7 @@ import 'package:chiwawa/core/saved_photo_places.dart';
 import 'package:chiwawa/core/services/trip_session_service.dart';
 import 'package:chiwawa/features/memorial/memorial_photo_edits_controller.dart';
 import 'package:chiwawa/features/plan/plan_controller.dart';
+import 'package:chiwawa/features/plan/models/plan_place_selection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -54,14 +55,23 @@ void main() {
     container.read(planItineraryProvider.notifier).replaceCurrentDay(
       const [route],
     );
-    container.read(selectedPlacesProvider.notifier).state = const ['이전 여행 장소'];
+    container.read(selectedPlacesProvider.notifier).state = const [
+      PlanPlaceSelection(
+        id: 'manual:previous-trip',
+        name: '이전 여행 장소',
+        source: PlanPlaceSource.manual,
+      ),
+    ];
     container.read(confirmedRouteProvider.notifier).confirm(const [route]);
     container.read(memorialPhotoEditsProvider.notifier).exclude('photo-1');
 
     container.read(currentTripRevisionProvider.notifier).state += 1;
 
     expect(container.read(planItineraryProvider).currentStops, isEmpty);
-    expect(container.read(selectedPlacesProvider), isNot(contains('이전 여행 장소')));
+    expect(
+      container.read(selectedPlacesProvider).map((place) => place.name),
+      isNot(contains('이전 여행 장소')),
+    );
     expect(container.read(confirmedRouteProvider), isEmpty);
     expect(container.read(memorialPhotoEditsProvider), isEmpty);
   });
