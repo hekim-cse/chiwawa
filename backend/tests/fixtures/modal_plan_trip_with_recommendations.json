@@ -1,0 +1,232 @@
+{
+  "trip_id": "trip_001",
+  "status": "PARTIAL_SUCCESS",
+  "day_plans": [
+    {
+      "day_index": 1,
+      "date": "2026-08-01",
+      "start_place": {
+        "place_id": "ChIJOXPJyWznAGARahb0KWFRjlM",
+        "name": "오사카 난바역",
+        "lat": 34.6657531,
+        "lng": 135.5010362
+      },
+      "end_place": {
+        "place_id": "ChIJbyd0kIjmAGAR_crecCbjwlc",
+        "name": "우메다 스카이빌딩",
+        "lat": 34.7052872,
+        "lng": 135.4896527
+      },
+      "assigned_pois": [
+        {
+          "poi_id": "poi_001",
+          "place_id": "ChIJ_fmKgRPnAGARkKWLtCYTu7g",
+          "name": "도톤보리",
+          "lat": 34.6687234,
+          "lng": 135.5012971,
+          "category": "TOURIST_ATTRACTION",
+          "estimated_stay_minutes": 60,
+          "priority": 1,
+          "must_visit": true,
+          "preferred_day_index": null
+        }
+      ],
+      "estimated_total_stay_minutes": 60,
+      "assignment_reason": "정확 일자 배정 최적화 결과",
+      "route_options": [
+        {
+          "day_index": 1,
+          "travel_mode": "DRIVE",
+          "total_travel_minutes": 25,
+          "ordered_stops": [
+            {
+              "stop_type": "START",
+              "place_id": "ChIJOXPJyWznAGARahb0KWFRjlM",
+              "name": "오사카 난바역",
+              "lat": 34.6657531,
+              "lng": 135.5010362
+            },
+            {
+              "stop_type": "POI",
+              "place_id": "ChIJ_fmKgRPnAGARkKWLtCYTu7g",
+              "name": "도톤보리",
+              "lat": 34.6687234,
+              "lng": 135.5012971
+            }
+          ],
+          "route_legs": [
+            {
+              "origin_place_id": "ChIJOXPJyWznAGARahb0KWFRjlM",
+              "destination_place_id": "ChIJ_fmKgRPnAGARkKWLtCYTu7g",
+              "travel_minutes": 7
+            }
+          ],
+          "missing_segments": [],
+          "warnings": [],
+          "timeline": {
+            "day_index": 1,
+            "travel_mode": "DRIVE",
+            "planned_start_at": "2026-08-01T10:00",
+            "planned_end_at": "2026-08-01T20:00",
+            "actual_end_at": "2026-08-01T11:25",
+            "total_travel_minutes": 25,
+            "total_stay_minutes": 60,
+            "timeline_stops": [
+              {
+                "stop_type": "START",
+                "place_id": "ChIJOXPJyWznAGARahb0KWFRjlM",
+                "name": "오사카 난바역",
+                "arrival_at": "2026-08-01T10:00",
+                "departure_at": "2026-08-01T10:00",
+                "stay_minutes": 0
+              }
+            ],
+            "exceeds_planned_end": false,
+            "warnings": []
+          }
+        },
+        {
+          "day_index": 1,
+          "travel_mode": "TRANSIT",
+          "total_travel_minutes": 0,
+          "ordered_stops": [],
+          "route_legs": [],
+          "missing_segments": ["ChIJ_fmKgRPnAGARkKWLtCYTu7g"],
+          "warnings": ["대중교통 경로 정보를 찾지 못했습니다"],
+          "timeline": null
+        }
+      ]
+    }
+  ],
+  "unassigned_pois": [
+    {
+      "poi": {
+        "poi_id": "poi_009",
+        "place_id": "ChIJunassigned000000000000000",
+        "name": "먼 장소",
+        "lat": 35.0111111,
+        "lng": 135.7681111,
+        "category": "ETC",
+        "estimated_stay_minutes": 90,
+        "priority": 3,
+        "must_visit": false,
+        "preferred_day_index": null
+      },
+      "reason": "시간 창에 배정 불가"
+    }
+  ],
+  "warnings": ["일부 이동수단의 경로를 생성하지 못했습니다"],
+  "day_recommendations": [
+    {
+      "day_index": 1,
+      "route_options": [
+        {
+          "route_option": {
+            "day_index": 1,
+            "travel_mode": "DRIVE",
+            "total_travel_minutes": 25,
+            "ordered_stops": [],
+            "route_legs": [],
+            "missing_segments": [],
+            "warnings": [],
+            "timeline": {
+              "day_index": 1,
+              "travel_mode": "DRIVE",
+              "planned_start_at": "2026-08-01T10:00",
+              "planned_end_at": "2026-08-01T20:00",
+              "actual_end_at": "2026-08-01T11:25",
+              "total_travel_minutes": 25,
+              "total_stay_minutes": 60,
+              "timeline_stops": [],
+              "exceeds_planned_end": false,
+              "warnings": []
+            }
+          },
+          "status": "SUCCESS",
+          "recommendation": {
+            "route_option": {
+              "day_index": 1,
+              "travel_mode": "DRIVE",
+              "total_travel_minutes": 25,
+              "ordered_stops": [],
+              "route_legs": [],
+              "missing_segments": [],
+              "warnings": [],
+              "timeline": null
+            },
+            "route_leg_geometries": [],
+            "recommendation_groups": [
+              {
+                "category": "CAFE",
+                "display_name": "카페",
+                "recommendations": [
+                  {
+                    "candidate": {
+                      "place_id": "ChIJWQqT02rnAGAREYiacO9ZKGI",
+                      "name": "마루후쿠 커피 센니치마에 본점",
+                      "coordinate": {
+                        "latitude": 34.6676238,
+                        "longitude": 135.504198
+                      },
+                      "category": "CAFE",
+                      "formatted_address": "1-chome-9-1 Sennichimae, Osaka",
+                      "rating": 4.1,
+                      "user_rating_count": 3035
+                    },
+                    "window": {
+                      "day_index": 1,
+                      "leg_index": 0,
+                      "previous_place_id": "ChIJOXPJyWznAGARahb0KWFRjlM",
+                      "next_place_id": "ChIJ_fmKgRPnAGARkKWLtCYTu7g",
+                      "previous_departure_at": "2026-08-01T10:00:00+09:00",
+                      "next_arrival_at": "2026-08-01T10:07:00+09:00",
+                      "original_travel_minutes": 7,
+                      "original_timeline_end_at": "2026-08-01T11:25:00+09:00",
+                      "planned_end_at": "2026-08-01T20:00:00+09:00"
+                    },
+                    "route_metrics": {
+                      "previous_to_candidate": {
+                        "travel_minutes": 8,
+                        "distance_meters": 1530
+                      },
+                      "candidate_to_next": {
+                        "travel_minutes": 3,
+                        "distance_meters": 421
+                      },
+                      "candidate_arrival_at": "2026-08-01T10:08:00+09:00",
+                      "candidate_departure_at": "2026-08-01T10:38:00+09:00",
+                      "next_arrival_at": "2026-08-01T10:41:00+09:00"
+                    },
+                    "insertion_impact": {
+                      "replacement_travel_minutes": 11,
+                      "replacement_total_minutes": 41,
+                      "additional_minutes": 34,
+                      "updated_next_arrival_at": "2026-08-01T10:41:00+09:00",
+                      "updated_timeline_end_at": "2026-08-01T11:59:00+09:00",
+                      "remaining_minutes": 481,
+                      "rejection_reasons": []
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "route_option": {
+            "day_index": 1,
+            "travel_mode": "TRANSIT",
+            "total_travel_minutes": 0,
+            "ordered_stops": [],
+            "route_legs": [],
+            "missing_segments": ["ChIJ_fmKgRPnAGARkKWLtCYTu7g"],
+            "warnings": ["대중교통 경로 정보를 찾지 못했습니다"],
+            "timeline": null
+          },
+          "status": "UNAVAILABLE",
+          "recommendation": null
+        }
+      ]
+    }
+  ]
+}
