@@ -24,7 +24,7 @@ class WeatherBanner extends ConsumerWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: ChiwawaColors.secondary,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         border: Border.all(color: ChiwawaColors.border),
       ),
       child: Row(

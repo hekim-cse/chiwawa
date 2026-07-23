@@ -200,7 +200,7 @@ class _ScheduleSummaryRow extends StatelessWidget {
     return Opacity(
       opacity: isPast ? 0.5 : 1,
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         onTap: onTap,
         child: Padding(
           padding: EdgeInsets.only(bottom: isLast ? 0 : 2),
@@ -294,7 +294,7 @@ class _PlaceThumbnail extends StatelessWidget {
     if (useApiBackend) return _ThumbnailFallback(label: label);
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(ChiwawaRadii.control),
       child: SizedBox(
         width: 72,
         height: 54,

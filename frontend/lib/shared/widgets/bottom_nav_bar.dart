@@ -48,7 +48,7 @@ class BottomNavBar extends StatelessWidget {
                     onSelected: (index) => context.go(_items[index].path),
                   )
                 : NavigationBar(
-                    height: 66,
+                    height: ChiwawaControlSizes.navigationBar,
                     selectedIndex: currentIndex,
                     labelBehavior:
                         NavigationDestinationLabelBehavior.alwaysShow,
@@ -97,7 +97,7 @@ class _CompactBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 66,
+      height: ChiwawaControlSizes.navigationBar,
       child: Row(
         children: [
           for (var index = 0; index < items.length; index++)

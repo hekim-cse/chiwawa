@@ -22,7 +22,7 @@ class DailySection extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         border: Border.all(color: ChiwawaColors.border),
       ),
       child: Column(
@@ -78,7 +78,7 @@ class DailySection extends StatelessWidget {
             itemCount: visiblePhotos,
             itemBuilder: (context, index) {
               return ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(ChiwawaRadii.control),
                 child: Image.asset(
                   day.photoAssetPaths.isEmpty
                       ? MockImages.memorialPhoto(seedOffset + index)

@@ -25,7 +25,7 @@ Future<ImageSource?> showPhotoSourceSheet(BuildContext context) {
             height: 4,
             decoration: BoxDecoration(
               color: ChiwawaColors.border,
-              borderRadius: BorderRadius.circular(99),
+              borderRadius: BorderRadius.circular(ChiwawaRadii.round),
             ),
           ),
           const SizedBox(height: 16),

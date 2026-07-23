@@ -30,7 +30,7 @@ class PawPhotoSheet extends StatelessWidget {
                 height: 4,
                 decoration: BoxDecoration(
                   color: ChiwawaColors.border,
-                  borderRadius: BorderRadius.circular(99),
+                  borderRadius: BorderRadius.circular(ChiwawaRadii.round),
                 ),
               ),
             ),
@@ -54,7 +54,7 @@ class PawPhotoSheet extends StatelessWidget {
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: ChiwawaColors.secondary,
-                    borderRadius: BorderRadius.circular(99),
+                    borderRadius: BorderRadius.circular(ChiwawaRadii.round),
                   ),
                   child: Text(
                     '사진 ${cluster.photoCount}장',
@@ -86,7 +86,7 @@ class PawPhotoSheet extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final photo = cluster.photos[index];
                   return ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(ChiwawaRadii.control),
                     child: MemorialPhotoImage(
                       assetPath: photo.assetPath,
                       fileUrl: photo.fileUrl,

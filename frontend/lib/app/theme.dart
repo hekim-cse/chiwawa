@@ -38,7 +38,23 @@ abstract final class ChiwawaRadii {
   static const round = 999.0;
 }
 
+abstract final class ChiwawaControlSizes {
+  static const minimumInteractive = 48.0;
+  static const navigationBar = 66.0;
+}
+
 class ChiwawaTheme {
+  static Color? primaryStateLayer(Set<WidgetState> states) {
+    if (states.contains(WidgetState.pressed)) {
+      return ChiwawaColors.primary.withValues(alpha: 0.12);
+    }
+    if (states.contains(WidgetState.hovered) ||
+        states.contains(WidgetState.focused)) {
+      return ChiwawaColors.primary.withValues(alpha: 0.08);
+    }
+    return null;
+  }
+
   static ThemeData light() {
     final colorScheme = ColorScheme.fromSeed(
       seedColor: ChiwawaColors.primary,
@@ -54,6 +70,10 @@ class ChiwawaTheme {
       colorScheme: colorScheme,
       fontFamily: 'Pretendard',
       scaffoldBackgroundColor: ChiwawaColors.background,
+      hoverColor: ChiwawaColors.primary.withValues(alpha: 0.06),
+      focusColor: ChiwawaColors.primary.withValues(alpha: 0.08),
+      highlightColor: ChiwawaColors.primary.withValues(alpha: 0.10),
+      splashColor: ChiwawaColors.primary.withValues(alpha: 0.08),
     );
 
     final textTheme = base.textTheme
@@ -127,9 +147,14 @@ class ChiwawaTheme {
         centerTitle: false,
       ),
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          minimumSize: const Size.square(48),
-          foregroundColor: ChiwawaColors.textPrimary,
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(
+            Size.square(ChiwawaControlSizes.minimumInteractive),
+          ),
+          foregroundColor: const WidgetStatePropertyAll(
+            ChiwawaColors.textPrimary,
+          ),
+          overlayColor: WidgetStateProperty.resolveWith(primaryStateLayer),
         ),
       ),
       cardTheme: CardThemeData(
@@ -203,7 +228,10 @@ class ChiwawaTheme {
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          minimumSize: const Size(48, 48),
+          minimumSize: const Size(
+            ChiwawaControlSizes.minimumInteractive,
+            ChiwawaControlSizes.minimumInteractive,
+          ),
           elevation: 0,
           foregroundColor: Colors.white,
           backgroundColor: ChiwawaColors.primary,
@@ -215,7 +243,12 @@ class ChiwawaTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: ButtonStyle(
-          minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
+          minimumSize: const WidgetStatePropertyAll(
+            Size(
+              ChiwawaControlSizes.minimumInteractive,
+              ChiwawaControlSizes.minimumInteractive,
+            ),
+          ),
           backgroundColor: WidgetStateProperty.resolveWith((states) {
             if (states.contains(WidgetState.pressed)) {
               return ChiwawaColors.primaryPressed;
@@ -223,6 +256,16 @@ class ChiwawaTheme {
             return ChiwawaColors.primary;
           }),
           foregroundColor: const WidgetStatePropertyAll(Colors.white),
+          overlayColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.pressed)) {
+              return Colors.white.withValues(alpha: 0.16);
+            }
+            if (states.contains(WidgetState.hovered) ||
+                states.contains(WidgetState.focused)) {
+              return Colors.white.withValues(alpha: 0.10);
+            }
+            return null;
+          }),
           shape: WidgetStatePropertyAll(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(ChiwawaRadii.control),
@@ -232,18 +275,62 @@ class ChiwawaTheme {
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          foregroundColor: ChiwawaColors.primary,
-          side: const BorderSide(color: ChiwawaColors.border),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(ChiwawaRadii.control),
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(
+            Size(
+              ChiwawaControlSizes.minimumInteractive,
+              ChiwawaControlSizes.minimumInteractive,
+            ),
           ),
-          textStyle: textTheme.labelLarge,
+          foregroundColor: const WidgetStatePropertyAll(
+            ChiwawaColors.primary,
+          ),
+          side: const WidgetStatePropertyAll(
+            BorderSide(color: ChiwawaColors.border),
+          ),
+          overlayColor: WidgetStateProperty.resolveWith(primaryStateLayer),
+          shape: WidgetStatePropertyAll(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(ChiwawaRadii.control),
+            ),
+          ),
+          textStyle: WidgetStatePropertyAll(textTheme.labelLarge),
         ),
       ),
+      textButtonTheme: TextButtonThemeData(
+        style: ButtonStyle(
+          minimumSize: const WidgetStatePropertyAll(
+            Size(
+              ChiwawaControlSizes.minimumInteractive,
+              ChiwawaControlSizes.minimumInteractive,
+            ),
+          ),
+          foregroundColor: const WidgetStatePropertyAll(
+            ChiwawaColors.primary,
+          ),
+          overlayColor: WidgetStateProperty.resolveWith(primaryStateLayer),
+          textStyle: WidgetStatePropertyAll(textTheme.labelLarge),
+        ),
+      ),
+      switchTheme: SwitchThemeData(
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected)
+              ? Colors.white
+              : ChiwawaColors.textMuted;
+        }),
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected)
+              ? ChiwawaColors.primary
+              : ChiwawaColors.border;
+        }),
+        trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected)
+              ? Colors.transparent
+              : ChiwawaColors.textMuted;
+        }),
+      ),
       navigationBarTheme: NavigationBarThemeData(
-        height: 64,
+        height: ChiwawaControlSizes.navigationBar,
         labelTextStyle: WidgetStatePropertyAll(textTheme.labelMedium),
         iconTheme: const WidgetStatePropertyAll(IconThemeData(size: 22)),
       ),

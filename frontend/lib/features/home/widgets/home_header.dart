@@ -120,11 +120,11 @@ class _HeaderIconButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.control),
         onTap: onTap,
         child: SizedBox(
-          width: 44,
-          height: 44,
+          width: ChiwawaControlSizes.minimumInteractive,
+          height: ChiwawaControlSizes.minimumInteractive,
           child: Icon(icon, color: ChiwawaColors.textPrimary, size: 24),
         ),
       ),
