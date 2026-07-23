@@ -1,5 +1,6 @@
 import 'assets/app_images.dart';
 import 'models/memorial_map_models.dart';
+import 'models/transport_mode.dart';
 import 'models/travel_models.dart';
 
 const trips = [
@@ -162,7 +163,7 @@ const photoSearchCandidates = [
   ),
 ];
 
-const routePlaces = [
+const transitRoutePlaces = [
   RoutePlace(
     name: '메이지 신궁',
     duration: '90분',
@@ -192,6 +193,76 @@ const routePlaces = [
     travelCost: '¥150',
   ),
 ];
+
+const walkRoutePlaces = [
+  RoutePlace(
+    name: '메이지 신궁',
+    duration: '90분',
+    transport: '도보 0분',
+    category: '신사',
+    travelCost: '무료',
+  ),
+  RoutePlace(
+    name: '하라주쿠 다케시타도리',
+    duration: '55분',
+    transport: '도보 14분',
+    category: '쇼핑',
+    travelCost: '무료',
+  ),
+  RoutePlace(
+    name: '오모테산도',
+    duration: '100분',
+    transport: '도보 12분',
+    category: '카페·거리',
+    travelCost: '무료',
+  ),
+  RoutePlace(
+    name: '시부야 스크램블',
+    duration: '60분',
+    transport: '도보 18분',
+    category: '랜드마크',
+    travelCost: '무료',
+  ),
+];
+
+const driveRoutePlaces = [
+  RoutePlace(
+    name: '메이지 신궁',
+    duration: '80분',
+    transport: '자동차 0분',
+    category: '신사',
+    travelCost: '무료',
+  ),
+  RoutePlace(
+    name: '시부야 스크램블',
+    duration: '50분',
+    transport: '자동차 11분',
+    category: '랜드마크',
+    travelCost: '¥700',
+  ),
+  RoutePlace(
+    name: '오모테산도',
+    duration: '90분',
+    transport: '자동차 9분',
+    category: '카페·거리',
+    travelCost: '¥500',
+  ),
+  RoutePlace(
+    name: '하라주쿠 다케시타도리',
+    duration: '55분',
+    transport: '자동차 7분',
+    category: '쇼핑',
+    travelCost: '¥400',
+  ),
+];
+
+List<RoutePlace> routePlacesFor(TransportMode mode) {
+  return switch (mode) {
+    TransportMode.walk => walkRoutePlaces,
+    TransportMode.drive => driveRoutePlaces,
+    TransportMode.transit => transitRoutePlaces,
+  };
+}
 
 const memorialSummary =
     MemorialSummary(days: 4, places: 12, distance: '38.4km');

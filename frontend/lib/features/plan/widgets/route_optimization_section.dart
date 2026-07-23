@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/models/transport_mode.dart';
 import '../../../core/models/travel_models.dart';
 import '../models/plan_itinerary.dart';
 import 'plan_itinerary_workspace.dart';
@@ -11,6 +12,7 @@ class RouteOptimizationSection extends StatelessWidget {
     required this.canOptimize,
     required this.onOptimize,
     required this.onConfirm,
+    this.transportMode = TransportMode.transit,
     this.itinerary,
     this.onMove,
     this.onEditTime,
@@ -22,6 +24,7 @@ class RouteOptimizationSection extends StatelessWidget {
   final bool canOptimize;
   final VoidCallback onOptimize;
   final VoidCallback onConfirm;
+  final TransportMode transportMode;
   final List<PlanItineraryStop>? itinerary;
   final void Function(int fromIndex, int toIndex)? onMove;
   final ValueChanged<PlanItineraryStop>? onEditTime;
@@ -61,6 +64,7 @@ class RouteOptimizationSection extends StatelessWidget {
           const SizedBox(height: 22),
           PlanItineraryWorkspace(
             stops: itinerary ?? _stopsFrom(state.places),
+            transportMode: transportMode,
             onMove: onMove,
             onEditTime: onEditTime,
             onDelete: onDelete,
@@ -95,7 +99,7 @@ class _RouteFailureCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         border: Border.all(color: ChiwawaColors.border),
       ),
       child: Row(
