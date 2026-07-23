@@ -1,0 +1,975 @@
+{
+  "$defs": {
+    "CandidateRecommendationResponseDTO": {
+      "additionalProperties": false,
+      "description": "삽입 가능한 장소 한 개와 평가 결과 응답.",
+      "properties": {
+        "candidate": {
+          "$ref": "#/$defs/PlaceCandidateResponseDTO"
+        },
+        "insertion_impact": {
+          "$ref": "#/$defs/RouteLegInsertionImpactResponseDTO"
+        },
+        "route_metrics": {
+          "$ref": "#/$defs/CandidateRouteMetricsResponseDTO"
+        },
+        "window": {
+          "$ref": "#/$defs/RouteLegInsertionWindowResponseDTO"
+        }
+      },
+      "required": [
+        "candidate",
+        "window",
+        "route_metrics",
+        "insertion_impact"
+      ],
+      "title": "CandidateRecommendationResponseDTO",
+      "type": "object"
+    },
+    "CandidateRouteMetricsResponseDTO": {
+      "additionalProperties": false,
+      "description": "추천 장소를 경유하는 양쪽 이동 지표와 시각 응답.",
+      "properties": {
+        "candidate_arrival_at": {
+          "format": "date-time",
+          "title": "Candidate Arrival At",
+          "type": "string"
+        },
+        "candidate_departure_at": {
+          "format": "date-time",
+          "title": "Candidate Departure At",
+          "type": "string"
+        },
+        "candidate_to_next": {
+          "$ref": "#/$defs/RouteLegMetricsResponseDTO"
+        },
+        "next_arrival_at": {
+          "format": "date-time",
+          "title": "Next Arrival At",
+          "type": "string"
+        },
+        "previous_to_candidate": {
+          "$ref": "#/$defs/RouteLegMetricsResponseDTO"
+        }
+      },
+      "required": [
+        "previous_to_candidate",
+        "candidate_to_next",
+        "candidate_arrival_at",
+        "candidate_departure_at",
+        "next_arrival_at"
+      ],
+      "title": "CandidateRouteMetricsResponseDTO",
+      "type": "object"
+    },
+    "DayPlanDTO": {
+      "properties": {
+        "assigned_pois": {
+          "items": {
+            "$ref": "#/$defs/PoiDTO"
+          },
+          "title": "Assigned Pois",
+          "type": "array"
+        },
+        "assignment_reason": {
+          "title": "Assignment Reason",
+          "type": "string"
+        },
+        "date": {
+          "title": "Date",
+          "type": "string"
+        },
+        "day_index": {
+          "minimum": 1,
+          "title": "Day Index",
+          "type": "integer"
+        },
+        "end_place": {
+          "$ref": "#/$defs/PlaceDTO"
+        },
+        "estimated_total_stay_minutes": {
+          "minimum": 0,
+          "title": "Estimated Total Stay Minutes",
+          "type": "integer"
+        },
+        "route_options": {
+          "items": {
+            "$ref": "#/$defs/RouteOptionDTO"
+          },
+          "title": "Route Options",
+          "type": "array"
+        },
+        "start_place": {
+          "$ref": "#/$defs/PlaceDTO"
+        }
+      },
+      "required": [
+        "day_index",
+        "date",
+        "start_place",
+        "end_place",
+        "assigned_pois",
+        "estimated_total_stay_minutes",
+        "assignment_reason"
+      ],
+      "title": "DayPlanDTO",
+      "type": "object"
+    },
+    "DayRouteOptionRecommendationsResponseDTO": {
+      "additionalProperties": false,
+      "description": "한 여행 일자의 이동수단별 추천 응답.",
+      "properties": {
+        "day_index": {
+          "minimum": 1,
+          "title": "Day Index",
+          "type": "integer"
+        },
+        "route_options": {
+          "items": {
+            "$ref": "#/$defs/RouteOptionRecommendationOutcomeResponseDTO"
+          },
+          "title": "Route Options",
+          "type": "array"
+        }
+      },
+      "required": [
+        "day_index",
+        "route_options"
+      ],
+      "title": "DayRouteOptionRecommendationsResponseDTO",
+      "type": "object"
+    },
+    "GeoCoordinateResponseDTO": {
+      "additionalProperties": false,
+      "description": "추천 장소의 위도·경도 응답.",
+      "properties": {
+        "latitude": {
+          "maximum": 90,
+          "minimum": -90,
+          "title": "Latitude",
+          "type": "number"
+        },
+        "longitude": {
+          "maximum": 180,
+          "minimum": -180,
+          "title": "Longitude",
+          "type": "number"
+        }
+      },
+      "required": [
+        "latitude",
+        "longitude"
+      ],
+      "title": "GeoCoordinateResponseDTO",
+      "type": "object"
+    },
+    "OptimizedRouteLegGeometryResponseDTO": {
+      "additionalProperties": false,
+      "description": "최적화 경로 구간 식별 정보와 geometry 응답.",
+      "properties": {
+        "day_index": {
+          "minimum": 1,
+          "title": "Day Index",
+          "type": "integer"
+        },
+        "destination_place_id": {
+          "minLength": 1,
+          "title": "Destination Place Id",
+          "type": "string"
+        },
+        "geometry": {
+          "$ref": "#/$defs/RouteLegGeometryResponseDTO"
+        },
+        "leg_index": {
+          "minimum": 0,
+          "title": "Leg Index",
+          "type": "integer"
+        },
+        "origin_place_id": {
+          "minLength": 1,
+          "title": "Origin Place Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "day_index",
+        "leg_index",
+        "origin_place_id",
+        "destination_place_id",
+        "geometry"
+      ],
+      "title": "OptimizedRouteLegGeometryResponseDTO",
+      "type": "object"
+    },
+    "PlaceCandidateResponseDTO": {
+      "additionalProperties": false,
+      "description": "경로 주변에서 검색한 추천 장소 응답.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/RecommendationCategory"
+        },
+        "coordinate": {
+          "$ref": "#/$defs/GeoCoordinateResponseDTO"
+        },
+        "formatted_address": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Formatted Address"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "place_id": {
+          "minLength": 1,
+          "title": "Place Id",
+          "type": "string"
+        },
+        "rating": {
+          "anyOf": [
+            {
+              "maximum": 5,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rating"
+        },
+        "user_rating_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "User Rating Count"
+        }
+      },
+      "required": [
+        "place_id",
+        "name",
+        "coordinate",
+        "category"
+      ],
+      "title": "PlaceCandidateResponseDTO",
+      "type": "object"
+    },
+    "PlaceDTO": {
+      "properties": {
+        "lat": {
+          "title": "Lat",
+          "type": "number"
+        },
+        "lng": {
+          "title": "Lng",
+          "type": "number"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "place_id": {
+          "title": "Place Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "place_id",
+        "name",
+        "lat",
+        "lng"
+      ],
+      "title": "PlaceDTO",
+      "type": "object"
+    },
+    "PoiCategory": {
+      "enum": [
+        "TOURIST_ATTRACTION",
+        "RESTAURANT",
+        "CAFE",
+        "SHOPPING",
+        "ACTIVITY",
+        "HOTEL",
+        "ETC"
+      ],
+      "title": "PoiCategory",
+      "type": "string"
+    },
+    "PoiDTO": {
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/PoiCategory",
+          "default": "ETC"
+        },
+        "estimated_stay_minutes": {
+          "exclusiveMinimum": 0,
+          "title": "Estimated Stay Minutes",
+          "type": "integer"
+        },
+        "lat": {
+          "title": "Lat",
+          "type": "number"
+        },
+        "lng": {
+          "title": "Lng",
+          "type": "number"
+        },
+        "must_visit": {
+          "default": true,
+          "title": "Must Visit",
+          "type": "boolean"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "place_id": {
+          "title": "Place Id",
+          "type": "string"
+        },
+        "poi_id": {
+          "title": "Poi Id",
+          "type": "string"
+        },
+        "preferred_day_index": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Preferred Day Index"
+        },
+        "priority": {
+          "default": 3,
+          "maximum": 5,
+          "minimum": 1,
+          "title": "Priority",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "poi_id",
+        "place_id",
+        "name",
+        "lat",
+        "lng",
+        "estimated_stay_minutes"
+      ],
+      "title": "PoiDTO",
+      "type": "object"
+    },
+    "RecommendationCategory": {
+      "description": "사용자에게 노출할 서버 관리 추천 카테고리.",
+      "enum": [
+        "LANDMARK",
+        "CAFE",
+        "CULTURE",
+        "PARK",
+        "RESTAURANT"
+      ],
+      "title": "RecommendationCategory",
+      "type": "string"
+    },
+    "RecommendationGroupResponseDTO": {
+      "additionalProperties": false,
+      "description": "화면에 표시할 카테고리별 추천 장소 응답.",
+      "properties": {
+        "category": {
+          "$ref": "#/$defs/RecommendationCategory"
+        },
+        "display_name": {
+          "minLength": 1,
+          "title": "Display Name",
+          "type": "string"
+        },
+        "recommendations": {
+          "items": {
+            "$ref": "#/$defs/CandidateRecommendationResponseDTO"
+          },
+          "title": "Recommendations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "category",
+        "display_name",
+        "recommendations"
+      ],
+      "title": "RecommendationGroupResponseDTO",
+      "type": "object"
+    },
+    "RouteInsertionRejectionReason": {
+      "description": "경로 구간에 추천 후보를 삽입할 수 없는 사유.",
+      "enum": [
+        "STAY_DURATION_BELOW_MINIMUM",
+        "PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED",
+        "CANDIDATE_TO_NEXT_LIMIT_EXCEEDED",
+        "PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED",
+        "CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED",
+        "PLANNED_END_EXCEEDED"
+      ],
+      "title": "RouteInsertionRejectionReason",
+      "type": "string"
+    },
+    "RouteLegDTO": {
+      "properties": {
+        "destination_place_id": {
+          "title": "Destination Place Id",
+          "type": "string"
+        },
+        "origin_place_id": {
+          "title": "Origin Place Id",
+          "type": "string"
+        },
+        "travel_minutes": {
+          "title": "Travel Minutes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "origin_place_id",
+        "destination_place_id",
+        "travel_minutes"
+      ],
+      "title": "RouteLegDTO",
+      "type": "object"
+    },
+    "RouteLegGeometryResponseDTO": {
+      "additionalProperties": false,
+      "description": "Google 지도에 표시할 한 경로 구간 polyline 응답.",
+      "properties": {
+        "encoded_polyline": {
+          "minLength": 1,
+          "title": "Encoded Polyline",
+          "type": "string"
+        }
+      },
+      "required": [
+        "encoded_polyline"
+      ],
+      "title": "RouteLegGeometryResponseDTO",
+      "type": "object"
+    },
+    "RouteLegInsertionImpactResponseDTO": {
+      "additionalProperties": false,
+      "description": "추천 장소 추가가 전체 일정에 미치는 영향 응답.",
+      "properties": {
+        "additional_minutes": {
+          "title": "Additional Minutes",
+          "type": "integer"
+        },
+        "rejection_reasons": {
+          "items": {
+            "$ref": "#/$defs/RouteInsertionRejectionReason"
+          },
+          "title": "Rejection Reasons",
+          "type": "array"
+        },
+        "remaining_minutes": {
+          "title": "Remaining Minutes",
+          "type": "integer"
+        },
+        "replacement_total_minutes": {
+          "minimum": 0,
+          "title": "Replacement Total Minutes",
+          "type": "integer"
+        },
+        "replacement_travel_minutes": {
+          "minimum": 0,
+          "title": "Replacement Travel Minutes",
+          "type": "integer"
+        },
+        "updated_next_arrival_at": {
+          "format": "date-time",
+          "title": "Updated Next Arrival At",
+          "type": "string"
+        },
+        "updated_timeline_end_at": {
+          "format": "date-time",
+          "title": "Updated Timeline End At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "replacement_travel_minutes",
+        "replacement_total_minutes",
+        "additional_minutes",
+        "updated_next_arrival_at",
+        "updated_timeline_end_at",
+        "remaining_minutes",
+        "rejection_reasons"
+      ],
+      "title": "RouteLegInsertionImpactResponseDTO",
+      "type": "object"
+    },
+    "RouteLegInsertionWindowResponseDTO": {
+      "additionalProperties": false,
+      "description": "추천 장소가 삽입될 기존 일정 구간 응답.",
+      "properties": {
+        "day_index": {
+          "minimum": 1,
+          "title": "Day Index",
+          "type": "integer"
+        },
+        "leg_index": {
+          "minimum": 0,
+          "title": "Leg Index",
+          "type": "integer"
+        },
+        "next_arrival_at": {
+          "format": "date-time",
+          "title": "Next Arrival At",
+          "type": "string"
+        },
+        "next_place_id": {
+          "minLength": 1,
+          "title": "Next Place Id",
+          "type": "string"
+        },
+        "original_timeline_end_at": {
+          "format": "date-time",
+          "title": "Original Timeline End At",
+          "type": "string"
+        },
+        "original_travel_minutes": {
+          "minimum": 0,
+          "title": "Original Travel Minutes",
+          "type": "integer"
+        },
+        "planned_end_at": {
+          "format": "date-time",
+          "title": "Planned End At",
+          "type": "string"
+        },
+        "previous_departure_at": {
+          "format": "date-time",
+          "title": "Previous Departure At",
+          "type": "string"
+        },
+        "previous_place_id": {
+          "minLength": 1,
+          "title": "Previous Place Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "day_index",
+        "leg_index",
+        "previous_place_id",
+        "next_place_id",
+        "previous_departure_at",
+        "next_arrival_at",
+        "original_travel_minutes",
+        "original_timeline_end_at",
+        "planned_end_at"
+      ],
+      "title": "RouteLegInsertionWindowResponseDTO",
+      "type": "object"
+    },
+    "RouteLegMetricsResponseDTO": {
+      "additionalProperties": false,
+      "description": "추천 장소 전후 한쪽 이동 지표 응답.",
+      "properties": {
+        "distance_meters": {
+          "minimum": 0,
+          "title": "Distance Meters",
+          "type": "integer"
+        },
+        "travel_minutes": {
+          "minimum": 0,
+          "title": "Travel Minutes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "travel_minutes",
+        "distance_meters"
+      ],
+      "title": "RouteLegMetricsResponseDTO",
+      "type": "object"
+    },
+    "RouteOptionDTO": {
+      "properties": {
+        "day_index": {
+          "minimum": 1,
+          "title": "Day Index",
+          "type": "integer"
+        },
+        "missing_segments": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Missing Segments",
+          "type": "array"
+        },
+        "ordered_stops": {
+          "items": {
+            "$ref": "#/$defs/RouteStopDTO"
+          },
+          "title": "Ordered Stops",
+          "type": "array"
+        },
+        "route_legs": {
+          "items": {
+            "$ref": "#/$defs/RouteLegDTO"
+          },
+          "title": "Route Legs",
+          "type": "array"
+        },
+        "timeline": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TimelineDTO"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "total_travel_minutes": {
+          "minimum": 0,
+          "title": "Total Travel Minutes",
+          "type": "integer"
+        },
+        "travel_mode": {
+          "$ref": "#/$defs/TravelMode"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "day_index",
+        "travel_mode",
+        "total_travel_minutes",
+        "ordered_stops",
+        "route_legs"
+      ],
+      "title": "RouteOptionDTO",
+      "type": "object"
+    },
+    "RouteOptionRecommendationOutcomeResponseDTO": {
+      "additionalProperties": false,
+      "description": "사용 불가 이동수단까지 보존하는 옵션별 추천 응답.",
+      "properties": {
+        "recommendation": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RouteOptionRecommendationResponseDTO"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "route_option": {
+          "$ref": "#/$defs/RouteOptionDTO"
+        },
+        "status": {
+          "$ref": "#/$defs/RouteOptionRecommendationStatus"
+        }
+      },
+      "required": [
+        "route_option",
+        "status",
+        "recommendation"
+      ],
+      "title": "RouteOptionRecommendationOutcomeResponseDTO",
+      "type": "object"
+    },
+    "RouteOptionRecommendationResponseDTO": {
+      "additionalProperties": false,
+      "description": "한 Route Option에 종속된 geometry와 추천 그룹 응답.",
+      "properties": {
+        "recommendation_groups": {
+          "items": {
+            "$ref": "#/$defs/RecommendationGroupResponseDTO"
+          },
+          "title": "Recommendation Groups",
+          "type": "array"
+        },
+        "route_leg_geometries": {
+          "items": {
+            "$ref": "#/$defs/OptimizedRouteLegGeometryResponseDTO"
+          },
+          "title": "Route Leg Geometries",
+          "type": "array"
+        },
+        "route_option": {
+          "$ref": "#/$defs/RouteOptionDTO"
+        }
+      },
+      "required": [
+        "route_option",
+        "route_leg_geometries",
+        "recommendation_groups"
+      ],
+      "title": "RouteOptionRecommendationResponseDTO",
+      "type": "object"
+    },
+    "RouteOptionRecommendationStatus": {
+      "description": "경로 옵션별 추천 생성 상태.",
+      "enum": [
+        "SUCCESS",
+        "UNAVAILABLE"
+      ],
+      "title": "RouteOptionRecommendationStatus",
+      "type": "string"
+    },
+    "RouteStopDTO": {
+      "properties": {
+        "lat": {
+          "title": "Lat",
+          "type": "number"
+        },
+        "lng": {
+          "title": "Lng",
+          "type": "number"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "place_id": {
+          "title": "Place Id",
+          "type": "string"
+        },
+        "stop_type": {
+          "$ref": "#/$defs/RouteStopType"
+        }
+      },
+      "required": [
+        "stop_type",
+        "place_id",
+        "name",
+        "lat",
+        "lng"
+      ],
+      "title": "RouteStopDTO",
+      "type": "object"
+    },
+    "RouteStopType": {
+      "enum": [
+        "START",
+        "POI",
+        "END"
+      ],
+      "title": "RouteStopType",
+      "type": "string"
+    },
+    "TimelineDTO": {
+      "properties": {
+        "actual_end_at": {
+          "title": "Actual End At",
+          "type": "string"
+        },
+        "day_index": {
+          "minimum": 1,
+          "title": "Day Index",
+          "type": "integer"
+        },
+        "exceeds_planned_end": {
+          "default": false,
+          "title": "Exceeds Planned End",
+          "type": "boolean"
+        },
+        "planned_end_at": {
+          "title": "Planned End At",
+          "type": "string"
+        },
+        "planned_start_at": {
+          "title": "Planned Start At",
+          "type": "string"
+        },
+        "timeline_stops": {
+          "items": {
+            "$ref": "#/$defs/TimelineStopDTO"
+          },
+          "title": "Timeline Stops",
+          "type": "array"
+        },
+        "total_stay_minutes": {
+          "minimum": 0,
+          "title": "Total Stay Minutes",
+          "type": "integer"
+        },
+        "total_travel_minutes": {
+          "minimum": 0,
+          "title": "Total Travel Minutes",
+          "type": "integer"
+        },
+        "travel_mode": {
+          "$ref": "#/$defs/TravelMode"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "day_index",
+        "travel_mode",
+        "planned_start_at",
+        "planned_end_at",
+        "actual_end_at",
+        "total_travel_minutes",
+        "total_stay_minutes",
+        "timeline_stops"
+      ],
+      "title": "TimelineDTO",
+      "type": "object"
+    },
+    "TimelineStopDTO": {
+      "properties": {
+        "arrival_at": {
+          "title": "Arrival At",
+          "type": "string"
+        },
+        "departure_at": {
+          "title": "Departure At",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "place_id": {
+          "title": "Place Id",
+          "type": "string"
+        },
+        "stay_minutes": {
+          "minimum": 0,
+          "title": "Stay Minutes",
+          "type": "integer"
+        },
+        "stop_type": {
+          "$ref": "#/$defs/RouteStopType"
+        }
+      },
+      "required": [
+        "stop_type",
+        "place_id",
+        "name",
+        "arrival_at",
+        "departure_at",
+        "stay_minutes"
+      ],
+      "title": "TimelineStopDTO",
+      "type": "object"
+    },
+    "TravelMode": {
+      "enum": [
+        "WALK",
+        "DRIVE",
+        "TRANSIT"
+      ],
+      "title": "TravelMode",
+      "type": "string"
+    },
+    "TripPlanningStatus": {
+      "enum": [
+        "SUCCESS",
+        "PARTIAL_SUCCESS",
+        "FAILED"
+      ],
+      "title": "TripPlanningStatus",
+      "type": "string"
+    },
+    "UnassignedPoiDTO": {
+      "properties": {
+        "poi": {
+          "$ref": "#/$defs/PoiDTO"
+        },
+        "reason": {
+          "title": "Reason",
+          "type": "string"
+        }
+      },
+      "required": [
+        "poi",
+        "reason"
+      ],
+      "title": "UnassignedPoiDTO",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "일정 최적화와 날짜별 빈 시간대 추천의 통합 API 응답.",
+  "properties": {
+    "day_plans": {
+      "items": {
+        "$ref": "#/$defs/DayPlanDTO"
+      },
+      "title": "Day Plans",
+      "type": "array"
+    },
+    "day_recommendations": {
+      "items": {
+        "$ref": "#/$defs/DayRouteOptionRecommendationsResponseDTO"
+      },
+      "title": "Day Recommendations",
+      "type": "array"
+    },
+    "status": {
+      "$ref": "#/$defs/TripPlanningStatus"
+    },
+    "trip_id": {
+      "minLength": 1,
+      "title": "Trip Id",
+      "type": "string"
+    },
+    "unassigned_pois": {
+      "items": {
+        "$ref": "#/$defs/UnassignedPoiDTO"
+      },
+      "title": "Unassigned Pois",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "trip_id",
+    "status",
+    "day_plans",
+    "unassigned_pois",
+    "warnings",
+    "day_recommendations"
+  ],
+  "title": "TripPlanningWithRecommendationsResponseDTO",
+  "type": "object"
+}

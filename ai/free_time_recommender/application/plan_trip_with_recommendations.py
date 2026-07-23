@@ -67,7 +67,27 @@ class GenerateRouteOptionRecommendationOutcomes:
     def __init__(self, generator: RouteOptionRecommendationGenerator) -> None:
         self._generator = generator
 
-    def execute(self, *, route_options, timezone, policy):
+    def execute(
+        self,
+        *,
+        route_options: tuple[RouteOptionDTO, ...],
+        timezone: ZoneInfo,
+        policy: RecommendationPolicy,
+    ) -> tuple[RouteOptionRecommendationOutcome, ...]:
+        if not isinstance(route_options, tuple):
+            raise TypeError("route_options는 tuple이어야 합니다.")
+        if any(
+            not isinstance(option, RouteOptionDTO)
+            for option in route_options
+        ):
+            raise TypeError(
+                "route_options는 RouteOptionDTO만 포함해야 합니다."
+            )
+        if not isinstance(timezone, ZoneInfo):
+            raise TypeError("timezone은 ZoneInfo여야 합니다.")
+        if not isinstance(policy, RecommendationPolicy):
+            raise TypeError("policy는 RecommendationPolicy여야 합니다.")
+
         available = tuple(
             option for option in route_options if option.timeline is not None
         )
@@ -83,7 +103,7 @@ class GenerateRouteOptionRecommendationOutcomes:
         if len(recommendations) != len(available):
             raise ValueError("경로 옵션 수와 추천 결과 수가 일치하지 않습니다.")
         iterator = iter(recommendations)
-        outcomes = []
+        outcomes: list[RouteOptionRecommendationOutcome] = []
         for option in route_options:
             recommendation = next(iterator) if option.timeline is not None else None
             outcomes.append(

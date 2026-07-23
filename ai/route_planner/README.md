@@ -393,7 +393,9 @@ missing_segments 존재
 → warning 추가
 ```
 
-가짜 이동시간으로 불완전한 Timeline을 만들지 않기 위한 정책입니다.
+Provider가 반환하지 않은 이동시간을 임의로 생성해 불완전한 Timeline을
+만들지 않기 위한 정책입니다. 운영 경로에서는 실제 Google Routes Matrix를
+사용하며, Fake Provider는 테스트와 평가에서만 주입합니다.
 
 > **관련 문서**
 >
