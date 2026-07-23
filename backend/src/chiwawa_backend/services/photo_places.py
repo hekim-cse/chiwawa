@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import inspect
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 
 from ai.image_search.domain.search_schemas import (
     ImageSearchRequest,
     ImageSearchResult,
 )
 from ai.image_search.services.image_loader import ImageLoadError
+from fastapi.concurrency import run_in_threadpool
 
 from chiwawa_backend.errors import DomainValidationError, NotFoundError
 from chiwawa_backend.schemas.base import PlaceSource
@@ -23,11 +25,17 @@ from chiwawa_backend.services.common import require_photo_search, require_trip
 from chiwawa_backend.services.wanted_places import create_wanted_place
 from chiwawa_backend.state import AppState, synchronized
 
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
 PHOTO_SEARCH_MAX_CANDIDATES = 5
 
 
 class PhotoPlaceRecognizer(Protocol):
-    def search(self, request: ImageSearchRequest) -> ImageSearchResult: ...
+    def search(
+        self,
+        request: ImageSearchRequest,
+    ) -> ImageSearchResult | Awaitable[ImageSearchResult]: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +45,7 @@ class PhotoPlaceSearchContext:
     recognizer: PhotoPlaceRecognizer
 
 
-def search_photo_places(
+async def search_photo_places(
     state: AppState,
     context: PhotoPlaceSearchContext,
 ) -> PhotoPlaceSearchResponse:
@@ -54,7 +62,7 @@ def search_photo_places(
         max_candidates=PHOTO_SEARCH_MAX_CANDIDATES,
     )
     try:
-        result = context.recognizer.search(request)
+        result = await _search_recognizer(context.recognizer, request)
     except ImageLoadError as error:
         raise DomainValidationError(str(error)) from error
 
@@ -80,6 +88,24 @@ def search_photo_places(
         )
         state.photo_searches[search.id] = search
     return search
+
+
+async def _search_recognizer(
+    recognizer: PhotoPlaceRecognizer,
+    request: ImageSearchRequest,
+) -> ImageSearchResult:
+    search = recognizer.search
+    if inspect.iscoroutinefunction(search):
+        async_search = cast(
+            "Callable[[ImageSearchRequest], Awaitable[ImageSearchResult]]",
+            search,
+        )
+        return await async_search(request)
+    sync_search = cast(
+        "Callable[[ImageSearchRequest], ImageSearchResult]",
+        search,
+    )
+    return await run_in_threadpool(sync_search, request)
 
 
 @synchronized

@@ -28,3 +28,12 @@ class ConfigurationError(RuntimeError):
     @override
     def __str__(self) -> str:
         return self.detail
+
+
+@dataclass(frozen=True, slots=True)
+class UpstreamServiceError(RuntimeError):
+    detail: str
+
+    @override
+    def __str__(self) -> str:
+        return self.detail

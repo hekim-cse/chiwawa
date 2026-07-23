@@ -10,6 +10,7 @@ from pydantic import SecretStr
 
 from chiwawa_backend.config import get_settings
 from chiwawa_backend.errors import ConfigurationError
+from chiwawa_backend.services.image_search_client import RemotePhotoPlaceRecognizer
 from chiwawa_backend.services.jwt_auth import (
     get_current_user_from_credentials,
     security,
@@ -62,6 +63,9 @@ class _LazyPhotoPlaceRecognizer:
 
 @lru_cache(maxsize=1)
 def get_photo_place_recognizer() -> PhotoPlaceRecognizer:
+    settings = get_settings()
+    if settings.image_search_url and settings.image_search_url.strip():
+        return RemotePhotoPlaceRecognizer(settings)
     return _LazyPhotoPlaceRecognizer()
 
 
