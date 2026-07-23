@@ -87,7 +87,7 @@ class _RecentSearchCard extends StatelessWidget {
       color: Colors.white,
       clipBehavior: Clip.antiAlias,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         side: const BorderSide(color: ChiwawaColors.border),
       ),
       child: InkWell(

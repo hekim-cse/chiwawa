@@ -78,7 +78,7 @@ class _MemorialShareSheetState extends State<MemorialShareSheet> {
                   ),
             ),
             const SizedBox(height: 16),
-            SwitchListTile.adaptive(
+            SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('위치 정보 포함'),
               subtitle: const Text('기본값은 포함하지 않음'),

@@ -116,7 +116,7 @@ class _TripListLoading extends StatelessWidget {
         height: 116,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(ChiwawaRadii.control),
           border: Border.all(color: ChiwawaColors.border),
         ),
       ),

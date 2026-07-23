@@ -51,7 +51,7 @@ class RouteResultCard extends StatelessWidget {
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(ChiwawaRadii.card),
               border: Border.all(color: ChiwawaColors.border),
             ),
             child: Column(
@@ -75,7 +75,7 @@ class RouteResultCard extends StatelessWidget {
                       ),
                       decoration: BoxDecoration(
                         color: ChiwawaColors.background,
-                        borderRadius: BorderRadius.circular(99),
+                        borderRadius: BorderRadius.circular(ChiwawaRadii.round),
                       ),
                       child: Text(
                         place.category,

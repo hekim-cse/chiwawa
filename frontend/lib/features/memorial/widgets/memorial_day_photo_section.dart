@@ -90,7 +90,7 @@ class _TimelinePhoto extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(ChiwawaRadii.control),
             child: Stack(
               children: [
                 MemorialPhotoImage(

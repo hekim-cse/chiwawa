@@ -267,7 +267,7 @@ class _GoogleSignInButton extends StatelessWidget {
           backgroundColor: Colors.white,
           side: const BorderSide(color: ChiwawaColors.border),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(ChiwawaRadii.control),
           ),
         ),
         child: launching

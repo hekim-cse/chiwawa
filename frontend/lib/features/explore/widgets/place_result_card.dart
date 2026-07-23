@@ -40,7 +40,7 @@ class PlaceResultCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(ChiwawaRadii.control),
                 child: SizedBox(
                   width: 80,
                   height: 80,
@@ -90,7 +90,8 @@ class PlaceResultCard extends StatelessWidget {
                           ),
                           decoration: BoxDecoration(
                             color: ChiwawaColors.secondary,
-                            borderRadius: BorderRadius.circular(99),
+                            borderRadius:
+                                BorderRadius.circular(ChiwawaRadii.round),
                           ),
                           child: Text(
                             result.category,
@@ -183,7 +184,7 @@ class _SavedBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: ChiwawaColors.secondary,
-        borderRadius: BorderRadius.circular(99),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.round),
         border: Border.all(color: ChiwawaColors.border),
       ),
       child: const Row(

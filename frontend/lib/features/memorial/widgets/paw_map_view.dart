@@ -113,7 +113,9 @@ class _PawMapViewState extends State<PawMapView>
       showDragHandle: false,
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(ChiwawaRadii.sheet),
+        ),
       ),
       builder: (_) => PawPhotoSheet(cluster: cluster),
     );
@@ -307,7 +309,7 @@ class _SelectedClusterPanel extends StatelessWidget {
       child: Row(
         children: [
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(ChiwawaRadii.control),
             child: MemorialPhotoImage(
               assetPath: photo.assetPath,
               fileUrl: photo.fileUrl,

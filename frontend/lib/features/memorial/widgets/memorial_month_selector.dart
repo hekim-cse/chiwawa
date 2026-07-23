@@ -18,7 +18,7 @@ class MemorialMonthSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: 44,
+      height: ChiwawaControlSizes.minimumInteractive,
       child: Row(
         children: [
           IconButton(

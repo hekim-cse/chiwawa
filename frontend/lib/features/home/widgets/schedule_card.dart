@@ -23,7 +23,7 @@ class ScheduleCard extends StatelessWidget {
     return Opacity(
       opacity: completed ? 0.5 : 1,
       child: InkWell(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         onTap: isFree ? onFreeTap : null,
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,7 +181,7 @@ class _PlaceCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         border: Border.all(color: ChiwawaColors.border),
       ),
       child: Column(
@@ -241,7 +241,7 @@ class _FreeTimeCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.card),
         border: Border.all(
           color: ChiwawaColors.primary,
           style: BorderStyle.solid,
@@ -291,7 +291,7 @@ class _StatusBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
         color: background,
-        borderRadius: BorderRadius.circular(99),
+        borderRadius: BorderRadius.circular(ChiwawaRadii.round),
       ),
       child: Text(
         label,

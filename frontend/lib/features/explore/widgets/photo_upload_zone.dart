@@ -15,7 +15,7 @@ class PhotoUploadZone extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(ChiwawaRadii.card),
       onTap: onTap,
       child: CustomPaint(
         painter: const _DashedBorderPainter(
