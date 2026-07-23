@@ -23,7 +23,9 @@ def _require_env(var_name: str) -> str:
 
     if not value:
         raise ValueError(
-            f"{var_name} 환경변수가 필요합니다. ai/image_search/.env 를 확인하세요."
+            f"{var_name} 환경변수가 필요합니다. "
+            "로컬 실행은 ai/image_search/.env, "
+            "Modal 배포는 Secret 'chiwawa-image-search' 를 확인하세요."
         )
 
     return value
