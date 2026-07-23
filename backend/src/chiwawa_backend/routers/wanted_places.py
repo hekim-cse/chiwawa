@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from chiwawa_backend.dependencies import get_state
+from chiwawa_backend.dependencies import get_state, require_user_id_when_enabled
 from chiwawa_backend.schemas.places import (
     WantedPlaceCreateRequest,
     WantedPlaceListResponse,
@@ -12,7 +12,11 @@ from chiwawa_backend.schemas.places import (
 from chiwawa_backend.services import wanted_places as wanted_place_service
 from chiwawa_backend.state import AppState
 
-router = APIRouter(prefix="/api/v1/trips/{trip_id}/wanted-places", tags=["places"])
+router = APIRouter(
+    prefix="/api/v1/trips/{trip_id}/wanted-places",
+    tags=["places"],
+    dependencies=[Depends(require_user_id_when_enabled)],
+)
 StateDep = Annotated[AppState, Depends(get_state)]
 
 

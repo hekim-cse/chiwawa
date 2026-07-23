@@ -6,3 +6,5 @@ __pycache__/
 ai/route_planner/.env
 .db
 artifacts/
+deploy/chiwawa.production.env
+deploy/runtime/

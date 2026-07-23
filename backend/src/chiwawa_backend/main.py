@@ -66,6 +66,7 @@ def create_app(
         auth.router,
         trips.router,
         photo_places.router,
+        photo_places.public_router,
         wanted_places.router,
         plans.router,
         schedule.router,

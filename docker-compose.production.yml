@@ -1,0 +1,68 @@
+name: chiwawa
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    user: "${CHIWAWA_RUNTIME_UID:-1000}:${CHIWAWA_RUNTIME_GID:-1000}"
+    env_file:
+      - path: ./deploy/chiwawa.production.env
+        required: false
+    environment:
+      CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS:-https://chiwawa.jmllem.com}
+      REQUIRE_AUTH: ${REQUIRE_AUTH:-true}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://chiwawa.jmllem.com}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-https://chiwawa.jmllem.com/api/v1/auth/google/callback}
+      GOOGLE_OAUTH_COOKIE_SECURE: ${GOOGLE_OAUTH_COOKIE_SECURE:-true}
+      GOOGLE_AUTH_DB_PATH: /data/google_auth.db
+      MEMORIAL_PHOTO_DIR: /data/memorial_photos
+    volumes:
+      - ./deploy/runtime:/data
+    expose:
+      - "8000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=512m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        API_BASE_URL: ${API_BASE_URL:-https://chiwawa.jmllem.com}
+        USE_API: ${USE_API:-true}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${CHIWAWA_BIND_HOST:-172.17.0.1}:${CHIWAWA_HTTP_PORT:-8082}:80"
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:rw,noexec,nosuid,size=32m
+      - /var/run:rw,noexec,nosuid,size=8m
+      - /tmp:rw,noexec,nosuid,size=32m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    restart: unless-stopped

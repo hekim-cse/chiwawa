@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
+from urllib.parse import urlparse
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -18,6 +19,7 @@ MISSING_GOOGLE_CREDENTIAL_MESSAGE = "GOOGLE_CLIENT_SECRET is required"
 MISSING_JWT_KEY_MESSAGE = "JWT_SECRET is required"
 SHORT_JWT_KEY_MESSAGE = "JWT_SECRET must contain at least 32 characters"
 MISSING_IMAGE_SEARCH_URL_MESSAGE = "IMAGE_SEARCH_URL is required"
+INVALID_PUBLIC_BASE_URL_MESSAGE = "PUBLIC_BASE_URL must be an absolute HTTP(S) URL"
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,7 +50,10 @@ class Settings(BaseSettings):
     image_search_url: str | None = None
     image_search_timeout_seconds: float = Field(default=125.0, ge=1, le=180)
     image_search_max_retries: int = Field(default=1, ge=0, le=2)
+    public_base_url: str = "https://chiwawa.jmllem.com"
+    photo_search_upload_dir: Path = Path("data/photo_search_uploads")
     cors_allow_origins: str = "http://localhost:8080"
+    require_auth: bool = False
     # 데모 모드: 토큰 없이(게스트) 접근 시 고정 데모 유저로 처리한다.
     # 시연에서 로그인 없이 메모리얼 앨범을 보여주기 위한 용도. 기본값 off.
     memorial_demo_mode: bool = False
@@ -88,6 +93,13 @@ class Settings(BaseSettings):
         if self.image_search_url is None or not self.image_search_url.strip():
             raise ConfigurationError(MISSING_IMAGE_SEARCH_URL_MESSAGE)
         return self.image_search_url.strip()
+
+    def require_public_base_url(self) -> str:
+        value = self.public_base_url.strip().rstrip("/")
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ConfigurationError(INVALID_PUBLIC_BASE_URL_MESSAGE)
+        return value
 
     def auth_db_path(self) -> Path:
         path = self.google_auth_db_path.expanduser()

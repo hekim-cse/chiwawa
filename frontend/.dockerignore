@@ -1,0 +1,9 @@
+.dart_tool/
+build/
+.packages
+.pub-cache/
+.idea/
+.git/
+test/
+docs/
+*.iml

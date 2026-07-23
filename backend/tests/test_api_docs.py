@@ -121,8 +121,8 @@ async def test_openapi_describes_auth_requirements_and_public_prototype_scope() 
         # When: the detailed OpenAPI document is parsed.
         response = await client.get("/openapi.json")
 
-    # Then: OAuth state and its browser-binding cookie are required, and only
-    # /auth/me declares Bearer security during the public prototype stage.
+    # Then: OAuth state and its browser-binding cookie are required, and
+    # authenticated endpoints declare Bearer security.
     schema = DetailedOpenApiSchema.model_validate_json(response.text)
     login = schema.paths["/api/v1/auth/google/login"].get
     callback = schema.paths["/api/v1/auth/google/callback"].get
@@ -140,4 +140,4 @@ async def test_openapi_describes_auth_requirements_and_public_prototype_scope() 
     assert {"200", "400", "422", "500", "502"} <= set(callback.responses)
     assert "401" in me.responses
     assert me.security == [{"HTTPBearer": []}]
-    assert create_trip.security is None
+    assert create_trip.security == [{"HTTPBearer": []}]

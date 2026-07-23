@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from chiwawa_backend.dependencies import get_state
+from chiwawa_backend.dependencies import get_state, require_user_id_when_enabled
 from chiwawa_backend.schemas.travel import (
     NearbyRecommendationRequest,
     NearbyRecommendationResponse,
@@ -12,7 +12,11 @@ from chiwawa_backend.schemas.travel import (
 from chiwawa_backend.services import travel as travel_service
 from chiwawa_backend.state import AppState
 
-router = APIRouter(prefix="/api/v1/trips/{trip_id}/assistant", tags=["assistant"])
+router = APIRouter(
+    prefix="/api/v1/trips/{trip_id}/assistant",
+    tags=["assistant"],
+    dependencies=[Depends(require_user_id_when_enabled)],
+)
 StateDep = Annotated[AppState, Depends(get_state)]
 
 

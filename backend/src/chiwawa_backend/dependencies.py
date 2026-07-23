@@ -35,6 +35,24 @@ def get_current_user_id(
     settings = get_settings()
     if credentials is None and settings.memorial_demo_mode:
         return settings.memorial_demo_user_id
+    return _user_id_from_credentials(credentials)
+
+
+def require_user_id_when_enabled(
+    credentials: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(security),
+    ],
+) -> int | None:
+    """Require a valid user only when production auth is enabled."""
+    if not get_settings().require_auth:
+        return None
+    return _user_id_from_credentials(credentials)
+
+
+def _user_id_from_credentials(
+    credentials: HTTPAuthorizationCredentials | None,
+) -> int:
     claims = get_current_user_from_credentials(credentials)
     subject = claims.sub
     if not subject.isdigit():
