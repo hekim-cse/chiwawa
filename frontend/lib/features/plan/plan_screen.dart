@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -9,10 +10,12 @@ import '../../core/providers/data_providers.dart';
 import '../../core/saved_photo_places.dart';
 import '../../shared/widgets/app_list_group.dart';
 import '../../shared/widgets/app_page_header.dart';
+import '../../shared/widgets/app_section_header.dart';
 import '../../shared/widgets/app_viewport.dart';
 import 'models/plan_itinerary.dart';
 import 'plan_controller.dart';
 import 'widgets/plan_day_selector.dart';
+import 'widgets/plan_transport_mode_section.dart';
 import 'widgets/place_input_field.dart';
 import 'widgets/route_optimization_section.dart';
 import 'widgets/saved_photo_places_section.dart';
@@ -22,6 +25,7 @@ export 'plan_controller.dart'
     show
         selectedPlacesProvider,
         travelPreferenceProvider,
+        transportModeProvider,
         routeOptimizationProvider,
         planItineraryProvider,
         planActionsProvider;
@@ -36,11 +40,14 @@ class PlanScreen extends ConsumerWidget {
     final routeState = ref.watch(routeOptimizationProvider);
     final itinerary = ref.watch(planItineraryProvider);
     final preference = ref.watch(travelPreferenceProvider);
+    final transportMode = ref.watch(transportModeProvider);
     final actions = ref.read(planActionsProvider);
     final tripInfo = ref.watch(tripInfoProvider).valueOrNull;
 
     return SafeArea(
       child: ListView(
+        key: const ValueKey('plan-scroll'),
+        scrollCacheExtent: const ScrollCacheExtent.pixels(5000),
         padding: AppLayout.pageInsets(context),
         children: [
           const AppPageHeader(
@@ -71,12 +78,19 @@ class PlanScreen extends ConsumerWidget {
             onSelected: (day) => _selectDay(ref, day),
           ),
           const SizedBox(height: ChiwawaSpacing.lg),
-          TravelPreferenceSection(
-            preference: preference,
-            onThemeChanged: actions.updateTheme,
-            onPaceChanged: actions.updatePace,
+          const SizedBox(height: ChiwawaSpacing.section),
+          AppSectionHeader(
+            title: '등록 장소',
+            description: '이번 날짜에 방문할 장소를 확인하고 더해 보세요.',
+            trailing: Text(
+              '${places.length}곳',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: ChiwawaColors.primary,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: ChiwawaSpacing.sm),
           PlaceInputField(
             places: places,
             onAdd: actions.addPlace,
@@ -95,11 +109,17 @@ class PlanScreen extends ConsumerWidget {
               onRemove: (place) => _removeSavedPlace(context, ref, place),
             ),
           ],
-          const SizedBox(height: 16),
+          const SizedBox(height: ChiwawaSpacing.section),
+          PlanTransportModeSection(
+            selected: transportMode,
+            onSelected: actions.updateTransportMode,
+          ),
+          const SizedBox(height: ChiwawaSpacing.md),
           RouteOptimizationSection(
             state: routeState,
             canOptimize: places.length >= 2,
-            onOptimize: actions.optimizeRoute,
+            onOptimize: () => actions.optimizeRoute(transportMode),
+            transportMode: transportMode,
             itinerary: itinerary.currentStops,
             onMove: ref.read(planItineraryProvider.notifier).move,
             onEditTime: (stop) => _editTime(context, ref, stop),
@@ -110,7 +130,13 @@ class PlanScreen extends ConsumerWidget {
               itinerary.currentStops.map((stop) => stop.place).toList(),
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: ChiwawaSpacing.section),
+          TravelPreferenceSection(
+            preference: preference,
+            onThemeChanged: actions.updateTheme,
+            onPaceChanged: actions.updatePace,
+          ),
+          const SizedBox(height: ChiwawaSpacing.xl),
         ],
       ),
     );
@@ -120,6 +146,7 @@ class PlanScreen extends ConsumerWidget {
     ref.read(planItineraryProvider.notifier).selectDay(day);
     ref.read(routeOptimizationProvider.notifier).reset();
   }
+
 
   Future<void> _editTime(
     BuildContext context,
@@ -159,7 +186,7 @@ class PlanScreen extends ConsumerWidget {
     PlanActions actions,
     PhotoSearchResult place,
   ) {
-    final added = actions.addPlace(place.name);
+    final added = actions.addSavedPlace(place);
     final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(

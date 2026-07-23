@@ -4,6 +4,7 @@ import '../api/dio_client.dart';
 import '../auth/auth_controller.dart';
 import '../env.dart';
 import '../mock_data.dart' as mock;
+import '../models/transport_mode.dart';
 import '../models/travel_models.dart';
 import '../services/trip_session_service.dart';
 import 'api/api_plan_repository.dart';
@@ -26,6 +27,7 @@ abstract class PlanRepository {
   Future<List<RoutePlace>> optimizeRoute(
     List<String> places,
     TravelPreference preference,
+    TransportMode transportMode,
   );
 }
 
@@ -40,8 +42,9 @@ class MockPlanRepository implements PlanRepository {
   Future<List<RoutePlace>> optimizeRoute(
     List<String> places,
     TravelPreference preference,
+    TransportMode transportMode,
   ) async {
     await Future<void>.delayed(const Duration(milliseconds: 700));
-    return mock.routePlaces;
+    return mock.routePlacesFor(transportMode);
   }
 }
