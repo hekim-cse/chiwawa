@@ -205,6 +205,36 @@ void main() {
     expect(find.text('이 달에는 저장된 사진이 아직 없어요.'), findsOneWidget);
   });
 
+  testWidgets('Memorial day error shows one retry action and recovers',
+      (tester) async {
+    useMobileTestSurface(tester);
+    final repository = _RetryingMemorialRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          memorialRepositoryProvider.overrideWithValue(repository),
+        ],
+        child: const ChiwawaApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('로그인 없이 둘러보기'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('기록'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('내용을 불러오지 못했어요'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, '다시 시도'), findsOneWidget);
+    expect(find.text('이날의 사진'), findsNothing);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, '다시 시도'));
+    await tester.pumpAndSettle();
+
+    expect(repository.fetchDayCalls, 2);
+    expect(find.text('내용을 불러오지 못했어요'), findsNothing);
+    expect(find.text('이날의 사진'), findsOneWidget);
+  });
+
   testWidgets('Memorial paw marker is tappable while route is playing',
       (tester) async {
     useMobileTestSurface(tester);
@@ -331,6 +361,57 @@ class _ApiLikeMemorialRepository implements MemorialRepository {
 
   @override
   Future<MemorialOverview?> fetchOverview() async => null;
+
+  @override
+  Future<Uint8List> fetchPhotoBytes(String fileUrl) async => Uint8List(0);
+}
+
+class _RetryingMemorialRepository implements MemorialRepository {
+  int fetchDayCalls = 0;
+
+  @override
+  Future<MemorialOverview?> fetchOverview() async => null;
+
+  @override
+  Future<MemorialCalendar> fetchCalendar(MemorialMonth month) async {
+    return MemorialCalendar(
+      year: month.year,
+      month: month.month,
+      days: [
+        MemorialCalendarDay(
+          day: DateTime(2025, 4, 1),
+          photoCount: 1,
+        ),
+      ],
+    );
+  }
+
+  @override
+  Future<MemorialDayTimeline> fetchDay(DateTime day) async {
+    fetchDayCalls += 1;
+    if (fetchDayCalls == 1) {
+      throw Exception('temporary memorial error');
+    }
+    return MemorialDayTimeline(
+      day: day,
+      items: [
+        MemorialTimelineEntry(
+          seq: 0,
+          photo: MemorialPhoto(
+            id: 'retry-photo',
+            fileName: 'retry.png',
+            contentType: 'image/png',
+            takenAt: DateTime(2025, 4, 1, 9),
+            fileUrl: '',
+            latitude: 35.7148,
+            longitude: 139.7967,
+            address: '다시 불러온 장소',
+            assetPath: 'assets/images/mock/mock_memorial_01.png',
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   Future<Uint8List> fetchPhotoBytes(String fileUrl) async => Uint8List(0);
