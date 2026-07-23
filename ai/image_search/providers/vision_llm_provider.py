@@ -32,6 +32,11 @@ _INSTRUCTION = """너는 여행 사진에서 장소를 추정하는 전문가다
 _NOTE_PROMPT_MAX_CHARS = 500
 
 
+# Gemini 호출의 최대 대기(밀리초). 기본값(None)은 무제한이라 느린 응답이 Modal 함수 timeout(120s)
+# 하드월까지 매달려 매핑되지 않은 오류가 된다. 명시적으로 끊어 통제된 실패(폴백)로 만든다.
+_GEMINI_TIMEOUT_MS = 30000
+
+
 # Gemini 를 감싸 사진 -> VisionIdentification 으로 변환하는 Provider
 class VisionLlmProvider:
     # 비전 지원 저비용 모델. 실제 응답 검증(step 7 CLI)에서 조정 가능.
@@ -47,7 +52,11 @@ class VisionLlmProvider:
         client: genai.Client | None = None,
     ) -> None:
         self.model = model or self.DEFAULT_MODEL
-        self._client = client or genai.Client(api_key=api_key or get_gemini_api_key())
+        # http_options 로 호출 timeout 을 명시 (미설정 시 무제한) — Modal 하드월 전에 통제된 실패로 끊는다
+        self._client = client or genai.Client(
+            api_key=api_key or get_gemini_api_key(),
+            http_options=types.HttpOptions(timeout=_GEMINI_TIMEOUT_MS),
+        )
 
     # 사진 바이트를 받아 장소를 추정한다.
     # image_bytes: 이미지 내용 (URL/경로 -> 바이트 변환은 호출자(recognizer)가 담당)

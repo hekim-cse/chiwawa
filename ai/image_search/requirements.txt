@@ -1,5 +1,7 @@
-httpx
+httpx>=0.28.0
 python-dotenv
-pydantic
+pydantic>=2.11.0
 pytest
-google-genai
+google-genai>=1.0.0
+modal>=1.5,<2
+fastapi[standard]>=0.115,<1
