@@ -100,29 +100,30 @@ class MemorialScreen extends ConsumerWidget {
             },
           ),
           const SizedBox(height: 12),
-          AsyncValueView<List<PawCluster>>(
-            value: pawClusters,
-            loadingHeight: 260,
+          AsyncValueView<MemorialDayTimeline>(
+            key: const ValueKey('memorial-day-content'),
+            value: dayTimeline,
+            loadingHeight: 430,
             onRetry: () => ref.invalidate(memorialDayProvider(selectedDate)),
-            builder: (clusters) => PawMapView(clusters: clusters),
-          ),
-          const SizedBox(height: ChiwawaSpacing.section),
-          dayTimeline.when(
-            data: (timeline) => MemorialDayPhotoSection(
-              timeline: timeline,
-              onEditLocation: (photo) =>
-                  _editPhotoLocation(context, ref, photo),
-              onExclude: (photo) => _excludePhoto(context, ref, photo),
-            ),
-            loading: () => const SizedBox(
-              height: 170,
-              child: Center(
-                child: CircularProgressIndicator(
-                  color: ChiwawaColors.primary,
+            builder: (timeline) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                AsyncValueView<List<PawCluster>>(
+                  value: pawClusters,
+                  loadingHeight: 260,
+                  onRetry: () =>
+                      ref.invalidate(memorialDayProvider(selectedDate)),
+                  builder: (clusters) => PawMapView(clusters: clusters),
                 ),
-              ),
+                const SizedBox(height: ChiwawaSpacing.section),
+                MemorialDayPhotoSection(
+                  timeline: timeline,
+                  onEditLocation: (photo) =>
+                      _editPhotoLocation(context, ref, photo),
+                  onExclude: (photo) => _excludePhoto(context, ref, photo),
+                ),
+              ],
             ),
-            error: (error, stackTrace) => const SizedBox.shrink(),
           ),
           if (confirmedRoute.isNotEmpty) ...[
             const SizedBox(height: 20),
