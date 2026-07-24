@@ -45,13 +45,15 @@ class ApiPlanRepository implements PlanRepository {
   }
 
   @override
-  Future<List<RoutePlace>> optimizeRoute(
+  Future<RouteOptimizationResult> optimizeRoute(
     RouteOptimizationRequest request,
   ) async {
     final tripId = await _requireTripId();
 
-    // 선택 장소는 이 호출 전에 wanted-place로 저장하고 반환 ID를 보존한다.
-    // 선택 ID 목록과 days[]는 Swagger가 확정될 때 요청 바디에 연결한다.
+    // 현재 백엔드는 여행에 저장된 wanted-place 전체를 대상으로 계산한다.
+    // FE는 이 호출 전에 선택 장소를 wanted-place로 저장하고 반환 ID를 보존한다.
+    // 선택 ID 목록과 days[].start_place/end_place 필드가 Swagger에 추가되면
+    // request의 providerPlaceId·name·좌표를 api/ 어댑터에서만 연결한다.
     try {
       final response = await dio.post<Map<String, Object?>>(
         '/api/v1/trips/$tripId/route-optimizations',
@@ -63,13 +65,15 @@ class ApiPlanRepository implements PlanRepository {
         fallback: request.transportMode,
       );
       final stops = json['stops'] as List<Object?>? ?? const [];
-      return [
-        for (final raw in stops)
-          _stopToRoutePlace(
-            Map<String, Object?>.from(raw! as Map),
-            responseMode,
-          ),
-      ];
+      return RouteOptimizationResult.success(
+        places: [
+          for (final raw in stops)
+            _stopToRoutePlace(
+              Map<String, Object?>.from(raw! as Map),
+              responseMode,
+            ),
+        ],
+      );
     } on DioException catch (error) {
       throw ApiException.fromDioException(error);
     }

@@ -1,5 +1,6 @@
 import 'assets/app_images.dart';
 import 'models/memorial_map_models.dart';
+import 'models/route_planning_models.dart';
 import 'models/transport_mode.dart';
 import 'models/travel_models.dart';
 
@@ -263,6 +264,61 @@ List<RoutePlace> routePlacesFor(TransportMode mode) {
     TransportMode.transit => transitRoutePlaces,
   };
 }
+
+const routeRecommendationGroups = [
+  RouteRecommendationGroup(
+    category: 'CAFE',
+    displayName: '카페',
+    recommendations: [
+      RouteRecommendation(
+        candidate: RouteRecommendationCandidate(
+          placeId: 'google-place-omotesando-coffee',
+          name: '오모테산도 로스터리',
+          formattedAddress: '도쿄 시부야구 진구마에',
+          latitude: 35.6652,
+          longitude: 139.7107,
+          rating: 4.6,
+          userRatingCount: 842,
+        ),
+        insertionImpact: RouteInsertionImpact(
+          previousPlaceId: 'mock-poi-1-1',
+          nextPlaceId: 'mock-poi-1-2',
+          additionalMinutes: 18,
+          candidateArrivalAt: '2026-01-01T14:10',
+          candidateDepartureAt: '2026-01-01T14:50',
+          updatedNextArrivalAt: '2026-01-01T15:03',
+          updatedTimelineEndAt: '2026-01-01T18:08',
+        ),
+      ),
+    ],
+  ),
+  RouteRecommendationGroup(
+    category: 'CULTURE',
+    displayName: '문화·전시',
+    recommendations: [
+      RouteRecommendation(
+        candidate: RouteRecommendationCandidate(
+          placeId: 'google-place-nezu-museum',
+          name: '네즈 미술관',
+          formattedAddress: '도쿄 미나토구 미나미아오야마',
+          latitude: 35.6622,
+          longitude: 139.7171,
+          rating: 4.5,
+          userRatingCount: 3821,
+        ),
+        insertionImpact: RouteInsertionImpact(
+          previousPlaceId: 'mock-poi-1-2',
+          nextPlaceId: 'mock-poi-1-3',
+          additionalMinutes: 24,
+          candidateArrivalAt: '2026-01-01T15:20',
+          candidateDepartureAt: '2026-01-01T16:20',
+          updatedNextArrivalAt: '2026-01-01T16:32',
+          updatedTimelineEndAt: '2026-01-01T18:14',
+        ),
+      ),
+    ],
+  ),
+];
 
 const memorialSummary =
     MemorialSummary(days: 4, places: 12, distance: '38.4km');
