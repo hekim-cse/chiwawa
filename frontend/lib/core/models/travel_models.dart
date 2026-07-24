@@ -390,46 +390,6 @@ extension RoutePlaceIdentity on RoutePlace {
   }
 }
 
-class RouteOptimizationState {
-  const RouteOptimizationState({
-    required this.status,
-    this.places = const [],
-    this.message,
-  });
-
-  const RouteOptimizationState.idle()
-      : status = AiJobStatus.idle,
-        places = const [],
-        message = null;
-
-  const RouteOptimizationState.pending()
-      : status = AiJobStatus.pending,
-        places = const [],
-        message = null;
-
-  const RouteOptimizationState.running()
-      : status = AiJobStatus.running,
-        places = const [],
-        message = null;
-
-  const RouteOptimizationState.done(List<RoutePlace> routePlaces)
-      : status = AiJobStatus.done,
-        places = routePlaces,
-        message = null;
-
-  const RouteOptimizationState.failed(String failureMessage)
-      : status = AiJobStatus.failed,
-        places = const [],
-        message = failureMessage;
-
-  final AiJobStatus status;
-  final List<RoutePlace> places;
-  final String? message;
-
-  bool get isWorking =>
-      status == AiJobStatus.pending || status == AiJobStatus.running;
-}
-
 class FreeTimeRecommend {
   const FreeTimeRecommend({
     required this.name,

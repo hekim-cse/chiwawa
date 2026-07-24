@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:chiwawa/core/models/place_search_models.dart';
 import 'package:chiwawa/core/models/route_planning_models.dart';
 import 'package:chiwawa/core/models/transport_mode.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
@@ -121,6 +122,20 @@ void main() {
         plannedStartTime: '09:00',
         plannedEndTime: '18:00',
         maxPlaceCount: 4,
+        startPlace: const PlaceSearchCandidate(
+          providerPlaceId: 'google-start',
+          name: '도쿄역',
+          formattedAddress: '도쿄도 지요다구',
+          latitude: 35.6812,
+          longitude: 139.7671,
+        ),
+        endPlace: const PlaceSearchCandidate(
+          providerPlaceId: 'google-end',
+          name: '신주쿠 그랜드 호텔',
+          formattedAddress: '도쿄도 신주쿠구',
+          latitude: 35.6909,
+          longitude: 139.7003,
+        ),
       ),
     );
 
@@ -128,7 +143,7 @@ void main() {
     expect(adapter.requests.first.path, contains('/wanted-places'));
     expect(adapter.requests.last.path, contains('/route-optimizations'));
     expect(adapter.requests.last.data, containsPair('transport_mode', 'walk'));
-    expect(result.single.placeId, 'wanted-server-1');
+    expect(result.places.single.placeId, 'wanted-server-1');
   });
 }
 
@@ -157,20 +172,22 @@ class _RecordingPlanRepository implements PlanRepository {
   }
 
   @override
-  Future<List<RoutePlace>> optimizeRoute(
+  Future<RouteOptimizationResult> optimizeRoute(
     RouteOptimizationRequest request,
   ) async {
     lastRequest = request;
-    return [
-      for (final place in request.places)
-        RoutePlace(
-          placeId: place.serverPlaceId ?? '',
-          name: place.name,
-          duration: '60분',
-          transport: request.transportMode.label,
-          category: '',
-        ),
-    ];
+    return RouteOptimizationResult.success(
+      places: [
+        for (final place in request.places)
+          RoutePlace(
+            placeId: place.serverPlaceId ?? '',
+            name: place.name,
+            duration: '60분',
+            transport: request.transportMode.label,
+            category: '',
+          ),
+      ],
+    );
   }
 }
 
