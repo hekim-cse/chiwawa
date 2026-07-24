@@ -6,9 +6,10 @@ import 'package:chiwawa/core/auth/auth_controller.dart';
 import 'package:chiwawa/core/auth/deep_link_service.dart';
 import 'package:chiwawa/core/confirmed_route.dart';
 import 'package:chiwawa/core/models/route_planning_models.dart';
-import 'package:chiwawa/core/repositories/api/api_plan_repository.dart';
-import 'package:chiwawa/core/models/transport_mode.dart';
+import 'package:chiwawa/core/models/place_search_models.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
+import 'package:chiwawa/core/models/transport_mode.dart';
+import 'package:chiwawa/core/repositories/api/api_plan_repository.dart';
 import 'package:chiwawa/core/saved_photo_places.dart';
 import 'package:chiwawa/core/services/trip_session_service.dart';
 import 'package:chiwawa/core/utils/time_formatters.dart';
@@ -157,6 +158,54 @@ void main() {
     );
   });
 
+  test('ApiPlanRepository forwards the selected transport mode', () async {
+    SharedPreferences.setMockInitialValues({});
+    final tripIdStore = TripIdStore();
+    await tripIdStore.save('trip-transport-test');
+    final dio = Dio();
+    final adapter = RecordingHttpClientAdapter();
+    dio.httpClientAdapter = adapter;
+    final repository = ApiPlanRepository(
+      dio: dio,
+      tripIdStore: tripIdStore,
+    );
+
+    await repository.optimizeRoute(
+      const RouteOptimizationRequest(
+        places: [
+          PlanRoutePlaceInput(localId: 'a', name: '장소 A'),
+          PlanRoutePlaceInput(localId: 'b', name: '장소 B'),
+        ],
+        preference: TravelPreference(),
+        transportMode: TransportMode.drive,
+        dayIndex: 1,
+        plannedStartTime: '09:00',
+        plannedEndTime: '18:00',
+        maxPlaceCount: 4,
+        startPlace: PlaceSearchCandidate(
+          providerPlaceId: 'google-start',
+          name: '도쿄역',
+          formattedAddress: '도쿄도 지요다구',
+          latitude: 35.6812,
+          longitude: 139.7671,
+        ),
+        endPlace: PlaceSearchCandidate(
+          providerPlaceId: 'google-end',
+          name: '신주쿠 호텔',
+          formattedAddress: '도쿄도 신주쿠구',
+          latitude: 35.6896,
+          longitude: 139.6917,
+        ),
+      ),
+    );
+
+    expect(adapter.requests, hasLength(1));
+    expect(
+      adapter.requests.single.data,
+      containsPair('transport_mode', 'drive'),
+    );
+  });
+
   test('saved places use place id before display name for identity', () {
     final notifier = SavedPhotoPlacesNotifier();
     const first = PhotoSearchResult(
@@ -241,40 +290,6 @@ void main() {
 
     expect(container.read(savedPhotoPlacesProvider), isEmpty);
     expect(container.read(confirmedRouteProvider), isEmpty);
-  });
-
-  test('ApiPlanRepository forwards the selected transport mode', () async {
-    SharedPreferences.setMockInitialValues({});
-    final tripIdStore = TripIdStore();
-    await tripIdStore.save('trip-transport-test');
-    final dio = Dio();
-    final adapter = RecordingHttpClientAdapter();
-    dio.httpClientAdapter = adapter;
-    final repository = ApiPlanRepository(
-      dio: dio,
-      tripIdStore: tripIdStore,
-    );
-
-    await repository.optimizeRoute(
-      const RouteOptimizationRequest(
-        places: [
-          PlanRoutePlaceInput(localId: 'a', name: '장소 A'),
-          PlanRoutePlaceInput(localId: 'b', name: '장소 B'),
-        ],
-        preference: TravelPreference(),
-        transportMode: TransportMode.drive,
-        dayIndex: 1,
-        plannedStartTime: '09:00',
-        plannedEndTime: '20:00',
-        maxPlaceCount: 4,
-      ),
-    );
-
-    expect(adapter.requests, hasLength(1));
-    expect(
-      adapter.requests.single.data,
-      containsPair('transport_mode', 'drive'),
-    );
   });
 }
 
