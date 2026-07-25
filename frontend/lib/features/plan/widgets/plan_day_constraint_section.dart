@@ -1,16 +1,25 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/models/place_search_models.dart';
 import '../../../shared/widgets/app_section_header.dart';
 import '../models/plan_day_constraint.dart';
+import '../plan_place_search_controller.dart';
+import 'plan_place_search_field.dart';
 
-class PlanDayConstraintSection extends StatefulWidget {
+class PlanDayConstraintSection extends StatelessWidget {
   const PlanDayConstraintSection({
     required this.day,
     required this.constraint,
-    required this.onStartPlaceChanged,
+    required this.startSearchState,
+    required this.endSearchState,
+    required this.onStartQueryChanged,
+    required this.onStartPlaceSelected,
+    required this.onStartRetry,
     required this.onStartTimeChanged,
-    required this.onEndPlaceChanged,
+    required this.onEndQueryChanged,
+    required this.onEndPlaceSelected,
+    required this.onEndRetry,
     required this.onEndTimeChanged,
     required this.onMaxPlaceCountChanged,
     super.key,
@@ -18,57 +27,28 @@ class PlanDayConstraintSection extends StatefulWidget {
 
   final int day;
   final PlanDayConstraint constraint;
-  final ValueChanged<String> onStartPlaceChanged;
+  final PlanPlaceSearchState startSearchState;
+  final PlanPlaceSearchState endSearchState;
+  final ValueChanged<String> onStartQueryChanged;
+  final ValueChanged<PlaceSearchCandidate> onStartPlaceSelected;
+  final VoidCallback onStartRetry;
   final ValueChanged<String> onStartTimeChanged;
-  final ValueChanged<String> onEndPlaceChanged;
+  final ValueChanged<String> onEndQueryChanged;
+  final ValueChanged<PlaceSearchCandidate> onEndPlaceSelected;
+  final VoidCallback onEndRetry;
   final ValueChanged<String> onEndTimeChanged;
   final ValueChanged<int> onMaxPlaceCountChanged;
 
   @override
-  State<PlanDayConstraintSection> createState() =>
-      _PlanDayConstraintSectionState();
-}
-
-class _PlanDayConstraintSectionState extends State<PlanDayConstraintSection> {
-  late final TextEditingController _startPlaceController;
-  late final TextEditingController _endPlaceController;
-
-  @override
-  void initState() {
-    super.initState();
-    _startPlaceController = TextEditingController(
-      text: widget.constraint.startPlace,
-    );
-    _endPlaceController = TextEditingController(
-      text: widget.constraint.endPlace,
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant PlanDayConstraintSection oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _syncController(_startPlaceController, widget.constraint.startPlace);
-    _syncController(_endPlaceController, widget.constraint.endPlace);
-  }
-
-  @override
-  void dispose() {
-    _startPlaceController.dispose();
-    _endPlaceController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final constraint = widget.constraint;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AppSectionHeader(
           title: '하루 시작과 마무리',
-          description: '출발과 도착 시간을 정하면 무리 없는 동선을 만들 수 있어요.',
+          description: '검색 결과에서 출발·도착 장소를 고르고 시간을 정해 주세요.',
           trailing: Text(
-            '${widget.day}일차',
+            '$day일차',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
                   color: ChiwawaColors.primary,
                   fontWeight: FontWeight.w800,
@@ -76,19 +56,20 @@ class _PlanDayConstraintSectionState extends State<PlanDayConstraintSection> {
           ),
         ),
         const SizedBox(height: ChiwawaSpacing.md),
-        _ConstraintPointRow(
-          role: '출발',
-          icon: Icons.trip_origin_rounded,
-          placeController: _startPlaceController,
-          placeKey: ValueKey('plan-start-place-${widget.day}'),
-          timeKey: ValueKey('plan-start-time-${widget.day}'),
+        PlanPlaceSearchField(
+          day: day,
+          role: PlanPlaceRole.start,
+          searchState: startSearchState,
+          selectedPlace: constraint.startPlace,
           time: constraint.startTime,
-          onPlaceChanged: widget.onStartPlaceChanged,
+          onQueryChanged: onStartQueryChanged,
+          onPlaceSelected: onStartPlaceSelected,
+          onRetry: onStartRetry,
           onTimePressed: () => _pickTime(
             context,
             initialValue: constraint.startTime,
             helpText: '출발 시간 선택',
-            onChanged: widget.onStartTimeChanged,
+            onChanged: onStartTimeChanged,
           ),
         ),
         Padding(
@@ -99,26 +80,27 @@ class _PlanDayConstraintSectionState extends State<PlanDayConstraintSection> {
             color: ChiwawaColors.secondary,
           ),
         ),
-        _ConstraintPointRow(
-          role: '도착',
-          icon: Icons.location_on_rounded,
-          placeController: _endPlaceController,
-          placeKey: ValueKey('plan-end-place-${widget.day}'),
-          timeKey: ValueKey('plan-end-time-${widget.day}'),
+        PlanPlaceSearchField(
+          day: day,
+          role: PlanPlaceRole.end,
+          searchState: endSearchState,
+          selectedPlace: constraint.endPlace,
           time: constraint.endTime,
-          onPlaceChanged: widget.onEndPlaceChanged,
+          onQueryChanged: onEndQueryChanged,
+          onPlaceSelected: onEndPlaceSelected,
+          onRetry: onEndRetry,
           onTimePressed: () => _pickTime(
             context,
             initialValue: constraint.endTime,
             helpText: '도착 시간 선택',
-            onChanged: widget.onEndTimeChanged,
+            onChanged: onEndTimeChanged,
           ),
         ),
         const SizedBox(height: ChiwawaSpacing.sm),
         _PlaceCountControl(
-          day: widget.day,
+          day: day,
           value: constraint.maxPlaceCount,
-          onChanged: widget.onMaxPlaceCountChanged,
+          onChanged: onMaxPlaceCountChanged,
         ),
         AnimatedSize(
           duration: const Duration(milliseconds: 160),
@@ -155,15 +137,6 @@ class _PlanDayConstraintSectionState extends State<PlanDayConstraintSection> {
     );
   }
 
-  void _syncController(TextEditingController controller, String value) {
-    if (controller.text == value) return;
-    controller.value = controller.value.copyWith(
-      text: value,
-      selection: TextSelection.collapsed(offset: value.length),
-      composing: TextRange.empty,
-    );
-  }
-
   Future<void> _pickTime(
     BuildContext context, {
     required String initialValue,
@@ -190,79 +163,6 @@ class _PlanDayConstraintSectionState extends State<PlanDayConstraintSection> {
     onChanged(
       '${picked.hour.toString().padLeft(2, '0')}:'
       '${picked.minute.toString().padLeft(2, '0')}',
-    );
-  }
-}
-
-class _ConstraintPointRow extends StatelessWidget {
-  const _ConstraintPointRow({
-    required this.role,
-    required this.icon,
-    required this.placeController,
-    required this.placeKey,
-    required this.timeKey,
-    required this.time,
-    required this.onPlaceChanged,
-    required this.onTimePressed,
-  });
-
-  final String role;
-  final IconData icon;
-  final TextEditingController placeController;
-  final Key placeKey;
-  final Key timeKey;
-  final String time;
-  final ValueChanged<String> onPlaceChanged;
-  final VoidCallback onTimePressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: const BoxDecoration(
-            color: ChiwawaColors.secondary,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, size: 17, color: ChiwawaColors.primary),
-        ),
-        const SizedBox(width: ChiwawaSpacing.sm),
-        Expanded(
-          child: TextFormField(
-            key: placeKey,
-            controller: placeController,
-            onChanged: onPlaceChanged,
-            textInputAction: TextInputAction.done,
-            maxLines: 1,
-            decoration: InputDecoration(
-              labelText: '$role 장소',
-              hintText: '$role 장소를 입력하세요',
-            ),
-          ),
-        ),
-        const SizedBox(width: ChiwawaSpacing.xs),
-        SizedBox(
-          width: 88,
-          height: ChiwawaControlSizes.minimumInteractive,
-          child: OutlinedButton(
-            key: timeKey,
-            onPressed: onTimePressed,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              foregroundColor: ChiwawaColors.primary,
-              side: const BorderSide(color: ChiwawaColors.border),
-            ),
-            child: Text(
-              time,
-              maxLines: 1,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

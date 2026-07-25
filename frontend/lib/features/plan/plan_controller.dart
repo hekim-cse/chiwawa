@@ -67,12 +67,25 @@ class PlanItineraryController extends StateNotifier<PlanItineraryState> {
   void replaceCurrentDay(
     List<RoutePlace> places, {
     String startTime = '09:00',
+    RouteTimeline? timeline,
   }) {
+    final timelineStops = timeline?.timelineStops
+            .where((stop) => stop.stopType == 'POI')
+            .toList(growable: false) ??
+        const <RouteTimelineStop>[];
     final stops = <PlanItineraryStop>[
       for (var index = 0; index < places.length; index++)
         PlanItineraryStop(
           id: '${places[index].identityKey}-$index',
-          startTime: _timeForIndex(index, startTime),
+          startTime: index < timelineStops.length
+              ? timelineStops[index].arrivalTime
+              : _timeForIndex(index, startTime),
+          departureTime: index < timelineStops.length
+              ? timelineStops[index].departureTime
+              : null,
+          stayMinutes: index < timelineStops.length
+              ? timelineStops[index].stayMinutes
+              : null,
           place: places[index],
         ),
     ];
@@ -181,6 +194,39 @@ class PlanActions {
     }
   }
 
+  Future<bool> addRecommendation(RouteRecommendation recommendation) async {
+    final candidate = recommendation.candidate;
+    final localId = 'recommendation:${candidate.placeId}';
+    final existing = _ref
+        .read(selectedPlacesProvider)
+        .any((selection) => selection.id == localId);
+    if (existing) return false;
+    final record = await _ref.read(planRepositoryProvider).saveWantedPlace(
+          PlanRoutePlaceInput(
+            localId: localId,
+            name: candidate.name,
+            address: candidate.formattedAddress,
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+          ),
+        );
+    final added = _addSelection(
+      PlanPlaceSelection(
+        id: localId,
+        name: candidate.name,
+        address: candidate.formattedAddress,
+        source: PlanPlaceSource.freeTime,
+        serverPlaceId: record.id,
+        latitude: candidate.latitude,
+        longitude: candidate.longitude,
+      ),
+    );
+    if (added) {
+      await optimizeRoute(_ref.read(transportModeProvider));
+    }
+    return added;
+  }
+
   bool _addSelection(PlanPlaceSelection selection) {
     final places = _ref.read(selectedPlacesProvider);
     if (places.any((place) => place.id == selection.id)) return false;
@@ -274,7 +320,7 @@ class RouteOptimizationController
       if (requestVersion != _requestVersion) return;
       _ref.read(selectedPlacesProvider.notifier).state =
           List.unmodifiable(selections);
-      final routePlaces = await _ref.read(planRepositoryProvider).optimizeRoute(
+      final result = await _ref.read(planRepositoryProvider).optimizeRoute(
             RouteOptimizationRequest(
               places: [
                 for (final selection in selections)
@@ -293,15 +339,26 @@ class RouteOptimizationController
               plannedStartTime: dayConstraint.startTime,
               plannedEndTime: dayConstraint.endTime,
               maxPlaceCount: dayConstraint.maxPlaceCount,
+              startPlace: dayConstraint.startPlace!,
+              endPlace: dayConstraint.endPlace!,
             ),
           );
       if (requestVersion != _requestVersion) return;
-      final limitedPlaces =
-          routePlaces.take(dayConstraint.maxPlaceCount).toList(growable: false);
-      state = RouteOptimizationState.done(List.unmodifiable(limitedPlaces));
+      final filteredResult = _excludeSelectedRecommendations(
+        result,
+        selections,
+      );
+      final limitedResult =
+          _limitResult(filteredResult, dayConstraint.maxPlaceCount);
+      state = RouteOptimizationState.done(limitedResult);
+      if (!limitedResult.isAvailable) {
+        _ref.read(planItineraryProvider.notifier).clearCurrentDay();
+        return;
+      }
       _ref.read(planItineraryProvider.notifier).replaceCurrentDay(
-            limitedPlaces,
+            limitedResult.places,
             startTime: dayConstraint.startTime,
+            timeline: limitedResult.timeline,
           );
     } catch (_) {
       if (requestVersion != _requestVersion) return;
@@ -309,6 +366,40 @@ class RouteOptimizationController
         '경로 최적화에 실패했어요. 다시 시도해 주세요.',
       );
     }
+  }
+
+  RouteOptimizationResult _excludeSelectedRecommendations(
+    RouteOptimizationResult result,
+    List<PlanPlaceSelection> selections,
+  ) {
+    final selectedIds = selections.map((selection) => selection.id).toSet();
+    final groups = [
+      for (final group in result.recommendationGroups)
+        if (group.recommendations.any(
+          (recommendation) => !selectedIds.contains(
+            'recommendation:${recommendation.candidate.placeId}',
+          ),
+        ))
+          RouteRecommendationGroup(
+            category: group.category,
+            displayName: group.displayName,
+            recommendations: [
+              for (final recommendation in group.recommendations)
+                if (!selectedIds.contains(
+                  'recommendation:${recommendation.candidate.placeId}',
+                ))
+                  recommendation,
+            ],
+          ),
+    ];
+    return RouteOptimizationResult(
+      availability: result.availability,
+      places: result.places,
+      timeline: result.timeline,
+      missingSegments: result.missingSegments,
+      warnings: result.warnings,
+      recommendationGroups: groups,
+    );
   }
 
   Future<List<PlanPlaceSelection>> _persistSelections(
@@ -350,4 +441,19 @@ class RouteOptimizationController
     _requestVersion += 1;
     state = const RouteOptimizationState.idle();
   }
+}
+
+RouteOptimizationResult _limitResult(
+  RouteOptimizationResult result,
+  int maxPlaceCount,
+) {
+  if (!result.isAvailable || result.places.length <= maxPlaceCount) {
+    return result;
+  }
+  return RouteOptimizationResult.success(
+    places: result.places.take(maxPlaceCount).toList(growable: false),
+    timeline: result.timeline,
+    warnings: result.warnings,
+    recommendationGroups: result.recommendationGroups,
+  );
 }

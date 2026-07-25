@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
 import '../../core/confirmed_route.dart';
+import '../../core/models/place_search_models.dart';
+import '../../core/models/route_planning_models.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/saved_photo_places.dart';
@@ -17,6 +19,7 @@ import '../../shared/widgets/app_viewport.dart';
 import 'models/plan_itinerary.dart';
 import 'plan_controller.dart';
 import 'plan_day_constraints_controller.dart';
+import 'plan_place_search_controller.dart';
 import 'widgets/plan_day_constraint_section.dart';
 import 'widgets/plan_day_selector.dart';
 import 'widgets/plan_transport_mode_section.dart';
@@ -34,6 +37,13 @@ export 'plan_controller.dart'
         planItineraryProvider,
         planActionsProvider;
 export 'plan_day_constraints_controller.dart' show planDayConstraintsProvider;
+export 'plan_place_search_controller.dart'
+    show
+        PlanPlaceRole,
+        PlanPlaceSearchKey,
+        PlanPlaceSearchState,
+        PlanPlaceSearchStatus,
+        planPlaceSearchProvider;
 
 class PlanScreen extends ConsumerWidget {
   const PlanScreen({super.key});
@@ -46,6 +56,15 @@ class PlanScreen extends ConsumerWidget {
     final itinerary = ref.watch(planItineraryProvider);
     final dayConstraints = ref.watch(planDayConstraintsProvider);
     final dayConstraint = dayConstraints.forDay(itinerary.selectedDay);
+    final placeSearchStates = ref.watch(planPlaceSearchProvider);
+    final startSearchKey = PlanPlaceSearchKey(
+      day: itinerary.selectedDay,
+      role: PlanPlaceRole.start,
+    );
+    final endSearchKey = PlanPlaceSearchKey(
+      day: itinerary.selectedDay,
+      role: PlanPlaceRole.end,
+    );
     final preference = ref.watch(travelPreferenceProvider);
     final transportMode = ref.watch(transportModeProvider);
     final actions = ref.read(planActionsProvider);
@@ -89,12 +108,21 @@ class PlanScreen extends ConsumerWidget {
             key: ValueKey('plan-day-constraint-${itinerary.selectedDay}'),
             day: itinerary.selectedDay,
             constraint: dayConstraint,
-            onStartPlaceChanged: (value) => _updateDayConstraint(
+            startSearchState: placeSearchStates.forKey(startSearchKey),
+            endSearchState: placeSearchStates.forKey(endSearchKey),
+            onStartQueryChanged: (value) => _updatePlaceQuery(
               ref,
-              (controller) => controller.updateStartPlace(
-                itinerary.selectedDay,
-                value,
-              ),
+              key: startSearchKey,
+              value: value,
+              cityBias: tripInfo?.city,
+            ),
+            onStartPlaceSelected: (place) => _selectConstraintPlace(
+              ref,
+              key: startSearchKey,
+              place: place,
+            ),
+            onStartRetry: () => unawaited(
+              ref.read(planPlaceSearchProvider.notifier).retry(startSearchKey),
             ),
             onStartTimeChanged: (value) => _updateDayConstraint(
               ref,
@@ -103,12 +131,19 @@ class PlanScreen extends ConsumerWidget {
                 value,
               ),
             ),
-            onEndPlaceChanged: (value) => _updateDayConstraint(
+            onEndQueryChanged: (value) => _updatePlaceQuery(
               ref,
-              (controller) => controller.updateEndPlace(
-                itinerary.selectedDay,
-                value,
-              ),
+              key: endSearchKey,
+              value: value,
+              cityBias: tripInfo?.city,
+            ),
+            onEndPlaceSelected: (place) => _selectConstraintPlace(
+              ref,
+              key: endSearchKey,
+              place: place,
+            ),
+            onEndRetry: () => unawaited(
+              ref.read(planPlaceSearchProvider.notifier).retry(endSearchKey),
             ),
             onEndTimeChanged: (value) => _updateDayConstraint(
               ref,
@@ -163,6 +198,12 @@ class PlanScreen extends ConsumerWidget {
             selected: transportMode,
             onSelected: actions.updateTransportMode,
           ),
+          const SizedBox(height: ChiwawaSpacing.section),
+          TravelPreferenceSection(
+            preference: preference,
+            onThemeChanged: actions.updateTheme,
+            onPaceChanged: actions.updatePace,
+          ),
           const SizedBox(height: ChiwawaSpacing.md),
           RouteOptimizationSection(
             state: routeState,
@@ -178,12 +219,8 @@ class PlanScreen extends ConsumerWidget {
               ref,
               itinerary.currentStops.map((stop) => stop.place).toList(),
             ),
-          ),
-          const SizedBox(height: ChiwawaSpacing.section),
-          TravelPreferenceSection(
-            preference: preference,
-            onThemeChanged: actions.updateTheme,
-            onPaceChanged: actions.updatePace,
+            onAddRecommendation: (recommendation) =>
+                _addRecommendation(context, actions, recommendation),
           ),
           const SizedBox(height: ChiwawaSpacing.xl),
         ],
@@ -204,31 +241,44 @@ class PlanScreen extends ConsumerWidget {
     ref.read(planActionsProvider).resetOptimization();
   }
 
-  Future<void> _saveManualPlace(
-    BuildContext context,
-    PlanActions actions,
-    String value,
-  ) async {
-    try {
-      final added = await actions.saveAndAddPlace(value);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              added ? '$value 서버에 저장했어요.' : '$value 이미 저장 중이거나 일정에 있어요.',
-            ),
-          ),
-        );
-    } catch (_) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(content: Text('장소를 저장하지 못했어요. 다시 시도해 주세요.')),
-        );
+  void _updatePlaceQuery(
+    WidgetRef ref, {
+    required PlanPlaceSearchKey key,
+    required String value,
+    String? cityBias,
+  }) {
+    final constraints = ref.read(planDayConstraintsProvider);
+    final constraint = constraints.forDay(key.day);
+    final selected = key.role == PlanPlaceRole.start
+        ? constraint.startPlace
+        : constraint.endPlace;
+    if (selected != null && value != selected.name) {
+      _updateDayConstraint(
+        ref,
+        (controller) => key.role == PlanPlaceRole.start
+            ? controller.clearStartPlace(key.day)
+            : controller.clearEndPlace(key.day),
+      );
     }
+    ref.read(planPlaceSearchProvider.notifier).updateQuery(
+          key,
+          value,
+          cityBias: cityBias,
+        );
+  }
+
+  void _selectConstraintPlace(
+    WidgetRef ref, {
+    required PlanPlaceSearchKey key,
+    required PlaceSearchCandidate place,
+  }) {
+    _updateDayConstraint(
+      ref,
+      (controller) => key.role == PlanPlaceRole.start
+          ? controller.selectStartPlace(key.day, place)
+          : controller.selectEndPlace(key.day, place),
+    );
+    ref.read(planPlaceSearchProvider.notifier).selectPlace(key, place);
   }
 
   Future<void> _editTime(
@@ -278,6 +328,64 @@ class PlanScreen extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  Future<void> _saveManualPlace(
+    BuildContext context,
+    PlanActions actions,
+    String value,
+  ) async {
+    try {
+      final added = await actions.saveAndAddPlace(value);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              added ? '$value 서버에 저장했어요.' : '$value 이미 저장 중이거나 일정에 있어요.',
+            ),
+          ),
+        );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('장소를 저장하지 못했어요. 다시 시도해 주세요.')),
+        );
+    }
+  }
+
+  Future<bool> _addRecommendation(
+    BuildContext context,
+    PlanActions actions,
+    RouteRecommendation recommendation,
+  ) async {
+    try {
+      final added = await actions.addRecommendation(recommendation);
+      if (!context.mounted) return added;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              added
+                  ? '${recommendation.candidate.name} 장소를 추가하고 일정을 다시 계산했어요.'
+                  : '${recommendation.candidate.name} 이미 일정에 있어요.',
+            ),
+          ),
+        );
+      return added;
+    } catch (_) {
+      if (!context.mounted) return false;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('추천 장소를 추가하지 못했어요. 다시 시도해 주세요.')),
+        );
+      return false;
+    }
   }
 
   void _removeSavedPlace(
