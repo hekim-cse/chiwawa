@@ -186,11 +186,13 @@ void main() {
       find.byKey(const ValueKey('profile-name-field')),
       '도쿄 산책자',
     );
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('save-profile-name')));
     await tester.pumpAndSettle();
 
-    expect(find.text('도쿄 산책자'), findsOneWidget);
+    expect(find.text('도쿄 산책자'), findsNWidgets(2));
     expect(find.text('프로필 이름을 저장했어요.'), findsOneWidget);
+    expect(find.text('변경사항 저장됨'), findsOneWidget);
 
     await tester.tap(find.byTooltip('마이페이지로 돌아가기'));
     await tester.pumpAndSettle();
@@ -211,6 +213,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(SwitchListTile), findsNWidgets(2));
+    expect(find.text('2개 앱 안내 사용 중'), findsOneWidget);
     await tester.tap(find.byType(SwitchListTile).first);
     await tester.pumpAndSettle();
 
@@ -218,6 +221,7 @@ void main() {
       find.byType(SwitchListTile),
     );
     expect(switches.first.value, isFalse);
+    expect(find.text('1개 앱 안내 사용 중'), findsOneWidget);
   });
 
   testWidgets('mypage settings and help rows open dedicated pages',
@@ -248,6 +252,36 @@ void main() {
     );
   });
 
+  testWidgets('mypage detail pages expose expanded context', (tester) async {
+    useMobileTestSurface(tester);
+    await pumpAppAsGuest(tester);
+
+    await tester.tap(find.text('마이'));
+    await tester.pumpAndSettle();
+
+    Future<void> checkDetail(String menu, String detail) async {
+      await tester.scrollUntilVisible(find.text(menu), 300);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(menu));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        find.text(detail),
+        300,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(detail), findsOneWidget);
+      await tester.tap(find.byTooltip('마이페이지로 돌아가기'));
+      await tester.pumpAndSettle();
+    }
+
+    await checkDetail('언어 및 지역', '표기 예시');
+    await checkDetail('앱 정보', 'chiwawa로 할 수 있는 일');
+    await checkDetail('문의하기', '문의 전 확인');
+    await checkDetail('이용 가이드', '도움이 더 필요할 때');
+    await checkDetail('개인정보 및 위치 정보 안내', '내가 직접 관리할 수 있는 항목');
+  });
+
   testWidgets('support page validates inquiry message', (tester) async {
     useMobileTestSurface(tester);
     await pumpAppAsGuest(tester);
@@ -263,6 +297,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('문의 내용을 10자 이상 입력해 주세요.'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('support-diagnostics-switch')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('support-diagnostics-switch')),
+        findsOneWidget);
+    expect(find.textContaining('앱 버전: 1.0.0'), findsOneWidget);
+    expect(find.textContaining('빌드 SHA: unknown'), findsOneWidget);
   });
 
   testWidgets('photo analysis candidates can be selected', (tester) async {
@@ -453,7 +497,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('게스트로 이용 중'), findsOneWidget);
-    expect(find.text('현재 기기의 로컬 데이터만 사용하고 있어요.'), findsOneWidget);
+    expect(find.text('계정 동기화 없이 현재 기기의 로컬 상태를 사용해요.'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('데이터 보관 방식'), 300);
+    await tester.pumpAndSettle();
+    expect(find.text('데이터 보관 방식'), findsOneWidget);
 
     await tester.tap(find.byKey(const ValueKey('connect-google-account')));
     await tester.pumpAndSettle();

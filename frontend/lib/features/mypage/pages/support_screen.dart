@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/env.dart';
 import '../widgets/my_page_detail_scaffold.dart';
 
 class SupportScreen extends StatefulWidget {
@@ -16,6 +18,7 @@ class _SupportScreenState extends State<SupportScreen> {
   final _formKey = GlobalKey<FormState>();
   final _messageController = TextEditingController();
   String _category = '앱 이용';
+  var _includeDiagnostics = true;
 
   @override
   void dispose() {
@@ -39,6 +42,30 @@ class _SupportScreenState extends State<SupportScreen> {
           icon: Icons.mail_outline_rounded,
           title: 'support@chiwawa.app',
           description: '이메일 앱을 열 수 없는 환경에서는 문의 주소와 내용을 복사해요.',
+        ),
+        const SizedBox(height: ChiwawaSpacing.lg),
+        const MyPageSection(
+          title: '문의 전 확인',
+          child: Column(
+            children: [
+              MyPageDetailItem(
+                icon: Icons.screenshot_outlined,
+                title: '확인한 화면',
+                description: '홈, 일정, 탐색처럼 문제가 발생한 화면을 적어 주세요.',
+              ),
+              MyPageDetailItem(
+                icon: Icons.replay_rounded,
+                title: '다시 발생하는 순서',
+                description: '어떤 버튼을 눌렀는지 순서대로 적으면 확인이 빨라져요.',
+              ),
+              MyPageDetailItem(
+                icon: Icons.lock_outline_rounded,
+                title: '민감한 정보 제외',
+                description: '비밀번호, 인증 코드, 전체 위치 좌표는 적지 마세요.',
+                showDivider: false,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: ChiwawaSpacing.lg),
         Form(
@@ -86,20 +113,63 @@ class _SupportScreenState extends State<SupportScreen> {
             ],
           ),
         ),
+        const SizedBox(height: ChiwawaSpacing.lg),
+        MyPageSection(
+          title: '자동 첨부 정보',
+          padding: EdgeInsets.zero,
+          surface: true,
+          child: Column(
+            children: [
+              SwitchListTile(
+                key: const ValueKey('support-diagnostics-switch'),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+                title: const Text('앱 진단 정보 포함'),
+                subtitle: const Text('버전, 실행 환경, 데이터 모드만 포함해요.'),
+                value: _includeDiagnostics,
+                onChanged: (value) {
+                  setState(() => _includeDiagnostics = value);
+                },
+              ),
+              if (_includeDiagnostics) ...[
+                const Divider(height: 1, indent: 14, endIndent: 14),
+                Padding(
+                  padding: const EdgeInsets.all(ChiwawaSpacing.sm),
+                  child: Text(
+                    _diagnostics,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: ChiwawaColors.textSecondary,
+                        ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ],
     );
   }
+
+  String get _diagnostics => [
+        '앱 버전: 1.0.0',
+        '빌드 SHA: $appBuildSha',
+        '실행 환경: ${kIsWeb ? 'Web' : 'App'}',
+        '데이터 모드: ${useApiBackend ? 'API' : 'Mock'}',
+      ].join('\n');
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final message = _messageController.text.trim();
     final subject = '[chiwawa $_category 문의]';
+    final body = [
+      message,
+      if (_includeDiagnostics) '\n--- 앱 진단 정보 ---\n$_diagnostics',
+    ].join('\n');
     final uri = Uri(
       scheme: 'mailto',
       path: 'support@chiwawa.app',
       queryParameters: {
         'subject': subject,
-        'body': message,
+        'body': body,
       },
     );
 
@@ -112,7 +182,7 @@ class _SupportScreenState extends State<SupportScreen> {
 
     await Clipboard.setData(
       ClipboardData(
-        text: 'support@chiwawa.app\n$subject\n\n$message',
+        text: 'support@chiwawa.app\n$subject\n\n$body',
       ),
     );
     if (!mounted) return;
