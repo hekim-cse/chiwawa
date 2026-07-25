@@ -1,8 +1,10 @@
+import '../../../core/models/place_search_models.dart';
+
 class PlanDayConstraint {
   const PlanDayConstraint({
-    this.startPlace = '숙소',
+    this.startPlace,
     this.startTime = '09:00',
-    this.endPlace = '숙소',
+    this.endPlace,
     this.endTime = '20:00',
     this.maxPlaceCount = 4,
   });
@@ -10,17 +12,20 @@ class PlanDayConstraint {
   static const minimumPlaceCount = 1;
   static const maximumPlaceCount = 8;
 
-  final String startPlace;
+  final PlaceSearchCandidate? startPlace;
   final String startTime;
-  final String endPlace;
+  final PlaceSearchCandidate? endPlace;
   final String endTime;
   final int maxPlaceCount;
 
   bool get isValid => validationMessage == null;
 
   String? get validationMessage {
-    if (startPlace.trim().isEmpty || endPlace.trim().isEmpty) {
-      return '출발지와 도착지를 모두 입력해 주세요.';
+    if (startPlace == null || endPlace == null) {
+      return '검색 결과에서 출발지와 도착지를 선택해 주세요.';
+    }
+    if (!startPlace!.isValid || !endPlace!.isValid) {
+      return '선택한 장소 정보를 다시 확인해 주세요.';
     }
 
     final startMinutes = _minutesFromTime(startTime);
@@ -35,19 +40,24 @@ class PlanDayConstraint {
   }
 
   PlanDayConstraint copyWith({
-    String? startPlace,
+    PlaceSearchCandidate? startPlace,
+    bool clearStartPlace = false,
     String? startTime,
-    String? endPlace,
+    PlaceSearchCandidate? endPlace,
+    bool clearEndPlace = false,
     String? endTime,
     int? maxPlaceCount,
   }) {
     return PlanDayConstraint(
-      startPlace: startPlace ?? this.startPlace,
+      startPlace: clearStartPlace ? null : startPlace ?? this.startPlace,
       startTime: startTime ?? this.startTime,
-      endPlace: endPlace ?? this.endPlace,
+      endPlace: clearEndPlace ? null : endPlace ?? this.endPlace,
       endTime: endTime ?? this.endTime,
       maxPlaceCount: (maxPlaceCount ?? this.maxPlaceCount)
-          .clamp(minimumPlaceCount, maximumPlaceCount)
+          .clamp(
+            minimumPlaceCount,
+            maximumPlaceCount,
+          )
           .toInt(),
     );
   }

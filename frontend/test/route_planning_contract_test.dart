@@ -1,0 +1,460 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:chiwawa/app/theme.dart';
+import 'package:chiwawa/core/models/place_search_models.dart';
+import 'package:chiwawa/core/models/route_planning_models.dart';
+import 'package:chiwawa/core/models/transport_mode.dart';
+import 'package:chiwawa/core/models/travel_models.dart';
+import 'package:chiwawa/core/repositories/plan_repository.dart';
+import 'package:chiwawa/core/repositories/api/api_plan_repository.dart';
+import 'package:chiwawa/core/services/trip_session_service.dart';
+import 'package:chiwawa/features/plan/models/plan_place_selection.dart';
+import 'package:chiwawa/features/plan/plan_controller.dart';
+import 'package:chiwawa/features/plan/plan_day_constraints_controller.dart';
+import 'package:chiwawa/features/plan/widgets/plan_recommendations_section.dart';
+import 'package:chiwawa/features/plan/widgets/route_optimization_section.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/semantics.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+const _recommendation = RouteRecommendation(
+  candidate: RouteRecommendationCandidate(
+    placeId: 'google-dessert-1',
+    name: '핑크 디저트 라운지',
+    formattedAddress: '도쿄 시부야구',
+    latitude: 35.66,
+    longitude: 139.7,
+    rating: 4.7,
+    userRatingCount: 321,
+  ),
+  insertionImpact: RouteInsertionImpact(
+    previousPlaceId: 'wanted-seed:0',
+    nextPlaceId: 'wanted-seed:1',
+    additionalMinutes: 22,
+    candidateArrivalAt: '2026-07-23T14:10',
+    candidateDepartureAt: '2026-07-23T14:50',
+    updatedNextArrivalAt: '2026-07-23T15:02',
+    updatedTimelineEndAt: '2026-07-23T18:22',
+  ),
+);
+
+const _recommendationGroup = RouteRecommendationGroup(
+  category: 'DESSERT',
+  displayName: '디저트',
+  recommendations: [_recommendation],
+);
+
+const _startPlace = PlaceSearchCandidate(
+  providerPlaceId: 'google-start',
+  name: '도쿄역',
+  formattedAddress: '도쿄도 지요다구',
+  latitude: 35.6812,
+  longitude: 139.7671,
+);
+
+const _endPlace = PlaceSearchCandidate(
+  providerPlaceId: 'google-end',
+  name: '신주쿠 호텔',
+  formattedAddress: '도쿄도 신주쿠구',
+  latitude: 35.6896,
+  longitude: 139.6917,
+);
+
+void main() {
+  setUp(() {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  test('timeline and recommendation contracts retain all UI fields', () {
+    final timeline = RouteTimeline.fromJson(const {
+      'day_index': 2,
+      'travel_mode': 'TRANSIT',
+      'planned_start_at': '2026-07-23T09:00',
+      'planned_end_at': '2026-07-23T18:00',
+      'actual_end_at': '2026-07-23T18:22',
+      'total_travel_minutes': 71,
+      'total_stay_minutes': 300,
+      'exceeds_planned_end': true,
+      'warnings': ['예정 종료를 22분 초과해요.'],
+      'timeline_stops': [
+        {
+          'stop_type': 'POI',
+          'place_id': 'wanted-1',
+          'name': '첫 장소',
+          'arrival_at': '2026-07-23T10:12',
+          'departure_at': '2026-07-23T11:12',
+          'stay_minutes': 60,
+        },
+      ],
+    });
+    final group = RouteRecommendationGroup.fromJson(const {
+      'category': 'DESSERT',
+      'display_name': '디저트',
+      'recommendations': [
+        {
+          'candidate': {
+            'place_id': 'google-dessert-1',
+            'name': '핑크 디저트 라운지',
+            'formatted_address': '도쿄 시부야구',
+            'coordinate': {'lat': 35.66, 'lng': 139.7},
+            'rating': 4.7,
+            'user_rating_count': 321,
+          },
+          'insertion_impact': {
+            'previous_place_id': 'wanted-1',
+            'next_place_id': 'wanted-2',
+            'additional_minutes': 22,
+            'candidate_arrival_at': '2026-07-23T14:10',
+            'candidate_departure_at': '2026-07-23T14:50',
+            'updated_next_arrival_at': '2026-07-23T15:02',
+            'updated_timeline_end_at': '2026-07-23T18:22',
+          },
+        },
+      ],
+    });
+
+    expect(timeline.dayIndex, 2);
+    expect(timeline.exceedsPlannedEnd, isTrue);
+    expect(timeline.timelineStops.single.arrivalTime, '10:12');
+    expect(timeline.timelineStops.single.departureTime, '11:12');
+    expect(group.displayName, '디저트');
+    expect(group.recommendations.single.insertionImpact.stayMinutes, 40);
+    expect(
+      group.recommendations.single.insertionImpact.updatedTimelineEndTime,
+      '18:22',
+    );
+  });
+
+  test('route optimization saves places first and forwards server ids',
+      () async {
+    final repository = _RecordingPlanRepository();
+    final container = ProviderContainer(
+      overrides: [
+        planRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+    _selectEndpoints(container);
+
+    await container
+        .read(routeOptimizationProvider.notifier)
+        .optimize(TransportMode.transit);
+
+    expect(repository.savedInputs.map((place) => place.name), ['첫 장소', '두 장소']);
+    expect(
+      repository.lastRequest?.wantedPlaceIds,
+      ['wanted-seed:0', 'wanted-seed:1'],
+    );
+    expect(repository.lastRequest?.startPlace, _startPlace);
+    expect(repository.lastRequest?.endPlace, _endPlace);
+    expect(
+      container
+          .read(selectedPlacesProvider)
+          .every((selection) => selection.isPersisted),
+      isTrue,
+    );
+  });
+
+  test('a later save failure does not discard an earlier server id', () async {
+    final repository = _RecordingPlanRepository(failOnSaveNumber: 2);
+    final container = ProviderContainer(
+      overrides: [
+        planRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+    _selectEndpoints(container);
+
+    await container
+        .read(routeOptimizationProvider.notifier)
+        .optimize(TransportMode.transit);
+
+    final selections = container.read(selectedPlacesProvider);
+    expect(selections.first.serverPlaceId, 'wanted-seed:0');
+    expect(selections.last.serverPlaceId, isNull);
+    expect(
+      container.read(routeOptimizationProvider).status,
+      AiJobStatus.failed,
+    );
+  });
+
+  test('API wanted-place response id is retained in the optimized stop',
+      () async {
+    final store = TripIdStore();
+    await store.save('trip-route-contract');
+    final dio = Dio();
+    final adapter = _QueueHttpClientAdapter([
+      {
+        'id': 'wanted-server-1',
+        'name': '도쿄 타워',
+        'city': '도쿄',
+        'country': '일본',
+        'latitude': 35.6586,
+        'longitude': 139.7454,
+      },
+      {
+        'transport_mode': 'walk',
+        'stops': [
+          {
+            'order': 1,
+            'place_id': 'wanted-server-1',
+            'name': '도쿄 타워',
+            'estimated_travel_minutes': 9,
+          },
+        ],
+      },
+    ]);
+    dio.httpClientAdapter = adapter;
+    final repository = ApiPlanRepository(
+      dio: dio,
+      tripIdStore: store,
+    );
+
+    final saved = await repository.saveWantedPlace(
+      const PlanRoutePlaceInput(
+        localId: 'manual:1',
+        name: '도쿄 타워',
+        latitude: 35.6586,
+        longitude: 139.7454,
+      ),
+    );
+    final result = await repository.optimizeRoute(
+      RouteOptimizationRequest(
+        places: [
+          PlanRoutePlaceInput(
+            localId: 'manual:1',
+            serverPlaceId: saved.id,
+            name: saved.name,
+            latitude: saved.latitude,
+            longitude: saved.longitude,
+          ),
+        ],
+        preference: const TravelPreference(),
+        transportMode: TransportMode.walk,
+        dayIndex: 1,
+        plannedStartTime: '09:00',
+        plannedEndTime: '18:00',
+        maxPlaceCount: 4,
+        startPlace: _startPlace,
+        endPlace: _endPlace,
+      ),
+    );
+
+    expect(saved.id, 'wanted-server-1');
+    expect(adapter.requests.first.path, contains('/wanted-places'));
+    expect(adapter.requests.last.path, contains('/route-optimizations'));
+    expect(
+      adapter.requests.last.data,
+      containsPair('transport_mode', 'walk'),
+    );
+    expect(result.places.single.placeId, 'wanted-server-1');
+  });
+
+  test('adding a recommendation saves it and reoptimizes the route', () async {
+    final repository = _RecordingPlanRepository();
+    final container = ProviderContainer(
+      overrides: [
+        planRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+    _selectEndpoints(container);
+
+    await container
+        .read(routeOptimizationProvider.notifier)
+        .optimize(TransportMode.transit);
+    final added = await container
+        .read(planActionsProvider)
+        .addRecommendation(_recommendation);
+
+    final recommendationPlace = container
+        .read(selectedPlacesProvider)
+        .singleWhere((place) => place.source == PlanPlaceSource.freeTime);
+    expect(added, isTrue);
+    expect(recommendationPlace.serverPlaceId,
+        'wanted-recommendation:google-dessert-1');
+    expect(repository.optimizeCount, 2);
+    expect(
+      repository.lastRequest?.wantedPlaceIds,
+      contains('wanted-recommendation:google-dessert-1'),
+    );
+    expect(
+      container.read(routeOptimizationProvider).result?.recommendationGroups,
+      isEmpty,
+    );
+  });
+
+  testWidgets('unavailable route keeps the selected mode and shows reasons',
+      (tester) async {
+    await tester.pumpWidget(
+      _testApp(
+        RouteOptimizationSection(
+          state: const RouteOptimizationState.done(
+            RouteOptimizationResult.unavailable(
+              warnings: ['대중교통 데이터가 충분하지 않아요.'],
+              missingSegments: ['첫 장소 → 두 장소'],
+            ),
+          ),
+          canOptimize: true,
+          onOptimize: () {},
+          onConfirm: () {},
+          transportMode: TransportMode.transit,
+        ),
+      ),
+    );
+
+    expect(
+        find.byKey(const ValueKey('route-option-unavailable')), findsOneWidget);
+    expect(find.textContaining('자동으로 고르지 않았어요'), findsOneWidget);
+    expect(find.textContaining('첫 장소 → 두 장소'), findsOneWidget);
+    expect(find.byType(PlanRecommendationsSection), findsNothing);
+  });
+
+  testWidgets('server category drives recommendation preview and add action',
+      (tester) async {
+    var addCount = 0;
+    await tester.pumpWidget(
+      _testApp(
+        SingleChildScrollView(
+          child: PlanRecommendationsSection(
+            groups: const [_recommendationGroup],
+            onAdd: (_) async {
+              addCount += 1;
+              return true;
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('디저트'), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(
+            find.byKey(
+              const ValueKey('route-recommendation-google-dessert-1'),
+            ),
+          )
+          .getSemanticsData()
+          .hasAction(SemanticsAction.tap),
+      isTrue,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('route-recommendation-google-dessert-1')),
+    );
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('route-recommendation-preview')),
+      findsOneWidget,
+    );
+    expect(find.text('14:10~14:50'), findsOneWidget);
+    expect(find.text('체류 40분'), findsOneWidget);
+    expect(find.text('종료 18:22'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('add-route-recommendation')));
+    await tester.pumpAndSettle();
+    expect(addCount, 1);
+  });
+}
+
+void _selectEndpoints(ProviderContainer container) {
+  final controller = container.read(planDayConstraintsProvider.notifier);
+  controller.selectStartPlace(1, _startPlace);
+  controller.selectEndPlace(1, _endPlace);
+}
+
+Widget _testApp(Widget child) {
+  return MaterialApp(
+    theme: ChiwawaTheme.light(),
+    home: Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: child,
+        ),
+      ),
+    ),
+  );
+}
+
+class _RecordingPlanRepository implements PlanRepository {
+  _RecordingPlanRepository({this.failOnSaveNumber});
+
+  final int? failOnSaveNumber;
+  final List<PlanRoutePlaceInput> savedInputs = [];
+  RouteOptimizationRequest? lastRequest;
+  var optimizeCount = 0;
+
+  @override
+  List<String> get defaultSelectedPlaces => const ['첫 장소', '두 장소'];
+
+  @override
+  Future<WantedPlaceRecord> saveWantedPlace(
+    PlanRoutePlaceInput place,
+  ) async {
+    savedInputs.add(place);
+    if (savedInputs.length == failOnSaveNumber) {
+      throw StateError('wanted-place save failed');
+    }
+    return WantedPlaceRecord(
+      id: 'wanted-${place.localId}',
+      name: place.name,
+      address: place.address,
+      latitude: place.latitude,
+      longitude: place.longitude,
+    );
+  }
+
+  @override
+  Future<RouteOptimizationResult> optimizeRoute(
+    RouteOptimizationRequest request,
+  ) async {
+    optimizeCount += 1;
+    lastRequest = request;
+    return RouteOptimizationResult.success(
+      places: [
+        for (final place in request.places)
+          RoutePlace(
+            placeId: place.serverPlaceId ?? '',
+            name: place.name,
+            duration: '60분',
+            transport: '대중교통 12분',
+            category: '명소',
+          ),
+      ],
+      recommendationGroups: const [_recommendationGroup],
+    );
+  }
+}
+
+class _QueueHttpClientAdapter implements HttpClientAdapter {
+  _QueueHttpClientAdapter(this.responses);
+
+  final List<Map<String, Object?>> responses;
+  final List<RequestOptions> requests = [];
+  var _responseIndex = 0;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    requests.add(options);
+    return ResponseBody.fromString(
+      jsonEncode(responses[_responseIndex++]),
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}

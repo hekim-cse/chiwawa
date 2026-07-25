@@ -5,16 +5,26 @@ class PlanItineraryStop {
     required this.id,
     required this.startTime,
     required this.place,
+    this.departureTime,
+    this.stayMinutes,
   });
 
   final String id;
   final String startTime;
+  final String? departureTime;
+  final int? stayMinutes;
   final RoutePlace place;
 
-  PlanItineraryStop copyWith({String? startTime}) {
+  PlanItineraryStop copyWith({
+    String? startTime,
+    String? departureTime,
+    int? stayMinutes,
+  }) {
     return PlanItineraryStop(
       id: id,
       startTime: startTime ?? this.startTime,
+      departureTime: departureTime ?? this.departureTime,
+      stayMinutes: stayMinutes ?? this.stayMinutes,
       place: place,
     );
   }
