@@ -64,7 +64,7 @@ class MyPageDetailScaffold extends StatelessWidget {
                   bottom: ChiwawaSpacing.sm,
                 ),
                 decoration: const BoxDecoration(
-                  color: Colors.white,
+                  color: ChiwawaColors.background,
                   border: Border(
                     top: BorderSide(color: ChiwawaColors.border),
                   ),
@@ -91,15 +91,13 @@ class _DetailHeader extends StatelessWidget {
       padding: EdgeInsets.symmetric(
         horizontal: AppLayout.pageHorizontalPadding(context),
       ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: ChiwawaColors.border)),
-      ),
+      color: ChiwawaColors.background,
       child: Row(
         children: [
           IconButton(
             tooltip: '마이페이지로 돌아가기',
             onPressed: onBack,
+            color: ChiwawaColors.primary,
             icon: const Icon(Icons.arrow_back_rounded),
           ),
           const SizedBox(width: ChiwawaSpacing.xs),
@@ -108,7 +106,9 @@ class _DetailHeader extends StatelessWidget {
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleMedium,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: ChiwawaColors.primary,
+                  ),
             ),
           ),
         ],
@@ -122,12 +122,14 @@ class MyPageSection extends StatelessWidget {
     required this.child,
     this.title,
     this.padding = const EdgeInsets.all(ChiwawaSpacing.md),
+    this.surface = false,
     super.key,
   });
 
   final String? title;
   final Widget child;
   final EdgeInsetsGeometry padding;
+  final bool surface;
 
   @override
   Widget build(BuildContext context) {
@@ -135,18 +137,29 @@ class MyPageSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (title != null) ...[
-          Text(title!, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: ChiwawaSpacing.xs),
-        ],
-        Material(
-          color: Colors.white,
-          clipBehavior: Clip.antiAlias,
-          shape: RoundedRectangleBorder(
-            side: const BorderSide(color: ChiwawaColors.border),
-            borderRadius: BorderRadius.circular(ChiwawaRadii.card),
+          Text(
+            title!,
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: ChiwawaColors.primary,
+                ),
           ),
-          child: Padding(padding: padding, child: child),
-        ),
+          const SizedBox(height: ChiwawaSpacing.sm),
+        ],
+        if (surface)
+          Material(
+            color: Colors.white,
+            clipBehavior: Clip.antiAlias,
+            shape: RoundedRectangleBorder(
+              side: const BorderSide(color: ChiwawaColors.border),
+              borderRadius: BorderRadius.circular(ChiwawaRadii.card),
+            ),
+            child: Padding(padding: padding, child: child),
+          )
+        else
+          Material(
+            color: Colors.transparent,
+            child: Padding(padding: padding, child: child),
+          ),
       ],
     );
   }
@@ -179,7 +192,8 @@ class MyPageInfoRow extends StatelessWidget {
                     Text(
                       label,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: ChiwawaColors.textSecondary,
+                            color: ChiwawaColors.primary,
+                            fontWeight: FontWeight.w700,
                           ),
                     ),
                     const SizedBox(height: ChiwawaSpacing.xxs),
@@ -199,7 +213,8 @@ class MyPageInfoRow extends StatelessWidget {
                       child: Text(
                         label,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: ChiwawaColors.textSecondary,
+                              color: ChiwawaColors.primary,
+                              fontWeight: FontWeight.w700,
                             ),
                       ),
                     ),
@@ -217,6 +232,97 @@ class MyPageInfoRow extends StatelessWidget {
                 ),
         ),
         if (showDivider) const Divider(height: 1),
+      ],
+    );
+  }
+}
+
+class MyPageDetailItem extends StatelessWidget {
+  const MyPageDetailItem({
+    required this.icon,
+    required this.title,
+    required this.description,
+    this.trailing,
+    this.onTap,
+    this.showDivider = true,
+    super.key,
+  });
+
+  final IconData icon;
+  final String title;
+  final String description;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final bool showDivider;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(vertical: ChiwawaSpacing.sm),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: ChiwawaColors.secondary,
+              borderRadius: BorderRadius.circular(ChiwawaRadii.control),
+            ),
+            child: Icon(icon, color: ChiwawaColors.primary, size: 19),
+          ),
+          const SizedBox(width: ChiwawaSpacing.sm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: ChiwawaColors.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                const SizedBox(height: ChiwawaSpacing.xxs),
+                Text(
+                  description,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: ChiwawaColors.textSecondary,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          if (trailing != null) ...[
+            const SizedBox(width: ChiwawaSpacing.xs),
+            trailing!,
+          ],
+          if (onTap != null && trailing == null) ...[
+            const SizedBox(width: ChiwawaSpacing.xs),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: ChiwawaColors.textMuted,
+            ),
+          ],
+        ],
+      ),
+    );
+
+    return Column(
+      children: [
+        if (onTap == null)
+          content
+        else
+          InkWell(
+            borderRadius: BorderRadius.circular(ChiwawaRadii.control),
+            onTap: onTap,
+            child: content,
+          ),
+        if (showDivider)
+          const Divider(
+            height: 1,
+            indent: 48,
+          ),
       ],
     );
   }
