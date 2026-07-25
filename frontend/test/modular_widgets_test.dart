@@ -1,17 +1,20 @@
 import 'package:chiwawa/app/theme.dart';
+import 'package:chiwawa/core/models/route_planning_models.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
 import 'package:chiwawa/core/saved_photo_places.dart';
 import 'package:chiwawa/features/explore/widgets/candidate_selector.dart';
 import 'package:chiwawa/features/home/widgets/home_quick_actions.dart';
 import 'package:chiwawa/features/plan/widgets/route_optimization_section.dart';
 import 'package:chiwawa/features/plan/models/plan_itinerary.dart';
+import 'package:chiwawa/features/plan/models/plan_place_selection.dart';
+import 'package:chiwawa/features/plan/widgets/place_input_field.dart';
 import 'package:chiwawa/features/plan/widgets/plan_day_selector.dart';
 import 'package:chiwawa/features/plan/widgets/plan_itinerary_workspace.dart';
 import 'package:chiwawa/features/trips/widgets/trip_list_item.dart';
 import 'package:chiwawa/features/mypage/widgets/my_page_detail_scaffold.dart';
-import 'package:chiwawa/shared/widgets/adaptive_segmented_control.dart';
 import 'package:chiwawa/shared/widgets/app_list_group.dart';
 import 'package:chiwawa/shared/widgets/app_status_view.dart';
+import 'package:chiwawa/shared/widgets/adaptive_segmented_control.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -88,6 +91,27 @@ void main() {
     );
     await tester.tap(find.text('두 번째'));
     expect(selected, 2);
+  });
+
+  testWidgets('selected place delete tooltip is localized', (tester) async {
+    await tester.pumpWidget(
+      app(
+        PlaceInputField(
+          places: const [
+            PlanPlaceSelection(
+              id: 'manual:0',
+              name: '메이지 신궁',
+              source: PlanPlaceSource.manual,
+            ),
+          ],
+          onAdd: (_) {},
+          onRemove: (_) {},
+        ),
+      ),
+    );
+
+    final chip = tester.widget<InputChip>(find.byType(InputChip));
+    expect(chip.deleteButtonTooltipMessage, '메이지 신궁 삭제');
   });
 
   testWidgets('quick actions grow to another row and keep callbacks isolated',
@@ -316,10 +340,14 @@ void main() {
         const SingleChildScrollView(
           padding: EdgeInsets.all(16),
           child: RouteOptimizationSection(
-            state: RouteOptimizationState.done([
-              repeatedPlace,
-              repeatedPlace,
-            ]),
+            state: RouteOptimizationState.done(
+              RouteOptimizationResult.success(
+                places: [
+                  repeatedPlace,
+                  repeatedPlace,
+                ],
+              ),
+            ),
             canOptimize: true,
             onOptimize: _noop,
             onConfirm: _noop,
@@ -379,6 +407,10 @@ void main() {
       ),
       findsOneWidget,
     );
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('itinerary-time-second-stop')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('itinerary-time-second-stop')));
     expect(editedId, 'second-stop');
     expect(tester.takeException(), isNull);

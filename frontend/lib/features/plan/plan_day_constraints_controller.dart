@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/models/place_search_models.dart';
 import '../../core/services/trip_session_service.dart';
 import 'models/plan_day_constraint.dart';
 
@@ -52,16 +53,24 @@ class PlanDayConstraintsController
   final PlanDayConstraintStore _store;
   final String tripId;
 
-  void updateStartPlace(int day, String value) {
-    _update(day, state.forDay(day).copyWith(startPlace: value));
+  void selectStartPlace(int day, PlaceSearchCandidate place) {
+    _update(day, state.forDay(day).copyWith(startPlace: place));
+  }
+
+  void clearStartPlace(int day) {
+    _update(day, state.forDay(day).copyWith(clearStartPlace: true));
   }
 
   void updateStartTime(int day, String value) {
     _update(day, state.forDay(day).copyWith(startTime: value));
   }
 
-  void updateEndPlace(int day, String value) {
-    _update(day, state.forDay(day).copyWith(endPlace: value));
+  void selectEndPlace(int day, PlaceSearchCandidate place) {
+    _update(day, state.forDay(day).copyWith(endPlace: place));
+  }
+
+  void clearEndPlace(int day) {
+    _update(day, state.forDay(day).copyWith(clearEndPlace: true));
   }
 
   void updateEndTime(int day, String value) {

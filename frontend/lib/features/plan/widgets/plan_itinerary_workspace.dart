@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
+import '../../../core/models/route_planning_models.dart';
 import '../../../core/models/transport_mode.dart';
 import '../../../shared/widgets/app_section_header.dart';
 import '../models/plan_itinerary.dart';
@@ -10,6 +11,7 @@ class PlanItineraryWorkspace extends StatelessWidget {
   const PlanItineraryWorkspace({
     required this.stops,
     required this.onConfirm,
+    this.result,
     this.transportMode = TransportMode.transit,
     this.onMove,
     this.onEditTime,
@@ -18,6 +20,7 @@ class PlanItineraryWorkspace extends StatelessWidget {
   });
 
   final List<PlanItineraryStop> stops;
+  final RouteOptimizationResult? result;
   final TransportMode transportMode;
   final void Function(int fromIndex, int toIndex)? onMove;
   final ValueChanged<PlanItineraryStop>? onEditTime;
@@ -44,7 +47,15 @@ class PlanItineraryWorkspace extends StatelessWidget {
         const SizedBox(height: ChiwawaSpacing.sm),
         RouteMapOverview(stops: stops),
         const SizedBox(height: ChiwawaSpacing.sm),
-        _ItinerarySummary(stops: stops, transportMode: transportMode),
+        _ItinerarySummary(
+          stops: stops,
+          transportMode: transportMode,
+          timeline: result?.timeline,
+        ),
+        if (result?.timeline?.exceedsPlannedEnd ?? false) ...[
+          const SizedBox(height: ChiwawaSpacing.sm),
+          _TimelineWarning(timeline: result!.timeline!),
+        ],
         const SizedBox(height: ChiwawaSpacing.lg),
         const AppSectionHeader(title: '일정 타임라인'),
         const SizedBox(height: ChiwawaSpacing.sm),
@@ -96,15 +107,19 @@ class _ItinerarySummary extends StatelessWidget {
   const _ItinerarySummary({
     required this.stops,
     required this.transportMode,
+    this.timeline,
   });
 
   final List<PlanItineraryStop> stops;
   final TransportMode transportMode;
+  final RouteTimeline? timeline;
 
   @override
   Widget build(BuildContext context) {
-    final travelMinutes =
+    final travelMinutes = timeline?.totalTravelMinutes ??
         _sumNumbers(stops.map((stop) => stop.place.transport));
+    final stayMinutes = timeline?.totalStayMinutes ??
+        _sumNumbers(stops.map((stop) => stop.place.duration));
     final expectedCost = _formatExpectedCost(stops);
 
     return Container(
@@ -119,33 +134,45 @@ class _ItinerarySummary extends StatelessWidget {
           bottom: BorderSide(color: ChiwawaColors.border),
         ),
       ),
-      child: Row(
+      child: GridView.count(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        crossAxisCount: 2,
+        childAspectRatio: 2.7,
+        mainAxisSpacing: ChiwawaSpacing.xs,
+        crossAxisSpacing: ChiwawaSpacing.xs,
         children: [
-          Expanded(
-            child: _SummaryItem(
-              key: const ValueKey('itinerary-summary-places'),
-              icon: Icons.place_outlined,
-              label: '방문 장소',
-              value: '${stops.length}곳',
-            ),
+          _SummaryItem(
+            key: const ValueKey('itinerary-summary-places'),
+            icon: Icons.place_outlined,
+            label: '방문 장소',
+            value: '${stops.length}곳',
           ),
-          const _SummaryDivider(),
-          Expanded(
-            child: _SummaryItem(
-              key: const ValueKey('itinerary-summary-travel-time'),
-              icon: _transportIcon(transportMode),
-              label: '이동 시간',
-              value: travelMinutes == 0 ? '확인 필요' : '약 $travelMinutes분',
-            ),
+          _SummaryItem(
+            key: const ValueKey('itinerary-summary-travel-time'),
+            icon: _transportIcon(transportMode),
+            label: '이동 시간',
+            value: travelMinutes == 0 ? '확인 필요' : '약 $travelMinutes분',
           ),
-          const _SummaryDivider(),
-          Expanded(
-            child: _SummaryItem(
-              key: const ValueKey('itinerary-summary-cost'),
-              icon: Icons.payments_outlined,
-              label: '예상 비용',
-              value: expectedCost,
-            ),
+          _SummaryItem(
+            key: const ValueKey('itinerary-summary-stay-time'),
+            icon: Icons.hourglass_bottom_rounded,
+            label: '체류 시간',
+            value: stayMinutes == 0 ? '확인 필요' : '약 $stayMinutes분',
+          ),
+          _SummaryItem(
+            key: const ValueKey('itinerary-summary-end-time'),
+            icon: Icons.flag_rounded,
+            label: '예상 종료',
+            value: timeline?.actualEndTime.isNotEmpty ?? false
+                ? timeline!.actualEndTime
+                : '확인 필요',
+          ),
+          _SummaryItem(
+            key: const ValueKey('itinerary-summary-cost'),
+            icon: Icons.payments_outlined,
+            label: '예상 비용',
+            value: expectedCost,
           ),
         ],
       ),
@@ -220,19 +247,6 @@ class _SummaryItem extends StatelessWidget {
   }
 }
 
-class _SummaryDivider extends StatelessWidget {
-  const _SummaryDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 1,
-      height: 40,
-      color: ChiwawaColors.border,
-    );
-  }
-}
-
 enum _StopAction { moveUp, moveDown, editTime, delete }
 
 class _ItineraryStopRow extends StatelessWidget {
@@ -268,21 +282,33 @@ class _ItineraryStopRow extends StatelessWidget {
           children: [
             SizedBox(
               width: 52,
-              child: TextButton(
-                key: ValueKey('itinerary-time-${stop.id}'),
-                style: TextButton.styleFrom(
-                  minimumSize: const Size(52, 44),
-                  padding: EdgeInsets.zero,
-                  foregroundColor: ChiwawaColors.textPrimary,
-                ),
-                onPressed: onEditTime,
-                child: Text(
-                  stop.startTime,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
+              child: Column(
+                children: [
+                  TextButton(
+                    key: ValueKey('itinerary-time-${stop.id}'),
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size(52, 36),
+                      padding: EdgeInsets.zero,
+                      foregroundColor: ChiwawaColors.textPrimary,
+                    ),
+                    onPressed: onEditTime,
+                    child: Text(
+                      stop.startTime,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                   ),
-                ),
+                  const Text(
+                    '도착',
+                    style: TextStyle(
+                      color: ChiwawaColors.primary,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
             ),
             const SizedBox(width: ChiwawaSpacing.sm),
@@ -319,7 +345,7 @@ class _ItineraryStopRow extends StatelessWidget {
                     ),
                     const SizedBox(height: ChiwawaSpacing.xxs),
                     Text(
-                      '${stop.place.category} · 체류 ${stop.place.duration}',
+                      _stopDetail(stop),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -385,6 +411,63 @@ class _ItineraryStopRow extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TimelineWarning extends StatelessWidget {
+  const _TimelineWarning({required this.timeline});
+
+  final RouteTimeline timeline;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('timeline-exceeds-planned-end'),
+      padding: const EdgeInsets.symmetric(
+        horizontal: ChiwawaSpacing.sm,
+        vertical: ChiwawaSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: ChiwawaColors.secondary,
+        borderRadius: BorderRadius.circular(ChiwawaRadii.control),
+        border: Border.all(color: ChiwawaColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.schedule_rounded,
+            color: ChiwawaColors.primary,
+            size: 19,
+          ),
+          const SizedBox(width: ChiwawaSpacing.xs),
+          Expanded(
+            child: Text(
+              '예상 종료 ${timeline.actualEndTime} · 계획한 도착 '
+              '${timeline.plannedEndTime}\n장소 수나 체류 시간을 조정해 주세요.',
+              style: const TextStyle(
+                color: ChiwawaColors.primary,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _stopDetail(PlanItineraryStop stop) {
+  final details = <String>[
+    if (stop.place.category.trim().isNotEmpty) stop.place.category,
+    if (stop.departureTime?.isNotEmpty ?? false) '출발 ${stop.departureTime}',
+    if (stop.stayMinutes != null)
+      '체류 ${stop.stayMinutes}분'
+    else if (stop.place.duration.trim().isNotEmpty)
+      '체류 ${stop.place.duration}',
+  ];
+  return details.join(' · ');
 }
 
 class _MovementRow extends StatelessWidget {
