@@ -15,6 +15,7 @@ class UserGuideScreen extends StatelessWidget {
       actionLabel: '내 여행 열기',
       route: '/trips',
       icon: Icons.luggage_rounded,
+      tip: '여행 기간과 도시를 먼저 정하면 홈과 일정이 같은 여행을 바라봐요.',
     ),
     _GuideStep(
       number: '02',
@@ -23,6 +24,7 @@ class UserGuideScreen extends StatelessWidget {
       actionLabel: '사진 탐색 열기',
       route: '/explore',
       icon: Icons.camera_alt_rounded,
+      tip: '랜드마크가 또렷한 사진을 사용하고 후보의 주소와 신뢰도를 함께 확인해요.',
     ),
     _GuideStep(
       number: '03',
@@ -31,6 +33,7 @@ class UserGuideScreen extends StatelessWidget {
       actionLabel: '일정 설계 열기',
       route: '/plan',
       icon: Icons.route_rounded,
+      tip: '저장한 장소를 날짜별로 나누고 최적화 전 방문 목록을 한 번 확인해요.',
     ),
     _GuideStep(
       number: '04',
@@ -39,6 +42,7 @@ class UserGuideScreen extends StatelessWidget {
       actionLabel: 'Memorial 열기',
       route: '/memorial',
       icon: Icons.photo_album_rounded,
+      tip: '공유하기 전에 사진 위치와 위치정보 포함 여부를 다시 확인해요.',
     ),
   ];
 
@@ -48,11 +52,28 @@ class UserGuideScreen extends StatelessWidget {
       title: '이용 가이드',
       subtitle: '사진 발견부터 여행 기록까지 chiwawa의 기본 흐름이에요.',
       children: [
+        const MyPageStatusBanner(
+          icon: Icons.flag_outlined,
+          title: '4단계로 여행을 연결해요',
+          description: '여행 만들기 → 장소 찾기 → 일정 설계 → 여행 기록 순서로 살펴보세요.',
+        ),
+        const SizedBox(height: ChiwawaSpacing.lg),
         for (var index = 0; index < _steps.length; index++) ...[
           _GuideStepCard(step: _steps[index]),
           if (index != _steps.length - 1)
             const SizedBox(height: ChiwawaSpacing.sm),
         ],
+        const SizedBox(height: ChiwawaSpacing.lg),
+        MyPageSection(
+          title: '도움이 더 필요할 때',
+          child: MyPageDetailItem(
+            icon: Icons.support_agent_rounded,
+            title: '문의하기',
+            description: '확인한 화면과 재현 순서를 작성해 이메일로 문의할 수 있어요.',
+            showDivider: false,
+            onTap: () => context.push('/mypage/support'),
+          ),
+        ),
       ],
     );
   }
@@ -66,6 +87,7 @@ class _GuideStepCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MyPageSection(
+      surface: true,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -85,7 +107,9 @@ class _GuideStepCard extends StatelessWidget {
               children: [
                 Text(
                   '${step.number} · ${step.title}',
-                  style: Theme.of(context).textTheme.titleSmall,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: ChiwawaColors.primary,
+                      ),
                 ),
                 const SizedBox(height: ChiwawaSpacing.xxs),
                 Text(
@@ -93,6 +117,26 @@ class _GuideStepCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: ChiwawaColors.textSecondary,
                       ),
+                ),
+                const SizedBox(height: ChiwawaSpacing.xs),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.lightbulb_outline_rounded,
+                      size: 16,
+                      color: ChiwawaColors.primary,
+                    ),
+                    const SizedBox(width: ChiwawaSpacing.xxs),
+                    Expanded(
+                      child: Text(
+                        step.tip,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: ChiwawaColors.primary,
+                            ),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: ChiwawaSpacing.sm),
                 TextButton.icon(
@@ -117,6 +161,7 @@ class _GuideStep {
     required this.actionLabel,
     required this.route,
     required this.icon,
+    required this.tip,
   });
 
   final String number;
@@ -125,4 +170,5 @@ class _GuideStep {
   final String actionLabel;
   final String route;
   final IconData icon;
+  final String tip;
 }
