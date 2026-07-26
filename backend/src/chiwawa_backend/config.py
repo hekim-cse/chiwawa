@@ -19,6 +19,9 @@ MISSING_JWT_KEY_MESSAGE = "JWT_SECRET is required"
 SHORT_JWT_KEY_MESSAGE = "JWT_SECRET must contain at least 32 characters"
 MISSING_IMAGE_SEARCH_URL_MESSAGE = "IMAGE_SEARCH_URL is required"
 MISSING_ROUTE_PLANNER_URL_MESSAGE = "ROUTE_PLANNER_URL is required"
+MISSING_FREE_TIME_RECOMMENDER_URL_MESSAGE = (
+    "FREE_TIME_RECOMMENDER_URL is required"
+)
 MISSING_GOOGLE_MAPS_API_KEY_MESSAGE = "GOOGLE_MAPS_API_KEY is required"
 
 
@@ -52,6 +55,7 @@ class Settings(BaseSettings):
     image_search_timeout_seconds: float = Field(default=125.0, ge=1, le=180)
     image_search_max_retries: int = Field(default=1, ge=0, le=2)
     route_planner_url: str | None = None
+    free_time_recommender_url: str | None = None
     route_planner_timeout_seconds: float = Field(default=305.0, ge=1, le=310)
     route_planner_max_retries: int = Field(default=1, ge=0, le=2)
     place_search_timeout_seconds: float = Field(default=10.0, ge=1, le=30)
@@ -102,6 +106,14 @@ class Settings(BaseSettings):
         if self.route_planner_url is None or not self.route_planner_url.strip():
             raise ConfigurationError(MISSING_ROUTE_PLANNER_URL_MESSAGE)
         return self.route_planner_url.strip()
+
+    def require_free_time_recommender_url(self) -> str:
+        if (
+            self.free_time_recommender_url is None
+            or not self.free_time_recommender_url.strip()
+        ):
+            raise ConfigurationError(MISSING_FREE_TIME_RECOMMENDER_URL_MESSAGE)
+        return self.free_time_recommender_url.strip()
 
     def require_google_maps_api_key(self) -> str:
         if self.google_maps_api_key is None:

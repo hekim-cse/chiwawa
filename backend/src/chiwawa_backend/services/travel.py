@@ -22,6 +22,7 @@ from chiwawa_backend.services.common import (
     require_trip,
 )
 from chiwawa_backend.services.plans import build_replan_from_schedule
+from chiwawa_backend.services.route_optimization import RoutePlanner
 from chiwawa_backend.services.schedule import (
     create_schedule_item,
     ensure_no_schedule_overlap,
@@ -32,6 +33,10 @@ from chiwawa_backend.state import AppState, synchronized
 RECOMMENDATION_DATE_ERROR = "recommendation date must be within trip dates"
 RECOMMENDATION_CONTEXT_ERROR = (
     "빈 시간 추천을 조회하려면 먼저 추천을 포함한 경로 최적화를 실행해야 합니다."
+)
+LEGACY_RECOMMENDATION_CONTEXT_ERROR = (
+    "기존 확정 일정에는 추천 계산 정보가 없습니다. "
+    "경로를 다시 최적화하고 확정해 주세요."
 )
 
 
@@ -63,26 +68,43 @@ def recommend_free_time(
     )
 
 
-@synchronized
-def latest_free_time_recommendations(
+async def latest_free_time_recommendations(
     state: AppState,
     trip_id: str,
+    route_planner: RoutePlanner,
 ) -> FreeTimeRecommendationResponse:
-    """가장 최근의 실제 경로 최적화 결과에 포함된 추천 후보를 조회한다."""
+    """확정 경로를 Modal 추천 전용 Endpoint로 평가한다."""
     trip = require_trip(state, trip_id)
     route_key = next(
-        (
-            key
-            for key in reversed(state.issued_route_recommendations)
-            if key[0] == trip_id
-        ),
+        (key for key in reversed(state.confirmed_routes) if key[0] == trip_id),
         None,
     )
     if route_key is None:
         raise DomainValidationError(RECOMMENDATION_CONTEXT_ERROR)
-    timeline = state.issued_route_timelines.get(route_key)
-    if timeline is None:
-        raise DomainValidationError(RECOMMENDATION_CONTEXT_ERROR)
+    confirmed_route = state.confirmed_routes[route_key]
+    route_option = confirmed_route.route_option
+    timezone = confirmed_route.timezone
+    if route_option is None or timezone is None:
+        raise DomainValidationError(LEGACY_RECOMMENDATION_CONTEXT_ERROR)
+    result = await route_planner.recommend_free_time(
+        route_option,
+        timezone=timezone,
+    )
+    outcome = next(
+        (
+            item
+            for item in result.route_options
+            if item.route_option.travel_mode == route_option.travel_mode
+        ),
+        None,
+    )
+    groups = (
+        outcome.recommendation.recommendation_groups
+        if outcome is not None and outcome.recommendation is not None
+        else []
+    )
+    with state.lock:
+        state.issued_route_recommendations[route_key] = groups
     route_date = trip.start_date + timedelta(days=route_key[1] - 1)
     return _recommendations_for_route(
         state,
@@ -149,6 +171,8 @@ def _recommendations_for_route(
                 date=recommendation_date,
                 start_time=arrival_time,
                 end_time=departure_time,
+                day_index=route_key[1],
+                recommendation=recommendation,
             )
             state.recommendations[item.id] = item
             items.append(item)
@@ -193,16 +217,17 @@ def nearby_recommendations(
 ) -> NearbyRecommendationResponse:
     trip = require_trip(state, trip_id)
     theme = payload.theme or "local"
+    location_name = trip.city or trip.country
     items = [
         NearbyRecommendationRead(
             title=f"{theme.title()} stop near current location",
-            place_name=f"{trip.city} nearby {theme}",
+            place_name=f"{location_name} nearby {theme}",
             estimated_walk_minutes=8,
             reason="Close enough to add without disrupting the current route.",
         ),
         NearbyRecommendationRead(
             title="Quick photo detour",
-            place_name=f"{trip.city} side-street viewpoint",
+            place_name=f"{location_name} side-street viewpoint",
             estimated_walk_minutes=12,
             reason="Matches the photo-centered travel goal.",
         ),

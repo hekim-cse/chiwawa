@@ -9,15 +9,28 @@ import pytest
 
 from chiwawa_backend.config import Settings
 from chiwawa_backend.errors import DomainValidationError, UpstreamServiceError
-from chiwawa_backend.schemas.ai_planning import TripPlanningRequest
+from chiwawa_backend.schemas.ai_planning import RouteOptionRead, TripPlanningRequest
 from chiwawa_backend.services.route_planner_client import RemoteRoutePlanner
 
 
 def _settings(*, retries: int = 0) -> Settings:
     return Settings(
         route_planner_url="https://modal.example/plan-trip",
+        free_time_recommender_url="https://modal.example/free-time",
         route_planner_timeout_seconds=10,
         route_planner_max_retries=retries,
+    )
+
+
+def _route_option() -> RouteOptionRead:
+    return RouteOptionRead.model_validate(
+        {
+            "day_index": 1,
+            "travel_mode": "TRANSIT",
+            "total_travel_minutes": 0,
+            "ordered_stops": [],
+            "route_legs": [],
+        },
     )
 
 
@@ -93,9 +106,13 @@ def _success_payload() -> dict[str, object]:
 @pytest.mark.anyio
 async def test_client_sends_integrated_modal_request() -> None:
     captured: dict[str, object] = {}
+    captured_timeout: dict[str, object] = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured.update(cast("dict[str, object]", json.loads(request.content)))
+        captured_timeout.update(
+            cast("dict[str, object]", request.extensions.get("timeout", {})),
+        )
         return httpx.Response(200, json=_success_payload())
 
     client = RemoteRoutePlanner(
@@ -109,6 +126,8 @@ async def test_client_sends_integrated_modal_request() -> None:
     assert response.status == "SUCCESS"
     assert captured["include_recommendations"] is True
     assert captured["timezone"] == "Asia/Tokyo"
+    assert captured_timeout
+    assert all(value is None for value in captured_timeout.values())
 
 
 @pytest.mark.anyio
@@ -159,3 +178,29 @@ async def test_client_rejects_invalid_modal_contract() -> None:
 
     with pytest.raises(UpstreamServiceError, match="응답 계약"):
         _ = await client.plan_trip(_request(), include_recommendations=False)
+
+
+@pytest.mark.anyio
+async def test_free_time_client_waits_without_http_timeout() -> None:
+    captured_timeout: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured_timeout.update(
+            cast("dict[str, object]", request.extensions.get("timeout", {})),
+        )
+        return httpx.Response(200, json={"route_options": []})
+
+    client = RemoteRoutePlanner(
+        _settings(),
+        transport=httpx.MockTransport(handler),
+        retry_backoff_seconds=0,
+    )
+
+    result = await client.recommend_free_time(
+        _route_option(),
+        timezone="Asia/Seoul",
+    )
+
+    assert result.route_options == []
+    assert captured_timeout
+    assert all(value is None for value in captured_timeout.values())

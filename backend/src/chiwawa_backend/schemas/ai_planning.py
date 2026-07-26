@@ -284,6 +284,10 @@ class DayRecommendationsRead(ApiModel):
     route_options: list[DayRecommendationRouteOptionRead]
 
 
+class FreeTimeRecommendationsRead(ApiModel):
+    route_options: list[DayRecommendationRouteOptionRead]
+
+
 class TripPlanningWithRecommendationsResponse(ApiModel):
     trip_id: str = Field(min_length=1)
     status: TripPlanningStatus

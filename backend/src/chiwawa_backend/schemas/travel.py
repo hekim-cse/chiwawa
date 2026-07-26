@@ -3,6 +3,7 @@ from typing import Self
 
 from pydantic import Field, model_validator
 
+from chiwawa_backend.schemas.ai_planning import CandidateRecommendationRead
 from chiwawa_backend.schemas.base import ApiModel
 from chiwawa_backend.schemas.plans import PlanDraftRead
 from chiwawa_backend.schemas.schedule import ScheduleItemRead, ScheduleResponse
@@ -51,6 +52,8 @@ class FreeTimeRecommendationRead(ApiModel):
     date: dt.date
     start_time: dt.time
     end_time: dt.time
+    day_index: int = Field(ge=1)
+    recommendation: CandidateRecommendationRead
 
 
 class FreeTimeRecommendationResponse(ApiModel):

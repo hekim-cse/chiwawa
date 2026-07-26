@@ -8,8 +8,14 @@ from typing import TYPE_CHECKING, cast
 import httpx
 from pydantic import ValidationError
 
-from chiwawa_backend.errors import DomainValidationError, UpstreamServiceError
+from chiwawa_backend.errors import (
+    ConfigurationError,
+    DomainValidationError,
+    UpstreamServiceError,
+)
 from chiwawa_backend.schemas.ai_planning import (
+    FreeTimeRecommendationsRead,
+    RouteOptionRead,
     TripPlanningRequest,
     TripPlanningWithRecommendationsResponse,
 )
@@ -24,6 +30,7 @@ DEFAULT_RETRY_BACKOFF_SECONDS = 0.25
 REQUEST_ERROR_MESSAGE = "경로 최적화 서비스 요청에 실패했습니다."
 INVALID_RESPONSE_MESSAGE = "경로 최적화 서비스 응답 계약이 올바르지 않습니다."
 UNREACHABLE_RETRY_LOOP_MESSAGE = "도달할 수 없는 경로 최적화 재시도 상태입니다."
+MISSING_FREE_TIME_URL_MESSAGE = "FREE_TIME_RECOMMENDER_URL is required"
 
 
 class RemoteRoutePlanner:
@@ -36,7 +43,7 @@ class RemoteRoutePlanner:
         retry_backoff_seconds: float = DEFAULT_RETRY_BACKOFF_SECONDS,
     ) -> None:
         self._url: str = settings.require_route_planner_url()
-        self._timeout: float = settings.route_planner_timeout_seconds
+        self._free_time_url: str | None = settings.free_time_recommender_url
         self._max_retries: int = settings.route_planner_max_retries
         self._transport: httpx.AsyncBaseTransport | None = transport
         self._retry_backoff_seconds: float = retry_backoff_seconds
@@ -53,7 +60,8 @@ class RemoteRoutePlanner:
         for attempt in range(self._max_retries + 1):
             try:
                 async with httpx.AsyncClient(
-                    timeout=self._timeout,
+                    # Modal이 명시적인 성공 또는 실패를 반환할 때까지 기다린다.
+                    timeout=None,  # noqa: S113 - 장기 실행 외부 작업의 명시적 정책
                     transport=self._transport,
                 ) as client:
                     response = await client.post(self._url, json=payload)
@@ -88,6 +96,56 @@ class RemoteRoutePlanner:
             except (ValidationError, ValueError) as error:
                 raise UpstreamServiceError(INVALID_RESPONSE_MESSAGE) from error
 
+        raise AssertionError(UNREACHABLE_RETRY_LOOP_MESSAGE)
+
+    async def recommend_free_time(
+        self,
+        route_option: RouteOptionRead,
+        *,
+        timezone: str,
+    ) -> FreeTimeRecommendationsRead:
+        payload = {
+            "timezone": timezone,
+            "route_options": [route_option.model_dump(mode="json")],
+        }
+        if self._free_time_url is None or not self._free_time_url.strip():
+            raise ConfigurationError(MISSING_FREE_TIME_URL_MESSAGE)
+        free_time_url = self._free_time_url.strip()
+        for attempt in range(self._max_retries + 1):
+            try:
+                async with httpx.AsyncClient(
+                    # 빈 시간 추천은 Modal의 명시적인 응답이 올 때까지 기다린다.
+                    # HTTP 상태 및 네트워크 오류 매핑은 아래 경계에서 그대로 처리한다.
+                    timeout=None,  # noqa: S113 - 사용자 요청에 따라 응답까지 무제한 대기
+                    transport=self._transport,
+                ) as client:
+                    response = await client.post(free_time_url, json=payload)
+            except httpx.RequestError as error:
+                if attempt < self._max_retries:
+                    await self._wait_before_retry(attempt)
+                    continue
+                raise UpstreamServiceError(REQUEST_ERROR_MESSAGE) from error
+            if response.status_code in RETRYABLE_STATUS_CODES:
+                if attempt < self._max_retries:
+                    await self._wait_before_retry(attempt)
+                    continue
+                message = (
+                    "빈 시간 추천 서비스가 일시적 오류를 반환했습니다. "
+                    f"HTTP {response.status_code}"
+                )
+                raise UpstreamServiceError(message)
+            if response.status_code in VALIDATION_ERROR_STATUS_CODES:
+                raise DomainValidationError(_response_detail(response))
+            if response.is_error:
+                message = (
+                    "빈 시간 추천 서비스가 오류를 반환했습니다. "
+                    f"HTTP {response.status_code}"
+                )
+                raise UpstreamServiceError(message)
+            try:
+                return FreeTimeRecommendationsRead.model_validate_json(response.content)
+            except (ValidationError, ValueError) as error:
+                raise UpstreamServiceError(INVALID_RESPONSE_MESSAGE) from error
         raise AssertionError(UNREACHABLE_RETRY_LOOP_MESSAGE)
 
     async def _wait_before_retry(self, attempt: int) -> None:
