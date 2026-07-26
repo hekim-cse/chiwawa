@@ -43,9 +43,7 @@ class GoogleCandidateRouteMetricsProvider:
         ):
             raise TypeError("timeout_seconds는 숫자여야 합니다.")
         if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
-            raise ValueError(
-                "timeout_seconds는 0보다 큰 유한한 값이어야 합니다."
-            )
+            raise ValueError("timeout_seconds는 0보다 큰 유한한 값이어야 합니다.")
         self._api_key = api_key
         self._timeout_seconds = float(timeout_seconds)
         self._transport = transport
@@ -105,15 +103,17 @@ class GoogleCandidateRouteMetricsProvider:
             "origin": {"placeId": origin_place_id},
             "destination": {"placeId": destination_place_id},
             "travelMode": travel_mode,
-            "departureTime": self._to_utc_text(departure_at),
             "computeAlternativeRoutes": False,
             "languageCode": "ko",
-            "regionCode": "JP",
         }
         # DRIVE에서 출발시각을 사용하려면 Google Routes의 기본값인
         # TRAFFIC_UNAWARE 대신 교통량을 반영하는 설정을 명시해야 한다.
         if travel_mode == "DRIVE":
             payload["routingPreference"] = "TRAFFIC_AWARE"
+        # Google Routes는 WALK에 departureTime을 허용하지 않는다.
+        # 시간에 따라 경로가 달라지는 DRIVE와 TRANSIT에만 전달한다.
+        if travel_mode in {"DRIVE", "TRANSIT"}:
+            payload["departureTime"] = self._to_utc_text(departure_at)
         try:
             with httpx.Client(
                 timeout=self._timeout_seconds,
@@ -130,8 +130,7 @@ class GoogleCandidateRouteMetricsProvider:
             ) from error
         except httpx.TransportError as error:
             raise CandidateRouteMetricsTransportError(
-                "Google Routes API 이동 지표 네트워크 요청에 "
-                "실패했습니다."
+                "Google Routes API 이동 지표 네트워크 요청에 실패했습니다."
             ) from error
         if response.status_code >= 400:
             raise CandidateRouteMetricsHttpError(response.status_code)
@@ -139,11 +138,7 @@ class GoogleCandidateRouteMetricsProvider:
 
     @staticmethod
     def _to_utc_text(value: datetime) -> str:
-        return (
-            value.astimezone(timezone.utc)
-            .isoformat()
-            .replace("+00:00", "Z")
-        )
+        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
     @classmethod
     def _parse_response(
@@ -163,8 +158,7 @@ class GoogleCandidateRouteMetricsProvider:
         routes = payload.get("routes")
         if not isinstance(routes, list) or len(routes) != 1:
             raise InvalidCandidateRouteMetricsResponseError(
-                "Google Routes API 이동 지표 응답에는 "
-                "경로 하나가 필요합니다."
+                "Google Routes API 이동 지표 응답에는 경로 하나가 필요합니다."
             )
         route = routes[0]
         if not isinstance(route, dict):
@@ -174,8 +168,7 @@ class GoogleCandidateRouteMetricsProvider:
         legs = route.get("legs")
         if not isinstance(legs, list) or len(legs) != 1:
             raise InvalidCandidateRouteMetricsResponseError(
-                "Google Routes API 경로에는 이동 구간 하나가 "
-                "필요합니다."
+                "Google Routes API 경로에는 이동 구간 하나가 필요합니다."
             )
         leg = legs[0]
         if not isinstance(leg, dict):
@@ -183,9 +176,7 @@ class GoogleCandidateRouteMetricsProvider:
                 "Google Routes API 이동 구간은 객체여야 합니다."
             )
         try:
-            travel_minutes = cls._duration_to_ceil_minutes(
-                leg["duration"]
-            )
+            travel_minutes = cls._duration_to_ceil_minutes(leg["duration"])
             distance_meters = leg["distanceMeters"]
             return RouteLegMetrics(travel_minutes, distance_meters)
         except (KeyError, TypeError, ValueError) as error:
@@ -202,7 +193,5 @@ class GoogleCandidateRouteMetricsProvider:
         except InvalidOperation as error:
             raise ValueError("duration 숫자가 유효하지 않습니다.") from error
         if not seconds.is_finite() or seconds < 0:
-            raise ValueError(
-                "duration은 0 이상의 유한한 값이어야 합니다."
-            )
+            raise ValueError("duration은 0 이상의 유한한 값이어야 합니다.")
         return int((seconds / Decimal(60)).to_integral_value(ROUND_CEILING))

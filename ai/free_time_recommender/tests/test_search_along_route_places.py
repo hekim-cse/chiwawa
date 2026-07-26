@@ -1,4 +1,6 @@
 # 카테고리별 경로 주변 장소 후보 검색 Use Case 테스트
+import pytest
+
 from ai.free_time_recommender.application.search_along_route_places import (
     SearchAlongRoutePlaces,
     SearchAlongRoutePlacesRequest,
@@ -63,9 +65,7 @@ def test_execute_searches_all_server_managed_categories() -> None:
     assert all(query.page_size == 3 for query in provider.queries)
     assert all(query.language_code == "ko" for query in provider.queries)
     assert all(query.region_code == "JP" for query in provider.queries)
-    assert tuple(group.category for group in result) == tuple(
-        RecommendationCategory
-    )
+    assert tuple(group.category for group in result) == tuple(RecommendationCategory)
 
 
 # 같은 장소는 먼저 검색된 카테고리에만 유지되는지 검증
@@ -97,9 +97,7 @@ def test_execute_deduplicates_places_by_catalog_priority() -> None:
     assert tuple(candidate.place_id for candidate in result[0].candidates) == (
         "shared",
     )
-    assert tuple(candidate.place_id for candidate in result[1].candidates) == (
-        "cafe",
-    )
+    assert tuple(candidate.place_id for candidate in result[1].candidates) == ("cafe",)
 
 
 # 서버 설정 후보 수의 Google API 지원 범위 검증
@@ -120,17 +118,27 @@ def test_use_case_rejects_invalid_candidates_per_category() -> None:
 
 
 # 한국어 사용자와 일본 여행 지역 외 설정의 조기 거부 검증
-def test_use_case_rejects_unsupported_locale_configuration() -> None:
+def test_use_case_rejects_unsupported_display_language() -> None:
     provider = StubAlongRoutePlaceProvider({})
 
-    for language_code, region_code in (("en", "JP"), ("ko", "KR")):
-        try:
-            SearchAlongRoutePlaces(
-                provider=provider,
-                candidates_per_category=3,
-                language_code=language_code,
-                region_code=region_code,
-            )
-        except ValueError:
-            continue
-        raise AssertionError("지원하지 않는 로케일 설정이 허용됐습니다.")
+    with pytest.raises(ValueError, match="지원 언어인 ko"):
+        SearchAlongRoutePlaces(
+            provider=provider,
+            candidates_per_category=3,
+            language_code="en",
+            region_code=None,
+        )
+
+
+def test_use_case_allows_worldwide_search_without_region_bias() -> None:
+    provider = StubAlongRoutePlaceProvider({})
+    use_case = SearchAlongRoutePlaces(
+        provider=provider,
+        candidates_per_category=3,
+        language_code="ko",
+        region_code=None,
+    )
+
+    use_case.execute(SearchAlongRoutePlacesRequest(encoded_polyline="encoded"))
+
+    assert all(query.region_code is None for query in provider.queries)

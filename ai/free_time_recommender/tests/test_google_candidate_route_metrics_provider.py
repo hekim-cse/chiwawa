@@ -61,19 +61,15 @@ def test_get_metrics_requests_two_time_ordered_routes() -> None:
         "https://routes.googleapis.com/directions/v2:computeRoutes",
         "https://routes.googleapis.com/directions/v2:computeRoutes",
     ]
+    assert all(headers["X-Goog-Api-Key"] == "test-key" for headers in request_headers)
     assert all(
-        headers["X-Goog-Api-Key"] == "test-key"
-        for headers in request_headers
-    )
-    assert all(
-        headers["X-Goog-FieldMask"]
-        == "routes.legs.duration,routes.legs.distanceMeters"
+        headers["X-Goog-FieldMask"] == "routes.legs.duration,routes.legs.distanceMeters"
         for headers in request_headers
     )
     assert requests[0]["origin"] == {"placeId": "도쿄역-place-id"}
     assert requests[0]["destination"] == {"placeId": "도쿄타워-place-id"}
     assert requests[0]["languageCode"] == "ko"
-    assert requests[0]["regionCode"] == "JP"
+    assert "regionCode" not in requests[0]
     assert requests[0]["travelMode"] == "TRANSIT"
     assert requests[0]["departureTime"] == "2026-08-01T10:00:00Z"
     assert requests[1]["origin"] == {"placeId": "도쿄타워-place-id"}
@@ -82,9 +78,7 @@ def test_get_metrics_requests_two_time_ordered_routes() -> None:
     assert result.previous_to_candidate.travel_minutes == 11
     assert result.previous_to_candidate.distance_meters == 1200
     assert result.candidate_to_next.travel_minutes == 5
-    assert result.next_arrival_at == datetime(
-        2026, 8, 1, 11, 16, tzinfo=timezone.utc
-    )
+    assert result.next_arrival_at == datetime(2026, 8, 1, 11, 16, tzinfo=timezone.utc)
 
 
 def test_get_metrics_uses_traffic_aware_routing_for_drive() -> None:
@@ -96,15 +90,7 @@ def test_get_metrics_uses_traffic_aware_routing_for_drive() -> None:
         requests.append(json.loads(request.content))
         return httpx.Response(
             200,
-            json={
-                "routes": [
-                    {
-                        "legs": [
-                            {"duration": "300s", "distanceMeters": 800}
-                        ]
-                    }
-                ]
-            },
+            json={"routes": [{"legs": [{"duration": "300s", "distanceMeters": 800}]}]},
         )
 
     provider = GoogleCandidateRouteMetricsProvider(
@@ -124,10 +110,39 @@ def test_get_metrics_uses_traffic_aware_routing_for_drive() -> None:
     )
 
     assert len(requests) == 2
-    assert all(
-        request["routingPreference"] == "TRAFFIC_AWARE"
-        for request in requests
+    assert all(request["routingPreference"] == "TRAFFIC_AWARE" for request in requests)
+
+
+def test_get_metrics_omits_departure_time_for_walk() -> None:
+    """WALK 요청에는 Google이 지원하지 않는 출발시각을 전달하지 않는다."""
+
+    requests: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content))
+        return httpx.Response(
+            200,
+            json={"routes": [{"legs": [{"duration": "300s", "distanceMeters": 800}]}]},
+        )
+
+    provider = GoogleCandidateRouteMetricsProvider(
+        api_key="test-key",
+        transport=httpx.MockTransport(handler),
     )
+    query = make_query()
+    provider.get_candidate_route_metrics(
+        CandidateRouteMetricsQuery(
+            previous_place_id=query.previous_place_id,
+            candidate_place_id=query.candidate_place_id,
+            next_place_id=query.next_place_id,
+            previous_departure_at=query.previous_departure_at,
+            stay_minutes=query.stay_minutes,
+            travel_mode=RouteTravelMode.WALK,
+        ),
+    )
+
+    assert len(requests) == 2
+    assert all("departureTime" not in request for request in requests)
 
 
 @pytest.mark.parametrize(
