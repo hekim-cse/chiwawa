@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
-import '../../../core/assets/app_images.dart';
-import '../../../core/env.dart';
 import '../../../core/models/travel_models.dart';
 
 class TodaySchedulePanel extends StatelessWidget {
@@ -19,13 +17,16 @@ class TodaySchedulePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleSchedules = schedules
+    final displayableSchedules = schedules
         .where(
           (schedule) =>
               schedule.place != null || schedule.status == ScheduleStatus.free,
         )
-        .take(4)
         .toList(growable: false);
+    // 확정 타임라인은 서버가 반환한 순서와 장소를 그대로 노출한다.
+    // 중간 POI를 표시 개수로 잘라내면 추천 장소가 확정된 후에도
+    // 홈에서 사라져 보이므로 전체 일정을 사용한다.
+    final visibleSchedules = displayableSchedules;
     final nextSchedule = _findNextSchedule(visibleSchedules);
     final remainingSchedules = nextSchedule == null
         ? visibleSchedules
@@ -33,7 +34,6 @@ class TodaySchedulePanel extends StatelessWidget {
             .where(
               (schedule) => schedule.identityKey != nextSchedule.identityKey,
             )
-            .take(3)
             .toList(growable: false);
 
     return Padding(
@@ -45,7 +45,7 @@ class TodaySchedulePanel extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.all(ChiwawaSpacing.sm),
               child: Text(
-                '오늘 등록된 일정이 아직 없어요.',
+                '확정된 여행 일정이 아직 없어요.',
                 style: TextStyle(
                   color: ChiwawaColors.textSecondary,
                   fontWeight: FontWeight.w700,
@@ -81,7 +81,6 @@ class TodaySchedulePanel extends StatelessWidget {
               isLast: index == remainingSchedules.length - 1,
               isPast:
                   remainingSchedules[index].status == ScheduleStatus.completed,
-              imageSeed: index + 21,
               onTap: remainingSchedules[index].status == ScheduleStatus.free
                   ? onFreeTap
                   : null,
@@ -154,7 +153,7 @@ class _NextScheduleCard extends StatelessWidget {
                     ),
                     const SizedBox(height: ChiwawaSpacing.xxs),
                     Text(
-                      schedule.place ?? '빈 시간 추천',
+                      schedule.displayPlace ?? '빈 시간 추천',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -184,7 +183,6 @@ class _ScheduleSummaryRow extends StatelessWidget {
     required this.schedule,
     required this.isLast,
     required this.isPast,
-    required this.imageSeed,
     this.onTap,
     super.key,
   });
@@ -192,7 +190,6 @@ class _ScheduleSummaryRow extends StatelessWidget {
   final ScheduleItem schedule;
   final bool isLast;
   final bool isPast;
-  final int imageSeed;
   final VoidCallback? onTap;
 
   @override
@@ -227,7 +224,7 @@ class _ScheduleSummaryRow extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Text(
-                    schedule.place ?? '빈 시간 추천',
+                    schedule.displayPlace ?? '빈 시간 추천',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -239,8 +236,7 @@ class _ScheduleSummaryRow extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               _PlaceThumbnail(
-                seed: imageSeed,
-                label: schedule.place ?? '빈 시간 추천',
+                label: schedule.displayPlace ?? '빈 시간 추천',
               ),
             ],
           ),
@@ -284,28 +280,13 @@ class _SchedulePin extends StatelessWidget {
 }
 
 class _PlaceThumbnail extends StatelessWidget {
-  const _PlaceThumbnail({required this.seed, required this.label});
+  const _PlaceThumbnail({required this.label});
 
-  final int seed;
   final String label;
 
   @override
   Widget build(BuildContext context) {
-    if (useApiBackend) return _ThumbnailFallback(label: label);
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(ChiwawaRadii.control),
-      child: SizedBox(
-        width: 72,
-        height: 54,
-        child: Image.asset(
-          MockImages.placeThumbnail(seed),
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) =>
-              _ThumbnailFallback(label: label),
-        ),
-      ),
-    );
+    return _ThumbnailFallback(label: label);
   }
 }
 

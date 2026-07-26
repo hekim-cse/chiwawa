@@ -52,9 +52,7 @@ class GoogleAlongRoutePlaceProvider:
         ):
             raise TypeError("timeout_seconds는 숫자여야 합니다.")
         if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
-            raise ValueError(
-                "timeout_seconds는 0보다 큰 유한한 값이어야 합니다."
-            )
+            raise ValueError("timeout_seconds는 0보다 큰 유한한 값이어야 합니다.")
 
         self._api_key = api_key
         self._timeout_seconds = float(timeout_seconds)
@@ -74,15 +72,16 @@ class GoogleAlongRoutePlaceProvider:
             "X-Goog-Api-Key": self._api_key,
             "X-Goog-FieldMask": self.FIELD_MASK,
         }
-        payload = {
+        payload: dict[str, object] = {
             "textQuery": self.CATEGORY_SEARCH_TEXT[query.category],
             "pageSize": query.page_size,
             "languageCode": query.language_code,
-            "regionCode": query.region_code,
             "searchAlongRouteParameters": {
                 "polyline": {"encodedPolyline": query.encoded_polyline}
             },
         }
+        if query.region_code is not None:
+            payload["regionCode"] = query.region_code
 
         try:
             with httpx.Client(
@@ -136,8 +135,7 @@ class GoogleAlongRoutePlaceProvider:
                 candidates.append(cls._parse_place(place, category))
             except (TypeError, ValueError, KeyError) as error:
                 raise InvalidAlongRoutePlaceResponseError(
-                    "Google Places API 장소 응답이 유효하지 않습니다. "
-                    f"index={index}"
+                    f"Google Places API 장소 응답이 유효하지 않습니다. index={index}"
                 ) from error
         return tuple(candidates)
 

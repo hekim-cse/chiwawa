@@ -58,6 +58,7 @@ class GenerateInitialRecommendationGroupsRequest:
     insertion_windows: tuple[RouteLegInsertionWindow, ...]
     travel_mode: RouteTravelMode
     policy: RecommendationPolicy
+    enforce_one_way_limits: bool = True
 
 
 class GenerateInitialRecommendationGroups:
@@ -71,13 +72,10 @@ class GenerateInitialRecommendationGroups:
     ) -> None:
         # 외부 API 호출 수를 제한하는 운영 설정이므로
         # boolean이나 0 이하 값을 허용하지 않는다.
-        if (
-            isinstance(candidates_to_evaluate_per_category, bool)
-            or not isinstance(candidates_to_evaluate_per_category, int)
+        if isinstance(candidates_to_evaluate_per_category, bool) or not isinstance(
+            candidates_to_evaluate_per_category, int
         ):
-            raise TypeError(
-                "candidates_to_evaluate_per_category는 정수여야 합니다."
-            )
+            raise TypeError("candidates_to_evaluate_per_category는 정수여야 합니다.")
         if candidates_to_evaluate_per_category <= 0:
             raise ValueError(
                 "candidates_to_evaluate_per_category는 1 이상이어야 합니다."
@@ -99,6 +97,8 @@ class GenerateInitialRecommendationGroups:
             raise TypeError(
                 "request는 GenerateInitialRecommendationGroupsRequest여야 합니다."
             )
+        if not isinstance(request.enforce_one_way_limits, bool):
+            raise TypeError("enforce_one_way_limits는 boolean이어야 합니다.")
 
         # ------------------------------------------------------------
         # 1단계: 장소 검색 Provider가 반환한 카테고리 순서를 유지한다.
@@ -110,9 +110,7 @@ class GenerateInitialRecommendationGroups:
             # 검색 상위 후보만 실제 경로 삽입 평가 대상으로 사용한다.
             # --------------------------------------------------------
             recommendations = []
-            for routed_candidate in candidate_group.candidates[
-                : self._candidate_limit
-            ]:
+            for routed_candidate in candidate_group.candidates[: self._candidate_limit]:
                 window = self._find_matching_window(
                     routed_candidate,
                     request.insertion_windows,
@@ -122,6 +120,7 @@ class GenerateInitialRecommendationGroups:
                     window=window,
                     travel_mode=request.travel_mode,
                     policy=request.policy,
+                    enforce_one_way_limits=request.enforce_one_way_limits,
                 )
                 if recommendation is not None:
                     recommendations.append(recommendation)
@@ -159,13 +158,9 @@ class GenerateInitialRecommendationGroups:
             and window.next_place_id == routed_candidate.destination_place_id
         )
         if not matches:
-            raise ValueError(
-                "후보의 경로 구간과 일치하는 삽입 Window가 없습니다."
-            )
+            raise ValueError("후보의 경로 구간과 일치하는 삽입 Window가 없습니다.")
         if len(matches) > 1:
-            raise ValueError(
-                "후보의 경로 구간과 일치하는 삽입 Window가 중복됩니다."
-            )
+            raise ValueError("후보의 경로 구간과 일치하는 삽입 Window가 중복됩니다.")
         return matches[0]
 
     def _evaluate_insertion(
@@ -175,6 +170,7 @@ class GenerateInitialRecommendationGroups:
         window: RouteLegInsertionWindow,
         travel_mode: RouteTravelMode,
         policy: RecommendationPolicy,
+        enforce_one_way_limits: bool,
     ) -> InsertableCandidateRecommendation | None:
         # 기존 최적화 일정에 이미 포함된 장소 ID를 수집한다.
         # 기존 방문지를 다시 추천하거나 동일 장소 경로를 조회하지 않는다.
@@ -201,6 +197,7 @@ class GenerateInitialRecommendationGroups:
         impact = self._evaluator.evaluate(
             window=window,
             policy=policy,
+            enforce_one_way_limits=enforce_one_way_limits,
             candidate_schedule=CandidateInsertionSchedule(
                 travel_times=CandidateTravelTimes(
                     previous_to_candidate_minutes=(

@@ -86,25 +86,38 @@ class GenerateRouteOptionRecommendations:
             if route_option.timeline is None:
                 raise ValueError("추천을 생성할 경로 옵션에는 Timeline이 필요합니다.")
 
-            queries = self._route_option_adapter.to_geometry_queries(
+            all_queries = self._route_option_adapter.to_geometry_queries(
                 route_option,
                 timezone,
             )
-            geometries = self._geometry_builder.execute(queries)
-            candidate_groups = self._place_search.execute(geometries)
             windows = (
-                self._timeline_adapter
-                .to_timezone_aware_route_leg_insertion_windows(
+                self._timeline_adapter.to_timezone_aware_route_leg_insertion_windows(
                     route_option.timeline,
                     timezone,
                 )
             )
+
+            # 사용자가 지정한 START와 END를 일정의 불변 경계로 유지한다.
+            # 빈 시간 추천은 마지막 방문지에서 고정 END로 이동하는 구간만
+            # 대체하므로, 앞선 POI의 순서와 시각을 다시 배치하지 않는다.
+            terminal_query = all_queries[-1]
+            terminal_window = windows[-1]
+            if terminal_query.leg_index != terminal_window.leg_index:
+                raise ValueError(
+                    "마지막 경로 구간과 추천 삽입 Window가 일치하지 않습니다."
+                )
+
+            geometries = self._geometry_builder.execute((terminal_query,))
+            candidate_groups = self._place_search.execute(geometries)
             groups = self._group_generator.execute(
                 GenerateInitialRecommendationGroupsRequest(
                     candidate_groups=candidate_groups,
-                    insertion_windows=windows,
-                    travel_mode=queries[0].geometry_query.travel_mode,
+                    insertion_windows=(terminal_window,),
+                    travel_mode=(terminal_query.geometry_query.travel_mode),
                     policy=policy,
+                    # 마지막 방문지와 고정 END 사이 추천은 편도 상한이
+                    # 아니라 전체 계획 종료 시각 안에 드는지로 판단한다.
+                    enforce_one_way_limits=False,
                 )
             )
             results.append(

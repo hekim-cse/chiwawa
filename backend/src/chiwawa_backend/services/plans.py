@@ -11,9 +11,6 @@ from chiwawa_backend.schemas.plans import (
     PlanDraftRead,
     PlanJobRead,
     PlanStopRead,
-    RouteOptimizationRequest,
-    RouteOptimizationResponse,
-    RouteStopRead,
 )
 from chiwawa_backend.schemas.schedule import ScheduleItemCreateRequest
 from chiwawa_backend.services.common import (
@@ -158,36 +155,6 @@ def _recreate_missing_confirmed_items(
 def _confirmed_item_is_missing(state: AppState, trip_id: str, item_id: str) -> bool:
     item = state.schedule_items.get(item_id)
     return item is None or item.trip_id != trip_id
-
-
-@synchronized
-def optimize_route(
-    state: AppState,
-    trip_id: str,
-    payload: RouteOptimizationRequest,
-) -> RouteOptimizationResponse:
-    _ = require_trip(state, trip_id)
-    places = [
-        place for place in state.wanted_places.values() if place.trip_id == trip_id
-    ]
-    ordered = sorted(places, key=lambda place: (-place.priority, place.name))
-    route_stops = [
-        RouteStopRead(
-            order=index,
-            place_id=place.id,
-            name=place.name,
-            estimated_travel_minutes=15 + (index * 5),
-        )
-        for index, place in enumerate(ordered, start=1)
-    ]
-    starting_buffer = 10 if payload.start_place else 0
-    total = starting_buffer + sum(stop.estimated_travel_minutes for stop in route_stops)
-    return RouteOptimizationResponse(
-        trip_id=trip_id,
-        transport_mode=payload.transport_mode,
-        stops=route_stops,
-        total_estimated_minutes=total,
-    )
 
 
 @synchronized

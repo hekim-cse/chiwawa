@@ -20,9 +20,10 @@ def test_schedule_reads_and_writes_share_state_lock() -> None:
         state = AppState()
         trip = create_trip(
             state,
-            TripCreateRequest(
-                city="Tokyo",
-                start_date=date(2026, 1, 1),
+                TripCreateRequest(
+                    city="Tokyo",
+                    country="Japan",
+                    start_date=date(2026, 1, 1),
                 end_date=date(2026, 1, 1),
             ),
         )

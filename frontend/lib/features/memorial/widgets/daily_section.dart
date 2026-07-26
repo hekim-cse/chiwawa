@@ -1,18 +1,15 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
-import '../../../core/assets/app_images.dart';
 import '../../../core/models/travel_models.dart';
 
 class DailySection extends StatelessWidget {
   const DailySection({
     required this.day,
-    required this.seedOffset,
     super.key,
   });
 
   final MemorialDay day;
-  final int seedOffset;
 
   @override
   Widget build(BuildContext context) {
@@ -79,14 +76,14 @@ class DailySection extends StatelessWidget {
             itemBuilder: (context, index) {
               return ClipRRect(
                 borderRadius: BorderRadius.circular(ChiwawaRadii.control),
-                child: Image.asset(
-                  day.photoAssetPaths.isEmpty
-                      ? MockImages.memorialPhoto(seedOffset + index)
-                      : day.photoAssetPaths[index % day.photoAssetPaths.length],
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const _PhotoFallback(),
-                ),
+                child: day.photoAssetPaths.isEmpty
+                    ? const _PhotoFallback()
+                    : Image.asset(
+                        day.photoAssetPaths[index % day.photoAssetPaths.length],
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const _PhotoFallback(),
+                      ),
               );
             },
           ),

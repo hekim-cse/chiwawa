@@ -67,7 +67,7 @@ def generate_memorial(
         # 촬영 시각이 없는 사진은 맨 뒤로 보낸다.
         timeline = [_photo_line(photo) for photo in sorted(photos, key=_photo_order)]
     summary = (
-        f"{trip.city} trip with {len(schedule.items)} schedule items "
+        f"{trip.city or trip.country} trip with {len(schedule.items)} schedule items "
         f"and {len(photos)} photos."
     )
     memorial = MemorialRecordRead(

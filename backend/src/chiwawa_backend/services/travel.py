@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from chiwawa_backend.errors import DomainValidationError
 from chiwawa_backend.schemas.base import PlaceSource
@@ -22,6 +22,7 @@ from chiwawa_backend.services.common import (
     require_trip,
 )
 from chiwawa_backend.services.plans import build_replan_from_schedule
+from chiwawa_backend.services.route_optimization import RoutePlanner
 from chiwawa_backend.services.schedule import (
     create_schedule_item,
     ensure_no_schedule_overlap,
@@ -30,6 +31,13 @@ from chiwawa_backend.services.schedule import (
 from chiwawa_backend.state import AppState, synchronized
 
 RECOMMENDATION_DATE_ERROR = "recommendation date must be within trip dates"
+RECOMMENDATION_CONTEXT_ERROR = (
+    "빈 시간 추천을 조회하려면 먼저 추천을 포함한 경로 최적화를 실행해야 합니다."
+)
+LEGACY_RECOMMENDATION_CONTEXT_ERROR = (
+    "기존 확정 일정에는 추천 계산 정보가 없습니다. "
+    "경로를 다시 최적화하고 확정해 주세요."
+)
 
 
 @synchronized
@@ -51,32 +59,128 @@ def recommend_free_time(
     trip = require_trip(state, trip_id)
     if not trip.start_date <= payload.date <= trip.end_date:
         raise DomainValidationError(RECOMMENDATION_DATE_ERROR)
-    area = payload.current_area or trip.city
-    duration = int(
+    route_key = _route_key_for_date(state, trip_id, trip.start_date, payload.date)
+    return _recommendations_for_route(
+        state,
+        trip_id,
+        route_key,
+        payload=payload,
+    )
+
+
+async def latest_free_time_recommendations(
+    state: AppState,
+    trip_id: str,
+    route_planner: RoutePlanner,
+) -> FreeTimeRecommendationResponse:
+    """확정 경로를 Modal 추천 전용 Endpoint로 평가한다."""
+    trip = require_trip(state, trip_id)
+    route_key = next(
+        (key for key in reversed(state.confirmed_routes) if key[0] == trip_id),
+        None,
+    )
+    if route_key is None:
+        raise DomainValidationError(RECOMMENDATION_CONTEXT_ERROR)
+    confirmed_route = state.confirmed_routes[route_key]
+    route_option = confirmed_route.route_option
+    timezone = confirmed_route.timezone
+    if route_option is None or timezone is None:
+        raise DomainValidationError(LEGACY_RECOMMENDATION_CONTEXT_ERROR)
+    result = await route_planner.recommend_free_time(
+        route_option,
+        timezone=timezone,
+    )
+    outcome = next(
         (
-            datetime.combine(payload.date, payload.end_time)
-            - datetime.combine(payload.date, payload.start_time)
-        ).total_seconds()
-        // 60,
+            item
+            for item in result.route_options
+            if item.route_option.travel_mode == route_option.travel_mode
+        ),
+        None,
     )
-    recommended_duration = min(60, duration)
-    recommended_end = (
-        datetime.combine(payload.date, payload.start_time)
-        + timedelta(minutes=recommended_duration)
-    ).time()
-    item = FreeTimeRecommendationRead(
-        id=state.next_id("recommendation"),
+    groups = (
+        outcome.recommendation.recommendation_groups
+        if outcome is not None and outcome.recommendation is not None
+        else []
+    )
+    with state.lock:
+        state.issued_route_recommendations[route_key] = groups
+    route_date = trip.start_date + timedelta(days=route_key[1] - 1)
+    return _recommendations_for_route(
+        state,
+        trip_id,
+        route_key,
+        route_date=route_date,
+    )
+
+
+def _route_key_for_date(
+    state: AppState,
+    trip_id: str,
+    trip_start_date: date,
+    requested_date: date,
+) -> tuple[str, int]:
+    day_index = (requested_date - trip_start_date).days + 1
+    route_key = (trip_id, day_index)
+    if route_key not in state.issued_route_recommendations:
+        raise DomainValidationError(RECOMMENDATION_CONTEXT_ERROR)
+    return route_key
+
+
+def _recommendations_for_route(
+    state: AppState,
+    trip_id: str,
+    route_key: tuple[str, int],
+    *,
+    route_date: date | None = None,
+    payload: FreeTimeRecommendationRequest | None = None,
+) -> FreeTimeRecommendationResponse:
+    trip = require_trip(state, trip_id)
+    recommendation_date = route_date or trip.start_date + timedelta(
+        days=route_key[1] - 1,
+    )
+    items: list[FreeTimeRecommendationRead] = []
+    for group in state.issued_route_recommendations.get(route_key, []):
+        for recommendation in group.recommendations:
+            arrival = recommendation.route_metrics.candidate_arrival_at
+            departure = recommendation.route_metrics.candidate_departure_at
+            arrival_time = arrival.time().replace(tzinfo=None)
+            departure_time = departure.time().replace(tzinfo=None)
+            if payload is not None and arrival_time < payload.start_time:
+                continue
+            if payload is not None and departure_time > payload.end_time:
+                continue
+            duration_minutes = int((departure - arrival).total_seconds() // 60)
+            if duration_minutes < 1:
+                continue
+            travel_minutes = (
+                recommendation.route_metrics.previous_to_candidate.travel_minutes
+                + recommendation.route_metrics.candidate_to_next.travel_minutes
+            )
+            item = FreeTimeRecommendationRead(
+                id=state.next_id("recommendation"),
+                trip_id=trip_id,
+                title=group.display_name,
+                place_name=recommendation.candidate.name,
+                duration_minutes=duration_minutes,
+                travel_minutes=travel_minutes,
+                reason=(
+                    f"기존 경로에 삽입 가능하며 삽입 후 "
+                    f"{recommendation.insertion_impact.remaining_minutes}분이 남습니다."
+                ),
+                date=recommendation_date,
+                start_time=arrival_time,
+                end_time=departure_time,
+                day_index=route_key[1],
+                recommendation=recommendation,
+            )
+            state.recommendations[item.id] = item
+            items.append(item)
+    return FreeTimeRecommendationResponse(
         trip_id=trip_id,
-        title=f"{area} short activity",
-        place_name=f"{area} neighborhood walk",
-        duration_minutes=recommended_duration,
-        reason="Fits the open time window and nearby travel context.",
-        date=payload.date,
-        start_time=payload.start_time,
-        end_time=recommended_end,
+        date=recommendation_date,
+        items=items,
     )
-    state.recommendations[item.id] = item
-    return FreeTimeRecommendationResponse(trip_id=trip_id, items=[item])
 
 
 @synchronized
@@ -113,16 +217,17 @@ def nearby_recommendations(
 ) -> NearbyRecommendationResponse:
     trip = require_trip(state, trip_id)
     theme = payload.theme or "local"
+    location_name = trip.city or trip.country
     items = [
         NearbyRecommendationRead(
             title=f"{theme.title()} stop near current location",
-            place_name=f"{trip.city} nearby {theme}",
+            place_name=f"{location_name} nearby {theme}",
             estimated_walk_minutes=8,
             reason="Close enough to add without disrupting the current route.",
         ),
         NearbyRecommendationRead(
             title="Quick photo detour",
-            place_name=f"{trip.city} side-street viewpoint",
+            place_name=f"{location_name} side-street viewpoint",
             estimated_walk_minutes=12,
             reason="Matches the photo-centered travel goal.",
         ),

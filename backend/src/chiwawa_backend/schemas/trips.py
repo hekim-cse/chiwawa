@@ -9,8 +9,8 @@ MAX_TRIP_DAYS = 31
 
 
 class TripCreateRequest(ApiModel):
-    city: str = Field(min_length=1)
-    country: str = Field(default="Japan", min_length=1)
+    city: str | None = Field(default=None, min_length=1)
+    country: str = Field(min_length=1)
     start_date: date
     end_date: date
     travelers: int = Field(default=1, ge=1)
@@ -43,7 +43,7 @@ class TripUpdateRequest(ApiModel):
 class TripRead(ApiModel):
     id: str
     title: str
-    city: str
+    city: str | None
     country: str
     start_date: date
     end_date: date

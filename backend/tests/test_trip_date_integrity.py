@@ -11,24 +11,33 @@ from chiwawa_backend.schemas.base import PlaceSource, TravelStyle
 from chiwawa_backend.schemas.plans import PlanDayRead, PlanDraftRead, PlanStopRead
 from chiwawa_backend.schemas.trips import TripRead
 from chiwawa_backend.state import AppState
+from tests.free_time_fakes import seed_free_time_recommendation_context
 
 
 @pytest.mark.anyio
 async def test_trip_patch_keeps_existing_recommendations_in_range() -> None:
-    app = create_app()
+    state = AppState()
+    app = create_app(state)
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
     ) as client:
         trip_response = await client.post(
             "/api/v1/trips",
-            json={
-                "city": "Tokyo",
-                "start_date": "2026-07-10",
+                json={
+                    "city": "Tokyo",
+                    "country": "Japan",
+                    "start_date": "2026-07-10",
                 "end_date": "2026-07-12",
             },
         )
         trip = TripRead.model_validate_json(trip_response.text)
+        seed_free_time_recommendation_context(
+            state,
+            trip.id,
+            day_index=3,
+            candidate_arrival_at=dt.datetime(2026, 7, 12, 15, tzinfo=dt.UTC),
+        )
         recommendation_response = await client.post(
             f"/api/v1/trips/{trip.id}/travel/free-time-recommendations",
             json={

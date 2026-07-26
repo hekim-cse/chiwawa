@@ -42,7 +42,7 @@ def memorial_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("GOOGLE_AUTH_DB_PATH", str(tmp_path / "test.db"))
     monkeypatch.setenv("MEMORIAL_PHOTO_DIR", str(tmp_path / "photos"))
     monkeypatch.setenv("JWT_SECRET", "test-only-secret-at-least-32-characters")
-    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "")
 
 
 @pytest.fixture
@@ -362,7 +362,8 @@ def test_reverse_geocode_parses_formatted_address(
 def test_reverse_geocode_without_key_returns_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
+    # Settings는 .env도 읽으므로 빈 환경변수로 명시적으로 덮어쓴다.
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "")
 
     def fail_get(*_args: object, **_kwargs: object) -> httpx.Response:
         message = "API 키가 없으면 호출 자체가 없어야 한다"

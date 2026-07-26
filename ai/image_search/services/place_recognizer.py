@@ -44,7 +44,10 @@ class VisionIdentifier(Protocol):
 @runtime_checkable
 class PlacesResolver(Protocol):
     def resolve_place(
-        self, place_name: str, language_code: str = "ko", region_code: str = "JP"
+        self,
+        place_name: str,
+        language_code: str = "ko",
+        region_code: str | None = None,
     ) -> ResolvedPlace: ...
 
     def search_nearby(
@@ -56,14 +59,16 @@ class PlacesResolver(Protocol):
         radius_m: float,
         max_result_count: int,
         language_code: str = "ko",
-        region_code: str = "JP",
+        region_code: str | None = None,
     ) -> list[ResolvedPlace]: ...
 
 
 # 캐스케이드 동작 설정 (step 7 실호출 검증 후 튜닝 가능)
 @dataclass(frozen=True)
 class PlaceRecognizerConfig:
-    landmark_score_threshold: float = 0.6  # 이 값 이상이면 랜드마크 채택, 미만이면 LLM 폴백
+    landmark_score_threshold: float = (
+        0.6  # 이 값 이상이면 랜드마크 채택, 미만이면 LLM 폴백
+    )
     nearby_radius_m: float = 1500  # 근처 검색 반경
     nearby_confidence_decay: float = 0.15  # 근처 후보 confidence 순차 감소폭
 
@@ -119,7 +124,9 @@ class PlaceRecognizer:
             if resolved is None:
                 return self._failed(signals)
 
-        identified = self._to_candidate(resolved, base_conf, reason, source, category, request)
+        identified = self._to_candidate(
+            resolved, base_conf, reason, source, category, request
+        )
 
         # 근처 추천 (식별 1건 제외한 나머지 개수만큼)
         nearby_wanted = max(0, request.max_candidates - 1)
@@ -147,7 +154,10 @@ class PlaceRecognizer:
     def _pick_seed(
         self, landmark: LandmarkDetection | None, llm: VisionIdentification | None
     ) -> tuple[str, float, CandidateSource, str] | None:
-        if landmark is not None and landmark.score >= self.config.landmark_score_threshold:
+        if (
+            landmark is not None
+            and landmark.score >= self.config.landmark_score_threshold
+        ):
             reason = f"랜드마크 감지 결과와 일치 (신뢰도 {landmark.score:.2f})"
             return landmark.name, landmark.score, CandidateSource.LANDMARK, reason
         if llm is not None and llm.place_name_guess:
@@ -157,7 +167,10 @@ class PlaceRecognizer:
     # 랜드마크 시드의 Places 확정이 실패했을 때 쓸 LLM 대체 시드
     # (랜드마크 시드였고, LLM 추정이 있으며, 방금 실패한 이름과 다를 때만)
     def _llm_fallback_seed(
-        self, source: CandidateSource, failed_name: str, llm: VisionIdentification | None
+        self,
+        source: CandidateSource,
+        failed_name: str,
+        llm: VisionIdentification | None,
     ) -> tuple[str, float, CandidateSource, str] | None:
         if source is not CandidateSource.LANDMARK:
             return None

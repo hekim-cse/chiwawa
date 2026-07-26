@@ -21,7 +21,6 @@ class PlanDayConstraintSection extends StatelessWidget {
     required this.onEndPlaceSelected,
     required this.onEndRetry,
     required this.onEndTimeChanged,
-    required this.onMaxPlaceCountChanged,
     super.key,
   });
 
@@ -37,7 +36,6 @@ class PlanDayConstraintSection extends StatelessWidget {
   final ValueChanged<PlaceSearchCandidate> onEndPlaceSelected;
   final VoidCallback onEndRetry;
   final ValueChanged<String> onEndTimeChanged;
-  final ValueChanged<int> onMaxPlaceCountChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -95,12 +93,6 @@ class PlanDayConstraintSection extends StatelessWidget {
             helpText: '도착 시간 선택',
             onChanged: onEndTimeChanged,
           ),
-        ),
-        const SizedBox(height: ChiwawaSpacing.sm),
-        _PlaceCountControl(
-          day: day,
-          value: constraint.maxPlaceCount,
-          onChanged: onMaxPlaceCountChanged,
         ),
         AnimatedSize(
           duration: const Duration(milliseconds: 160),
@@ -163,66 +155,6 @@ class PlanDayConstraintSection extends StatelessWidget {
     onChanged(
       '${picked.hour.toString().padLeft(2, '0')}:'
       '${picked.minute.toString().padLeft(2, '0')}',
-    );
-  }
-}
-
-class _PlaceCountControl extends StatelessWidget {
-  const _PlaceCountControl({
-    required this.day,
-    required this.value,
-    required this.onChanged,
-  });
-
-  final int day;
-  final int value;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const SizedBox(width: 44),
-        Expanded(
-          child: Text(
-            '최대 방문 장소',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: ChiwawaColors.primary,
-                  fontWeight: FontWeight.w700,
-                ),
-          ),
-        ),
-        IconButton(
-          key: ValueKey('plan-max-place-minus-$day'),
-          onPressed: value > PlanDayConstraint.minimumPlaceCount
-              ? () => onChanged(value - 1)
-              : null,
-          color: ChiwawaColors.primary,
-          icon: const Icon(Icons.remove_circle_outline_rounded),
-          tooltip: '최대 방문 장소 줄이기',
-        ),
-        SizedBox(
-          width: 34,
-          child: Text(
-            '$value곳',
-            key: ValueKey('plan-max-place-count-$day'),
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: ChiwawaColors.primary,
-                  fontWeight: FontWeight.w800,
-                ),
-          ),
-        ),
-        IconButton(
-          key: ValueKey('plan-max-place-plus-$day'),
-          onPressed: value < PlanDayConstraint.maximumPlaceCount
-              ? () => onChanged(value + 1)
-              : null,
-          color: ChiwawaColors.primary,
-          icon: const Icon(Icons.add_circle_outline_rounded),
-          tooltip: '최대 방문 장소 늘리기',
-        ),
-      ],
     );
   }
 }

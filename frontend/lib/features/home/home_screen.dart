@@ -36,7 +36,7 @@ class HomeScreen extends ConsumerWidget {
               ),
               const SizedBox(height: ChiwawaSpacing.section),
               AppSectionHeader(
-                title: '오늘의 일정',
+                title: '여행 일정',
                 description: data.tripInfo.currentDay.trim().isEmpty
                     ? null
                     : data.tripInfo.currentDay,

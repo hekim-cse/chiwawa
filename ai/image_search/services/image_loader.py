@@ -3,6 +3,8 @@
 # - 경로: 경로 탈출 방지 (허용 base 디렉토리 밖 접근 차단)
 # 검증 로직(validate_*)은 순수 함수로 분리해 네트워크·파일 없이 테스트한다.
 import ipaddress
+import base64
+import binascii
 import socket
 import time
 from pathlib import Path
@@ -51,7 +53,9 @@ def validate_image_url(url: str) -> str:
 
 
 # 호스트명을 IP 주소 목록으로 해석 (해석 실패도 차단 대상)
-def _resolve_addresses(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+def _resolve_addresses(
+    host: str,
+) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
     # 호스트가 이미 IP 리터럴이면 그대로 사용
     try:
         return [ipaddress.ip_address(host)]
@@ -151,6 +155,19 @@ def load_image_bytes(
     max_bytes: int = _MAX_IMAGE_BYTES,
     deadline_seconds: float = _DOWNLOAD_DEADLINE_SECONDS,
 ) -> bytes:
+    if request.image_base64:
+        try:
+            image_bytes = base64.b64decode(request.image_base64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise ImageLoadError("이미지 base64 데이터가 올바르지 않습니다.") from exc
+        if not image_bytes:
+            raise ImageLoadError("이미지 파일이 비어 있습니다.")
+        if len(image_bytes) > max_bytes:
+            raise ImageLoadError(
+                f"이미지가 너무 큽니다: {len(image_bytes)} bytes (상한 {max_bytes})"
+            )
+        return image_bytes
+
     if request.image_path:
         if allowed_base_dir is None:
             raise ImageLoadError(

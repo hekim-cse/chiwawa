@@ -6,3 +6,9 @@ __pycache__/
 ai/route_planner/.env
 .db
 artifacts/
+
+# Local application databases
+data/*.db
+data/*.db-*
+backend/data/*.db
+backend/data/*.db-*

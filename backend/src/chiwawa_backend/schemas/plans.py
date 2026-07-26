@@ -3,6 +3,12 @@ from typing import Self
 
 from pydantic import Field, model_validator
 
+from chiwawa_backend.schemas.ai_planning import (
+    RecommendationGroupRead,
+    RouteOptionRead,
+    TimelineRead,
+    TripPlanningPlace,
+)
 from chiwawa_backend.schemas.base import (
     ApiModel,
     PlaceSource,
@@ -78,6 +84,22 @@ class PlanConfirmResponse(ApiModel):
 class RouteOptimizationRequest(ApiModel):
     start_place: str | None = Field(default=None, min_length=1)
     transport_mode: str = Field(default="transit", min_length=1)
+    day_index: int = Field(default=1, ge=1)
+    planned_start_time: dt.time = dt.time(hour=9)
+    planned_end_time: dt.time = dt.time(hour=20)
+    max_place_count: int | None = Field(default=None, ge=1)
+    start: TripPlanningPlace | None = None
+    end: TripPlanningPlace | None = None
+    wanted_place_ids: list[str] = Field(default_factory=list)
+    pace: TravelStyle = TravelStyle.BALANCED
+    include_recommendations: bool = True
+
+    @model_validator(mode="after")
+    def require_complete_modal_input(self) -> Self:
+        if self.planned_end_time <= self.planned_start_time:
+            msg = "planned_end_time must be after planned_start_time"
+            raise ValueError(msg)
+        return self
 
 
 class RouteStopRead(ApiModel):
@@ -92,3 +114,27 @@ class RouteOptimizationResponse(ApiModel):
     transport_mode: str
     stops: list[RouteStopRead]
     total_estimated_minutes: int = Field(ge=0)
+    timeline: TimelineRead | None = None
+    missing_segments: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+    recommendation_groups: list[RecommendationGroupRead] = Field(
+        default_factory=list,
+    )
+
+
+class ConfirmedRouteOptimizationRead(ApiModel):
+    day_index: int = Field(ge=1)
+    start: TripPlanningPlace
+    end: TripPlanningPlace
+    route: RouteOptimizationResponse
+    route_option: RouteOptionRead | None = None
+    timezone: str | None = Field(default=None, min_length=1)
+
+
+class ConfirmedRouteOptimizationsResponse(ApiModel):
+    trip_id: str
+    items: list[ConfirmedRouteOptimizationRead]
+
+
+class RouteOptimizationConfirmRequest(ApiModel):
+    timeline: TimelineRead

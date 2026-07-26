@@ -61,7 +61,7 @@ class DayConstraintDTO(BaseModel):
 # 백엔드에서 AI로 전달하는 여행 일정 최적화 요청 DTO
 class TripPlanningRequestDTO(BaseModel):
     trip_id: str
-    timezone: str = "Asia/Tokyo"
+    timezone: str
     days: List[DayConstraintDTO]
     pois: List[PoiDTO]
 

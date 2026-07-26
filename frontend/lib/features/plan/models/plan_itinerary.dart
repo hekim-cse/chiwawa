@@ -7,12 +7,14 @@ class PlanItineraryStop {
     required this.place,
     this.departureTime,
     this.stayMinutes,
+    this.stopType = 'POI',
   });
 
   final String id;
   final String startTime;
   final String? departureTime;
   final int? stayMinutes;
+  final String stopType;
   final RoutePlace place;
 
   PlanItineraryStop copyWith({
@@ -25,6 +27,7 @@ class PlanItineraryStop {
       startTime: startTime ?? this.startTime,
       departureTime: departureTime ?? this.departureTime,
       stayMinutes: stayMinutes ?? this.stayMinutes,
+      stopType: stopType,
       place: place,
     );
   }

@@ -128,13 +128,13 @@ Free Time Recommender는 후보 장소 자체만 평가하지 않습니다.
 | 영역 | 상태 | 현재 범위 |
 |---|---|---|
 | 📱 Flutter 화면 | 구현 | 홈, 일정, 여행 목록, 사진 탐색, Memorial, 마이페이지 |
-| ⚙️ Backend API | 구현 | 여행, 희망 장소, 일정, 여행 중 보조 기능, Memorial, 인증 |
+| ⚙️ Backend API | 구현 | 여행, 희망 장소, 한국어 전 세계 장소 검색, 일정, 여행 중 보조 기능, Memorial, 인증 |
 | 🔐 Google OAuth + JWT | 구현 | Google 로그인, JWT 발급과 인증 사용자 조회 |
 | 📸 사진 기반 장소 검색 | 실제 연동 | Backend에서 `ai/image_search` 모듈 호출 |
 | 🗺️ Route Planner | 구현·테스트 | 정확 일자 배정, 방문 순서, 이동수단별 Route Option과 Timeline |
 | ⏰ Free Time Recommender | 구현·테스트 | Route Leg 주변 후보 검색과 일정 삽입 가능성 평가 |
-| 🔌 Backend와 Route Planner 통합 | 부분 구현 | DTO와 AI 모듈은 존재하지만 기본 일정 API는 현재 모의 일정 생성 사용 |
-| 🔌 Backend와 Free Time Recommender 통합 | 부분 구현 | Backend의 추천 Endpoint는 현재 시연용 규칙 기반 응답 |
+| 🔌 Backend와 Route Planner 통합 | 실제 연동 | `/route-optimizations`에서 Modal `plan_trip` 호출, 실제 Route Option과 Timeline 반환 |
+| 🔌 Backend와 Free Time Recommender 통합 | 실제 연동 | 경로 최적화의 검증된 추천 그룹을 저장하고 빈 시간 추천 Endpoint에서 반환 |
 | 🌁 Memorial | 구현 | 사진 메타데이터 저장, 날짜별 기록 생성과 지도·타임라인 UI |
 | 💾 저장소 | 혼합 | 여행 프로토타입은 메모리, Google 사용자와 Memorial 메타데이터는 SQLite |
 | 🚀 배포 | 부분 구현 | Dockerfile, GitHub Actions와 Modal AI 배포 Workflow |
@@ -330,7 +330,9 @@ flowchart LR
 - 현재 위치 주변 추천
 - 지연 발생 시 재계획
 
-현재 Backend의 해당 응답은 시연용 규칙 기반 구현입니다.
+Backend는 경로 최적화가 반환한 실제 추천 그룹을 보존하고, 가장 최근에 최적화한
+일정의 삽입 가능 후보를 반환합니다. 경로 최적화 없이 호출하면 임시 결과를 만들지
+않고 명시적인 오류를 반환합니다.
 
 ### 6. Memorial
 
@@ -781,7 +783,9 @@ Flutter Explore
 - 현재 위치 주변 추천
 - 일정 지연 재계획
 
-현재 Backend 응답은 시연용 규칙 기반 구현이며, 실제 Free Time Recommender 연결은 별도 통합 작업이 필요합니다.
+Backend 응답은 최근 경로 최적화에 포함된 실제 Free Time Recommender 결과를
+사용합니다. 추천 장소명, 체류시간, 추가 이동시간은 Modal과 Google Provider가
+검증한 값을 기준으로 반환합니다.
 
 ### Memorial
 
@@ -940,7 +944,7 @@ git switch -c feat/작업명
 - Backend의 여행·일정·추천 데이터 대부분은 메모리에 저장되어 재시작 시 초기화됩니다.
 - Google 사용자와 Memorial 사진 메타데이터만 SQLite에 영속 저장됩니다.
 - 여행 관련 API 일부는 아직 인증과 사용자 소유권 검증이 없습니다.
-- Backend의 일정 초안, 주변 추천과 빈 시간 추천은 현재 시연용 구현입니다.
+- Backend의 일정 초안과 현재 위치 기반 주변 추천은 현재 시연용 구현입니다.
 - Route Planner와 Free Time Recommender가 Backend 기본 여행 흐름에 완전히 통합되지 않았습니다.
 - Route Planner 정확 Solver는 기본 POI 12개 제한을 가집니다.
 - 외부 Google API와 Gemini 사용에는 별도 Key와 비용이 필요합니다.

@@ -35,7 +35,8 @@ class TripCreateSheet extends ConsumerStatefulWidget {
 class _TripCreateSheetState extends ConsumerState<TripCreateSheet> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
-  final _cityController = TextEditingController(text: '도쿄');
+  final _countryController = TextEditingController();
+  final _cityController = TextEditingController();
   late DateTimeRange _dateRange;
   int _travelers = 1;
   TravelPace _pace = TravelPace.balanced;
@@ -59,6 +60,7 @@ class _TripCreateSheetState extends ConsumerState<TripCreateSheet> {
   @override
   void dispose() {
     _titleController.dispose();
+    _countryController.dispose();
     _cityController.dispose();
     super.dispose();
   }
@@ -123,17 +125,30 @@ class _TripCreateSheetState extends ConsumerState<TripCreateSheet> {
               ),
               const SizedBox(height: 12),
               TextFormField(
+                key: const ValueKey('trip-country-field'),
+                controller: _countryController,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: '국가',
+                  hintText: '예: 일본, 프랑스, 미국',
+                  prefixIcon: Icon(Icons.public_rounded),
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) => value == null || value.trim().isEmpty
+                    ? '국가를 입력해 주세요.'
+                    : null,
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
                 key: const ValueKey('trip-city-field'),
                 controller: _cityController,
                 textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
-                  labelText: '도시',
+                  labelText: '도시 (선택)',
+                  hintText: '여러 도시를 여행한다면 비워 두세요',
                   prefixIcon: Icon(Icons.location_city_rounded),
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? '도시를 입력해 주세요.'
-                    : null,
               ),
               const SizedBox(height: 12),
               InkWell(
@@ -246,6 +261,7 @@ class _TripCreateSheetState extends ConsumerState<TripCreateSheet> {
           TripDraft(
             title: _titleController.text,
             city: _cityController.text.trim(),
+            country: _countryController.text.trim(),
             startDate: DateFormat('yyyy-MM-dd').format(_dateRange.start),
             endDate: DateFormat('yyyy-MM-dd').format(_dateRange.end),
             travelers: _travelers,

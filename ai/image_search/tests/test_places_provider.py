@@ -67,6 +67,33 @@ class TestResolvePlace:
         assert captured["path"].endswith("/v1/places:searchText")
         assert captured["api_key"] == "test-key"
         assert captured["body"]["textQuery"] == "센소지"
+        assert captured["body"]["pageSize"] == 1
+        assert "regionCode" not in captured["body"]
+
+    def test_resolves_non_japanese_place_without_region_restriction(self):
+        captured = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(
+                200,
+                json={
+                    "places": [
+                        google_place(
+                            id="eiffel-tower",
+                            displayName={"text": "에펠탑"},
+                            formattedAddress="Paris, France",
+                            location={"latitude": 48.8583701, "longitude": 2.2944813},
+                        )
+                    ]
+                },
+            )
+
+        place = make_provider(handler).resolve_place("에펠탑")
+
+        assert place.place_id == "eiffel-tower"
+        assert place.latitude == 48.8583701
+        assert "regionCode" not in captured["body"]
 
     # 검색 결과가 없으면 ValueError 를 던진다
     def test_raises_when_no_result(self):
@@ -111,7 +138,10 @@ def google_place(**overrides) -> dict:
         "primaryType": "buddhist_temple",
         "addressComponents": [
             {"longText": "다이토구", "types": ["locality", "political"]},
-            {"longText": "도쿄도", "types": ["administrative_area_level_1", "political"]},
+            {
+                "longText": "도쿄도",
+                "types": ["administrative_area_level_1", "political"],
+            },
             {"longText": "일본", "types": ["country", "political"]},
         ],
     }
@@ -138,7 +168,10 @@ class TestEnrichedParsing:
     # locality 가 없으면 administrative_area_level_1 로 폴백한다
     def test_falls_back_to_admin_area_when_no_locality(self):
         components = [
-            {"longText": "도쿄도", "types": ["administrative_area_level_1", "political"]},
+            {
+                "longText": "도쿄도",
+                "types": ["administrative_area_level_1", "political"],
+            },
             {"longText": "일본", "types": ["country", "political"]},
         ]
 
@@ -246,6 +279,7 @@ class TestSearchNearby:
         assert circle["center"] == {"latitude": 35.7148, "longitude": 139.7967}
         assert circle["radius"] == 1500
         assert captured["body"]["maxResultCount"] == 4
+        assert "regionCode" not in captured["body"]
         assert "cafe" in captured["body"]["includedTypes"]
 
     # 카테고리가 없으면(또는 매핑이 없으면) includedTypes 를 보내지 않는다

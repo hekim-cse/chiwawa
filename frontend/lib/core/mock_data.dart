@@ -123,12 +123,6 @@ const schedules = [
   ),
 ];
 
-const freeTimeRecommends = [
-  FreeTimeRecommend(name: '아메요코 시장', walk: '8분', duration: '45분'),
-  FreeTimeRecommend(name: '도쿄국립박물관', walk: '5분', duration: '60분'),
-  FreeTimeRecommend(name: '야나카 긴자 상점가', walk: '12분', duration: '50분'),
-];
-
 const photoSearchResult = PhotoSearchResult(
   id: 'place-sensoji',
   name: '아사쿠사 센소지',

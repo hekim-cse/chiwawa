@@ -14,12 +14,15 @@ from chiwawa_backend.schemas.travel import (
     FreeTimeRecommendationResponse,
 )
 from chiwawa_backend.schemas.trips import TripRead
+from chiwawa_backend.state import AppState
+from tests.free_time_fakes import seed_free_time_recommendation_context
 from tests.photo_place_fakes import create_photo_place_test_app
 
 
 @pytest.mark.anyio
 async def test_confirmation_commands_are_idempotent() -> None:
-    app = create_photo_place_test_app()
+    state = AppState()
+    app = create_photo_place_test_app(state)
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -28,11 +31,13 @@ async def test_confirmation_commands_are_idempotent() -> None:
             "/api/v1/trips",
             json={
                 "city": "Tokyo",
+                "country": "Japan",
                 "start_date": "2026-07-10",
                 "end_date": "2026-07-10",
             },
         )
         trip = TripRead.model_validate_json(trip_response.text)
+        seed_free_time_recommendation_context(state, trip.id)
 
         search_response = await client.post(
             f"/api/v1/trips/{trip.id}/photo-places/search",
@@ -97,6 +102,7 @@ async def test_confirm_retry_reflects_updated_wanted_place() -> None:
             "/api/v1/trips",
             json={
                 "city": "Tokyo",
+                "country": "Japan",
                 "start_date": "2026-07-10",
                 "end_date": "2026-07-10",
             },
