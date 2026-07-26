@@ -144,13 +144,11 @@ class _TripCreateSheetState extends ConsumerState<TripCreateSheet> {
                 controller: _cityController,
                 textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(
-                  labelText: '도시',
+                  labelText: '도시 (선택)',
+                  hintText: '여러 도시를 여행한다면 비워 두세요',
                   prefixIcon: Icon(Icons.location_city_rounded),
                   border: OutlineInputBorder(),
                 ),
-                validator: (value) => value == null || value.trim().isEmpty
-                    ? '도시를 입력해 주세요.'
-                    : null,
               ),
               const SizedBox(height: 12),
               InkWell(

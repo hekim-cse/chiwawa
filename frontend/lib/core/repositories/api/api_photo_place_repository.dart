@@ -6,6 +6,9 @@ import '../../models/travel_models.dart';
 import '../../services/trip_session_service.dart';
 import '../photo_place_repository.dart';
 
+/// Modal 콜드 스타트와 백엔드의 제한적 재시도까지 기다리는 사진 분석 요청 제한.
+const _photoAnalysisTimeout = Duration(seconds: 310);
+
 /// chiwawa_backend 사진 장소 탐색 구현체.
 /// POST /api/v1/trips/{trip_id}/photo-places/search  (🔒 Bearer 필요)
 class ApiPhotoPlaceRepository implements PhotoPlaceRepository {
@@ -47,6 +50,10 @@ class ApiPhotoPlaceRepository implements PhotoPlaceRepository {
             contentType: DioMediaType.parse(upload.mimeType),
           ),
         }),
+        options: Options(
+          sendTimeout: _photoAnalysisTimeout,
+          receiveTimeout: _photoAnalysisTimeout,
+        ),
       );
       final json = response.data ?? const {};
       final searchId = json['id']?.toString() ?? '';

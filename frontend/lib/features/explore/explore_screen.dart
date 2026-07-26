@@ -8,6 +8,7 @@ import '../../core/models/photo_upload.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/saved_photo_places.dart';
+import '../plan/plan_controller.dart';
 import '../../shared/widgets/app_viewport.dart';
 import '../../shared/widgets/app_page_header.dart';
 import 'explore_controller.dart';
@@ -126,15 +127,16 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
         );
       return;
     }
-    final added =
+    final saved =
         ref.read(savedPhotoPlacesProvider.notifier).addPlace(confirmed);
+    final addedToPlan = ref.read(planActionsProvider).addSavedPlace(confirmed);
     final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
     messenger.showSnackBar(
       SnackBar(
         content: Text(
-          added
-              ? '${result.name} 일정 후보에 저장했어요.'
-              : '${result.name} 이미 저장된 장소예요.',
+          saved || addedToPlan
+              ? '${result.name} 일정에 추가했어요.'
+              : '${result.name} 이미 일정에 있는 장소예요.',
         ),
       ),
     );

@@ -35,6 +35,32 @@ void main() {
     expect(draft.toJson()['country'], 'Japan');
   });
 
+  test('TripDraft serializes an omitted city as null', () {
+    const draft = TripDraft(
+      title: '유럽 여러 도시 여행',
+      city: '',
+      country: 'France',
+      startDate: '2026-08-01',
+      endDate: '2026-08-05',
+    );
+
+    expect(draft.toJson(), containsPair('city', null));
+    expect(
+      Trip.fromJson({
+        'id': 'trip-multi-city',
+        'title': '유럽 여러 도시 여행',
+        'city': null,
+        'country': 'France',
+        'start_date': '2026-08-01',
+        'end_date': '2026-08-05',
+        'travelers': 1,
+        'interests': const <String>[],
+        'travel_style': 'balanced',
+      }).toTripInfo().city,
+      'France',
+    );
+  });
+
   test('ScheduleItem parses and serializes API fields', () {
     final schedule = ScheduleItem.fromJson(const {
       'id': 'schedule-1',

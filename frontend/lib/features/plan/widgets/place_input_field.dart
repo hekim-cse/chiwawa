@@ -67,6 +67,7 @@ class _PlaceInputFieldState extends State<PlaceInputField> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TextField(
+            key: const ValueKey('plan-visit-place-search'),
             controller: _controller,
             textInputAction: TextInputAction.search,
             onChanged: widget.onQueryChanged,
@@ -121,14 +122,17 @@ class _PlaceInputFieldState extends State<PlaceInputField> {
       PlanPlaceSearchStatus.success => Column(
           children: [
             for (final candidate in widget.searchState.results)
-              ListTile(
-                key: ValueKey(
-                  'visit-place-result-${candidate.providerPlaceId}',
+              Material(
+                color: Colors.transparent,
+                child: ListTile(
+                  key: ValueKey(
+                    'visit-place-result-${candidate.providerPlaceId}',
+                  ),
+                  title: Text(candidate.name),
+                  subtitle: Text(candidate.formattedAddress),
+                  trailing: const Icon(Icons.add_circle_outline_rounded),
+                  onTap: () => widget.onPlaceSelected(candidate),
                 ),
-                title: Text(candidate.name),
-                subtitle: Text(candidate.formattedAddress),
-                trailing: const Icon(Icons.add_circle_outline_rounded),
-                onTap: () => widget.onPlaceSelected(candidate),
               ),
           ],
         ),

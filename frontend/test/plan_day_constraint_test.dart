@@ -35,7 +35,6 @@ void main() {
     expect(constraint.startTime, '09:00');
     expect(constraint.endPlace, isNull);
     expect(constraint.endTime, '20:00');
-    expect(constraint.maxPlaceCount, 4);
     expect(constraint.isValid, isFalse);
     expect(
       constraint.validationMessage,
@@ -68,21 +67,26 @@ void main() {
     expect(constraint.validationMessage, '도착 시간은 출발 시간보다 늦어야 해요.');
   });
 
-  test('day edits stay isolated and place count stays in range', () {
+  test('day constraint allows a round trip from and to the same place', () {
+    final constraint = const PlanDayConstraint().copyWith(
+      startPlace: _hotel,
+      endPlace: _hotel,
+    );
+
+    expect(constraint.isValid, isTrue);
+    expect(constraint.validationMessage, isNull);
+  });
+
+  test('day edits stay isolated', () {
     final controller = PlanDayConstraintsController();
     addTearDown(controller.dispose);
 
     controller.selectStartPlace(1, _station);
     controller.updateStartTime(1, '10:30');
-    controller.updateMaxPlaceCount(1, 99);
     controller.selectEndPlace(2, _airport);
 
     expect(controller.state.forDay(1).startPlace?.name, '도쿄역');
     expect(controller.state.forDay(1).startTime, '10:30');
-    expect(
-      controller.state.forDay(1).maxPlaceCount,
-      PlanDayConstraint.maximumPlaceCount,
-    );
     expect(controller.state.forDay(2).startPlace, isNull);
     expect(controller.state.forDay(2).endPlace?.name, '하네다 공항');
   });
