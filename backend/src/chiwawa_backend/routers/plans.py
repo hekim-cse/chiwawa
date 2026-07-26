@@ -110,13 +110,12 @@ async def optimize_route(
             state.issued_route_recommendations[route_key] = (
                 response.recommendation_groups
             )
-            start = payload.start
             end = payload.end
-            if start is None or end is None:
+            if end is None:
                 raise DomainValidationError(MISSING_ENDPOINTS_MESSAGE)
 
-            #state.issued_route_endpoints[route_key] = (start, end)
-            state.issued_route_endpoints[route_key] = (payload.start, payload.end)
+            state.issued_route_endpoints[route_key] = (payload.start, end)
+            #state.issued_route_endpoints[route_key] = (payload.start, payload.end)
             state.issued_route_responses[route_key] = response
             day_plan = next(
                 day for day in planning.day_plans if day.day_index == payload.day_index
