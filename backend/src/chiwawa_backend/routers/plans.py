@@ -10,6 +10,7 @@ from chiwawa_backend.dependencies import (
 from chiwawa_backend.errors import DomainValidationError
 from chiwawa_backend.schemas.plans import (
     AIPlanCreateRequest,
+    ConfirmedRouteOptimizationsResponse,
     PlanConfirmResponse,
     PlanDraftRead,
     PlanJobRead,
@@ -23,6 +24,7 @@ from chiwawa_backend.services.route_optimization import (
     MISSING_ENDPOINTS_MESSAGE,
     RoutePlanner,
     build_modal_request,
+    list_confirmed_route_optimizations,
     route_optimization_date,
     to_route_optimization_response,
 )
@@ -108,7 +110,27 @@ async def optimize_route(
             state.issued_route_recommendations[route_key] = (
                 response.recommendation_groups
             )
+            state.issued_route_endpoints[route_key] = (payload.start, payload.end)
+            state.issued_route_responses[route_key] = response
+            day_plan = next(
+                day for day in planning.day_plans if day.day_index == payload.day_index
+            )
+            requested_mode = response.timeline.travel_mode
+            state.issued_route_options[route_key] = next(
+                option
+                for option in day_plan.route_options
+                if option.travel_mode == requested_mode
+            )
+            state.issued_route_timezones[route_key] = timezone
     return response
+
+
+@router.get("/route-optimizations/confirmed")
+def get_confirmed_route_optimizations(
+    trip_id: str,
+    state: StateDep,
+) -> ConfirmedRouteOptimizationsResponse:
+    return list_confirmed_route_optimizations(state, trip_id)
 
 
 @router.post("/route-optimizations/confirm")

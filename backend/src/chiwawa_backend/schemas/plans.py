@@ -5,6 +5,7 @@ from pydantic import Field, model_validator
 
 from chiwawa_backend.schemas.ai_planning import (
     RecommendationGroupRead,
+    RouteOptionRead,
     TimelineRead,
     TripPlanningPlace,
 )
@@ -86,7 +87,7 @@ class RouteOptimizationRequest(ApiModel):
     day_index: int = Field(default=1, ge=1)
     planned_start_time: dt.time = dt.time(hour=9)
     planned_end_time: dt.time = dt.time(hour=20)
-    max_place_count: int = Field(default=4, ge=1, le=12)
+    max_place_count: int | None = Field(default=None, ge=1)
     start: TripPlanningPlace | None = None
     end: TripPlanningPlace | None = None
     wanted_place_ids: list[str] = Field(default_factory=list)
@@ -119,6 +120,20 @@ class RouteOptimizationResponse(ApiModel):
     recommendation_groups: list[RecommendationGroupRead] = Field(
         default_factory=list,
     )
+
+
+class ConfirmedRouteOptimizationRead(ApiModel):
+    day_index: int = Field(ge=1)
+    start: TripPlanningPlace
+    end: TripPlanningPlace
+    route: RouteOptimizationResponse
+    route_option: RouteOptionRead | None = None
+    timezone: str | None = Field(default=None, min_length=1)
+
+
+class ConfirmedRouteOptimizationsResponse(ApiModel):
+    trip_id: str
+    items: list[ConfirmedRouteOptimizationRead]
 
 
 class RouteOptimizationConfirmRequest(ApiModel):

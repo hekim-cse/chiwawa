@@ -155,6 +155,19 @@ async def test_route_optimization_calls_modal_and_preserves_frontend_contract() 
             },
         )
         wanted_place_id = WantedPlaceRead.model_validate(place_response.json()).id
+        endpoint_place_id = WantedPlaceRead.model_validate(
+            (
+                await client.post(
+                    f"/api/v1/trips/{trip_id}/wanted-places",
+                    json={
+                        "provider_place_id": "tokyo-station",
+                        "name": "도쿄역",
+                        "latitude": 35.6812,
+                        "longitude": 139.7671,
+                    },
+                )
+            ).json(),
+        ).id
 
         response = await client.post(
             f"/api/v1/trips/{trip_id}/route-optimizations",
@@ -171,12 +184,12 @@ async def test_route_optimization_calls_modal_and_preserves_frontend_contract() 
                     "lng": 139.7671,
                 },
                 "end": {
-                    "place_id": "shibuya-station",
-                    "name": "시부야역",
-                    "lat": 35.658,
-                    "lng": 139.7016,
+                    "place_id": "tokyo-station",
+                    "name": "도쿄역",
+                    "lat": 35.6812,
+                    "lng": 139.7671,
                 },
-                "wanted_place_ids": [wanted_place_id],
+                "wanted_place_ids": [endpoint_place_id, wanted_place_id],
                 "pace": "balanced",
                 "include_recommendations": True,
             },
@@ -187,6 +200,9 @@ async def test_route_optimization_calls_modal_and_preserves_frontend_contract() 
         )
         schedule_response = await client.get(
             f"/api/v1/trips/{trip_id}/schedule",
+        )
+        confirmed_routes_response = await client.get(
+            f"/api/v1/trips/{trip_id}/route-optimizations/confirmed",
         )
 
     assert response.status_code == HTTPStatus.CREATED
@@ -201,10 +217,20 @@ async def test_route_optimization_calls_modal_and_preserves_frontend_contract() 
     assert planner.request is not None
     assert planner.request.days[0].date.isoformat() == "2026-08-01"
     assert planner.request.timezone == "Asia/Tokyo"
+    assert planner.request.days[0].start_place.place_id == "tokyo-station"
+    assert planner.request.days[0].end_place.place_id.startswith("chiwawa:end:1:")
+    assert planner.request.days[0].end_place.lat == 35.6812
+    assert planner.request.days[0].end_place.lng == 139.7671
     assert planner.request.pois[0].place_id == "google-tokyo-tower"
+    assert len(planner.request.pois) == 1
     assert planner.request.pois[0].preferred_day_index == 1
     assert planner.include_recommendations is True
     assert confirm_response.status_code == HTTPStatus.OK
+    assert confirmed_routes_response.status_code == HTTPStatus.OK
+    confirmed_route = confirmed_routes_response.json()["items"][0]
+    assert confirmed_route["start"]["name"] == "도쿄역"
+    assert confirmed_route["end"]["name"] == "도쿄역"
+    assert confirmed_route["route"]["timeline"] == response.json()["timeline"]
     schedule = schedule_response.json()["items"]
     assert len(schedule) == 1
     assert schedule[0]["name"] == "도쿄 타워"

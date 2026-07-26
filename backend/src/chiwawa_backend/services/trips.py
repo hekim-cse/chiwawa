@@ -91,6 +91,10 @@ def update_trip(
     for route_key in [key for key in state.issued_route_timelines if key[0] == trip_id]:
         _ = state.issued_route_timelines.pop(route_key, None)
         _ = state.issued_route_recommendations.pop(route_key, None)
+        _ = state.issued_route_endpoints.pop(route_key, None)
+        _ = state.issued_route_responses.pop(route_key, None)
+        _ = state.issued_route_options.pop(route_key, None)
+        _ = state.issued_route_timezones.pop(route_key, None)
     return updated
 
 
@@ -132,9 +136,15 @@ def delete_trip(state: AppState, trip_id: str) -> None:
         _ = state.added_recommendations.pop(recommendation_id, None)
     for route_key in [key for key in state.confirmed_route_items if key[0] == trip_id]:
         _ = state.confirmed_route_items.pop(route_key, None)
+    for route_key in [key for key in state.confirmed_routes if key[0] == trip_id]:
+        _ = state.confirmed_routes.pop(route_key, None)
     for route_key in [key for key in state.issued_route_timelines if key[0] == trip_id]:
         _ = state.issued_route_timelines.pop(route_key, None)
         _ = state.issued_route_recommendations.pop(route_key, None)
+        _ = state.issued_route_endpoints.pop(route_key, None)
+        _ = state.issued_route_responses.pop(route_key, None)
+        _ = state.issued_route_options.pop(route_key, None)
+        _ = state.issued_route_timezones.pop(route_key, None)
 
 
 def _has_dated_resource_outside(
