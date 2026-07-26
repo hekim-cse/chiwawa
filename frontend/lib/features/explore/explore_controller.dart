@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/auth/auth_controller.dart';
+import '../../core/api/api_exception.dart';
 import '../../core/models/photo_upload.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/repositories/photo_place_repository.dart';
@@ -35,12 +36,12 @@ final exploreAnalysisErrorProvider = StateProvider<String?>((ref) {
   return null;
 });
 
-final exploreSelectedResultProvider = StateProvider<PhotoSearchResult>(
-  (ref) => ref.watch(photoPlaceRepositoryProvider).defaultResult,
+final exploreSelectedResultProvider = StateProvider<PhotoSearchResult?>(
+  (ref) => null,
 );
 
 final exploreCandidatesProvider = StateProvider<List<PhotoSearchResult>>(
-  (ref) => [ref.watch(photoPlaceRepositoryProvider).defaultResult],
+  (ref) => const [],
 );
 
 final exploreControllerProvider = Provider<ExploreController>((ref) {
@@ -62,6 +63,7 @@ class ExploreController {
 
   void replaceSelectedCandidate(PhotoSearchResult updated) {
     final selected = _ref.read(exploreSelectedResultProvider);
+    if (selected == null) return;
     final candidates = _ref.read(exploreCandidatesProvider);
     _ref.read(exploreCandidatesProvider.notifier).state = List.unmodifiable([
       for (final candidate in candidates)
@@ -106,11 +108,11 @@ class ExploreController {
           uniqueCandidates.first;
       _ref.read(exploreResultVisibleProvider.notifier).state = true;
       return true;
-    } catch (_) {
+    } catch (error) {
       if (requestVersion == _analysisVersion) {
         _ref.read(exploreResultVisibleProvider.notifier).state = false;
         _ref.read(exploreAnalysisErrorProvider.notifier).state =
-            '사진 분석을 완료하지 못했어요.';
+            mapApiErrorToMessage(error);
       }
       return false;
     } finally {

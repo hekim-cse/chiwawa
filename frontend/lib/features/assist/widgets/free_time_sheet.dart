@@ -38,7 +38,7 @@ class FreeTimeRecommendSheet extends ConsumerWidget {
                 controller: scrollController,
                 children: [
                   Text(
-                    '지금 1시간 여유가 있어요',
+                    '일정 사이에 들를 수 있는 장소예요',
                     style: Theme.of(context)
                         .textTheme
                         .titleMedium
@@ -49,8 +49,15 @@ class FreeTimeRecommendSheet extends ConsumerWidget {
                     value: recommendsAsync,
                     loadingHeight: 120,
                     onRetry: () => ref.invalidate(freeTimeRecommendsProvider),
-                    builder: (recommends) => Column(
-                      children: [
+                    builder: (recommends) => recommends.isEmpty
+                        ? const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 36),
+                            child: Center(
+                              child: Text('현재 경로에 삽입 가능한 추천 장소가 없어요.'),
+                            ),
+                          )
+                        : Column(
+                            children: [
                         for (final item in recommends) ...[
                           _RecommendCard(
                             item: item,
@@ -71,8 +78,8 @@ class FreeTimeRecommendSheet extends ConsumerWidget {
                           ),
                           const SizedBox(height: 12),
                         ],
-                      ],
-                    ),
+                            ],
+                          ),
                   ),
                 ],
               ),
@@ -115,7 +122,7 @@ class _RecommendCard extends StatelessWidget {
           Wrap(
             spacing: 8,
             children: [
-              _InfoChip(label: '도보 ${item.walk}'),
+              _InfoChip(label: '추가 이동 약 ${item.walk}'),
               _InfoChip(label: '약 ${item.duration} 소요'),
             ],
           ),

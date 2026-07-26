@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../app/theme.dart';
-import '../../../core/assets/app_images.dart';
-import '../../../core/env.dart';
 import '../../../core/models/travel_models.dart';
 
 class TodaySchedulePanel extends StatelessWidget {
@@ -45,7 +43,7 @@ class TodaySchedulePanel extends StatelessWidget {
             const Padding(
               padding: EdgeInsets.all(ChiwawaSpacing.sm),
               child: Text(
-                '오늘 등록된 일정이 아직 없어요.',
+                '확정된 여행 일정이 아직 없어요.',
                 style: TextStyle(
                   color: ChiwawaColors.textSecondary,
                   fontWeight: FontWeight.w700,
@@ -81,7 +79,6 @@ class TodaySchedulePanel extends StatelessWidget {
               isLast: index == remainingSchedules.length - 1,
               isPast:
                   remainingSchedules[index].status == ScheduleStatus.completed,
-              imageSeed: index + 21,
               onTap: remainingSchedules[index].status == ScheduleStatus.free
                   ? onFreeTap
                   : null,
@@ -184,7 +181,6 @@ class _ScheduleSummaryRow extends StatelessWidget {
     required this.schedule,
     required this.isLast,
     required this.isPast,
-    required this.imageSeed,
     this.onTap,
     super.key,
   });
@@ -192,7 +188,6 @@ class _ScheduleSummaryRow extends StatelessWidget {
   final ScheduleItem schedule;
   final bool isLast;
   final bool isPast;
-  final int imageSeed;
   final VoidCallback? onTap;
 
   @override
@@ -239,7 +234,6 @@ class _ScheduleSummaryRow extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               _PlaceThumbnail(
-                seed: imageSeed,
                 label: schedule.place ?? '빈 시간 추천',
               ),
             ],
@@ -284,28 +278,13 @@ class _SchedulePin extends StatelessWidget {
 }
 
 class _PlaceThumbnail extends StatelessWidget {
-  const _PlaceThumbnail({required this.seed, required this.label});
+  const _PlaceThumbnail({required this.label});
 
-  final int seed;
   final String label;
 
   @override
   Widget build(BuildContext context) {
-    if (useApiBackend) return _ThumbnailFallback(label: label);
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(ChiwawaRadii.control),
-      child: SizedBox(
-        width: 72,
-        height: 54,
-        child: Image.asset(
-          MockImages.placeThumbnail(seed),
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) =>
-              _ThumbnailFallback(label: label),
-        ),
-      ),
-    );
+    return _ThumbnailFallback(label: label);
   }
 }
 

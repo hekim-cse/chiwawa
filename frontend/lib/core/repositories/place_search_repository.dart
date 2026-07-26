@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api/dio_client.dart';
 import '../auth/auth_controller.dart';
 import '../env.dart';
 import '../models/place_search_models.dart';
@@ -10,7 +11,7 @@ final placeSearchRepositoryProvider = Provider<PlaceSearchRepository>((ref) {
   ref.watch(authSessionRevisionProvider);
   ref.watch(currentTripRevisionProvider);
   if (useApiBackend) {
-    return const ApiPlaceSearchRepository();
+    return ApiPlaceSearchRepository(dio: ref.watch(dioClientProvider));
   }
   return const MockPlaceSearchRepository();
 });

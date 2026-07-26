@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 
 import '../../api/api_exception.dart';
-import '../../mock_data.dart' as mock;
 import '../../models/photo_upload.dart';
 import '../../models/travel_models.dart';
 import '../../services/trip_session_service.dart';
@@ -14,9 +13,6 @@ class ApiPhotoPlaceRepository implements PhotoPlaceRepository {
 
   final Dio dio;
   final TripIdStore tripIdStore;
-
-  @override
-  PhotoSearchResult get defaultResult => mock.photoSearchResult;
 
   @override
   Future<List<PhotoSearchResult>> fetchRecentSearches() async {
@@ -43,7 +39,7 @@ class ApiPhotoPlaceRepository implements PhotoPlaceRepository {
     }
     try {
       final response = await dio.post<Map<String, Object?>>(
-        '/api/v1/trips/$tripId/photo-places/search',
+        '/api/v1/trips/$tripId/photo-places/search-upload',
         data: FormData.fromMap({
           'file': MultipartFile.fromBytes(
             upload.bytes,
@@ -104,6 +100,7 @@ class ApiPhotoPlaceRepository implements PhotoPlaceRepository {
     final address = [city, country].where((part) => part.isNotEmpty).join(', ');
     return PhotoSearchResult(
       id: json['id'] as String? ?? '',
+      providerPlaceId: json['provider_place_id'] as String? ?? '',
       searchId: searchId,
       name: json['name'] as String? ?? '',
       address: address,

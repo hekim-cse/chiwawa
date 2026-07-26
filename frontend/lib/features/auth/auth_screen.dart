@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -9,6 +10,7 @@ import '../../app/theme.dart';
 import '../../shared/widgets/app_viewport.dart';
 import '../../core/api/dio_client.dart';
 import '../../core/auth/auth_controller.dart';
+import '../../core/auth/oauth_popup.dart';
 import '../../core/env.dart';
 import '../../core/repositories/auth_repository.dart';
 import '../../shared/widgets/mascot_avatar.dart';
@@ -59,11 +61,29 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
 
     try {
       if (useApiBackend) {
-        // 실서버: 백엔드가 구글 동의 화면으로 리다이렉트 →
-        // 로그인 완료 시 chiwawa://auth?code=... 로 앱 복귀하면
-        // DeepLinkService가 callback API로 access_token을 교환한다.
         final baseUrl = ref.read(apiBaseUrlProvider);
-        final loginUri = Uri.parse('$baseUrl/api/v1/auth/google/login');
+        final backendUri = Uri.parse(baseUrl);
+        final loginUri = Uri.parse('$baseUrl/api/v1/auth/google/login').replace(
+          queryParameters: kIsWeb
+              ? {'popup_origin': Uri.base.origin}
+              : const <String, String>{},
+        );
+        if (kIsWeb) {
+          final result = await openGoogleOAuthPopup(
+            loginUri: loginUri,
+            backendOrigin: backendUri.origin,
+          );
+          await ref.read(authControllerProvider.notifier).signInWithToken(
+                result.accessToken,
+                user: AuthUser(
+                  name: result.profile.displayName,
+                  email: result.profile.email,
+                  pictureUrl: result.pictureUrl,
+                ),
+              );
+          if (mounted) context.go('/home');
+          return;
+        }
         final opened = await launchUrl(
           loginUri,
           mode: LaunchMode.externalApplication,
@@ -84,6 +104,10 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               ),
         );
         if (mounted) context.go('/home');
+      }
+    } catch (error) {
+      if (mounted) {
+        _showSnackBar(error.toString().replaceFirst('Bad state: ', ''));
       }
     } finally {
       if (mounted) setState(() => _launching = false);
@@ -197,7 +221,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'AI와 함께하는 일본 여행 플래너',
+                          'AI와 함께하는 자유여행 플래너',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: ChiwawaColors.textSecondary,

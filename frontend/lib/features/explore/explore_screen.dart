@@ -51,9 +51,10 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
     final selectedResult = ref.watch(exploreSelectedResultProvider);
     final candidates = ref.watch(exploreCandidatesProvider);
     ref.watch(savedPhotoPlacesProvider);
-    final selectedResultSaved = ref
-        .read(savedPhotoPlacesProvider.notifier)
-        .containsPlace(selectedResult);
+    final selectedResultSaved = selectedResult != null &&
+        ref
+            .read(savedPhotoPlacesProvider.notifier)
+            .containsPlace(selectedResult);
 
     return SafeArea(
       child: ListView(
@@ -81,7 +82,7 @@ class _ExploreScreenState extends ConsumerState<ExploreScreen> {
               onChooseAnother: _pickAndAnalyzePhoto,
             ),
           ],
-          if (showResult) ...[
+          if (showResult && selectedResult != null) ...[
             const SizedBox(height: 18),
             if (candidates.length > 1) ...[
               CandidateSelector(

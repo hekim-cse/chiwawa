@@ -191,6 +191,7 @@ void main() {
     final adapter = _QueueHttpClientAdapter([
       {
         'id': 'wanted-server-1',
+        'provider_place_id': 'google-tokyo-tower',
         'name': '도쿄 타워',
         'city': '도쿄',
         'country': '일본',
@@ -207,7 +208,31 @@ void main() {
             'estimated_travel_minutes': 9,
           },
         ],
+        'timeline': {
+          'day_index': 1,
+          'travel_mode': 'WALK',
+          'planned_start_at': '2026-08-01T09:00:00+09:00',
+          'planned_end_at': '2026-08-01T18:00:00+09:00',
+          'actual_end_at': '2026-08-01T10:09:00+09:00',
+          'total_travel_minutes': 9,
+          'total_stay_minutes': 60,
+          'timeline_stops': [
+            {
+              'stop_type': 'POI',
+              'place_id': 'wanted-server-1',
+              'name': '도쿄 타워',
+              'arrival_at': '2026-08-01T09:09:00+09:00',
+              'departure_at': '2026-08-01T10:09:00+09:00',
+              'stay_minutes': 60,
+            },
+          ],
+          'warnings': <String>[],
+        },
+        'missing_segments': <String>[],
+        'warnings': <String>[],
+        'recommendation_groups': <Object?>[],
       },
+      <String, Object?>{},
     ]);
     dio.httpClientAdapter = adapter;
     final repository = ApiPlanRepository(
@@ -218,6 +243,7 @@ void main() {
     final saved = await repository.saveWantedPlace(
       const PlanRoutePlaceInput(
         localId: 'manual:1',
+        providerPlaceId: 'google-tokyo-tower',
         name: '도쿄 타워',
         latitude: 35.6586,
         longitude: 139.7454,
@@ -229,6 +255,7 @@ void main() {
           PlanRoutePlaceInput(
             localId: 'manual:1',
             serverPlaceId: saved.id,
+            providerPlaceId: saved.providerPlaceId,
             name: saved.name,
             latitude: saved.latitude,
             longitude: saved.longitude,
@@ -244,13 +271,22 @@ void main() {
         endPlace: _endPlace,
       ),
     );
+    await repository.confirmRoute(result);
 
     expect(saved.id, 'wanted-server-1');
     expect(adapter.requests.first.path, contains('/wanted-places'));
-    expect(adapter.requests.last.path, contains('/route-optimizations'));
     expect(
-      adapter.requests.last.data,
+      adapter.requests.last.path,
+      contains('/route-optimizations/confirm'),
+    );
+    expect(adapter.requests[1].path, contains('/route-optimizations'));
+    expect(
+      adapter.requests[1].data,
       containsPair('transport_mode', 'walk'),
+    );
+    expect(
+      adapter.requests.first.data,
+      containsPair('provider_place_id', 'google-tokyo-tower'),
     );
     expect(result.places.single.placeId, 'wanted-server-1');
   });
@@ -286,6 +322,35 @@ void main() {
     expect(
       container.read(routeOptimizationProvider).result?.recommendationGroups,
       isEmpty,
+    );
+  });
+
+  test('selected visit place preserves Google identity and coordinates',
+      () async {
+    final repository = _RecordingPlanRepository();
+    final container = ProviderContainer(
+      overrides: [
+        planRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final added = await container
+        .read(planActionsProvider)
+        .saveAndAddSearchedPlace(_startPlace);
+
+    expect(added, isTrue);
+    expect(repository.savedInputs.single.providerPlaceId,
+        _startPlace.providerPlaceId);
+    expect(repository.savedInputs.single.latitude, _startPlace.latitude);
+    expect(
+      container
+          .read(selectedPlacesProvider)
+          .singleWhere(
+            (place) => place.providerPlaceId == _startPlace.providerPlaceId,
+          )
+          .providerPlaceId,
+      _startPlace.providerPlaceId,
     );
   });
 
@@ -392,6 +457,9 @@ class _RecordingPlanRepository implements PlanRepository {
 
   @override
   List<String> get defaultSelectedPlaces => const ['첫 장소', '두 장소'];
+
+  @override
+  Future<void> confirmRoute(RouteOptimizationResult result) async {}
 
   @override
   Future<WantedPlaceRecord> saveWantedPlace(

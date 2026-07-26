@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_exception.dart';
+import '../../core/models/place_search_models.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/models/route_planning_models.dart';
 import '../../core/models/transport_mode.dart';
@@ -69,26 +71,18 @@ class PlanItineraryController extends StateNotifier<PlanItineraryState> {
     String startTime = '09:00',
     RouteTimeline? timeline,
   }) {
-    final timelineStops = timeline?.timelineStops
-            .where((stop) => stop.stopType == 'POI')
-            .toList(growable: false) ??
-        const <RouteTimelineStop>[];
-    final stops = <PlanItineraryStop>[
-      for (var index = 0; index < places.length; index++)
-        PlanItineraryStop(
-          id: '${places[index].identityKey}-$index',
-          startTime: index < timelineStops.length
-              ? timelineStops[index].arrivalTime
-              : _timeForIndex(index, startTime),
-          departureTime: index < timelineStops.length
-              ? timelineStops[index].departureTime
-              : null,
-          stayMinutes: index < timelineStops.length
-              ? timelineStops[index].stayMinutes
-              : null,
-          place: places[index],
-        ),
-    ];
+    final timelineStops =
+        timeline?.timelineStops ?? const <RouteTimelineStop>[];
+    final stops = timelineStops.isEmpty
+        ? <PlanItineraryStop>[
+            for (var index = 0; index < places.length; index++)
+              PlanItineraryStop(
+                id: '${places[index].identityKey}-$index',
+                startTime: _timeForIndex(index, startTime),
+                place: places[index],
+              ),
+          ]
+        : _itineraryFromTimeline(places, timelineStops);
     _setCurrentStops(stops);
   }
 
@@ -131,6 +125,44 @@ class PlanItineraryController extends StateNotifier<PlanItineraryState> {
       }),
     );
   }
+}
+
+List<PlanItineraryStop> _itineraryFromTimeline(
+  List<RoutePlace> places,
+  List<RouteTimelineStop> timelineStops,
+) {
+  final placesById = {
+    for (final place in places)
+      if (place.placeId.isNotEmpty) place.placeId: place,
+  };
+  var poiIndex = 0;
+  final result = <PlanItineraryStop>[];
+  for (var index = 0; index < timelineStops.length; index++) {
+    final timelineStop = timelineStops[index];
+    RoutePlace? place = placesById[timelineStop.placeId];
+    if (timelineStop.stopType == 'POI' && place == null) {
+      if (poiIndex < places.length) place = places[poiIndex];
+      poiIndex += 1;
+    }
+    place ??= RoutePlace(
+      placeId: timelineStop.placeId,
+      name: timelineStop.name,
+      duration: '',
+      transport: '',
+      category: timelineStop.stopType == 'START' ? '출발지' : '도착지',
+    );
+    result.add(
+      PlanItineraryStop(
+        id: '${timelineStop.stopType}:${timelineStop.placeId}-$index',
+        startTime: timelineStop.arrivalTime,
+        departureTime: timelineStop.departureTime,
+        stayMinutes: timelineStop.stayMinutes,
+        stopType: timelineStop.stopType,
+        place: place,
+      ),
+    );
+  }
+  return result;
 }
 
 String _timeForIndex(int index, String startTime) {
@@ -194,6 +226,36 @@ class PlanActions {
     }
   }
 
+  Future<bool> saveAndAddSearchedPlace(PlaceSearchCandidate candidate) async {
+    final localId = 'place:${candidate.providerPlaceId}';
+    final existing = _ref
+        .read(selectedPlacesProvider)
+        .any((selection) => selection.id == localId);
+    if (existing) return false;
+    final record = await _ref.read(planRepositoryProvider).saveWantedPlace(
+          PlanRoutePlaceInput(
+            localId: localId,
+            providerPlaceId: candidate.providerPlaceId,
+            name: candidate.name,
+            address: candidate.formattedAddress,
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+          ),
+        );
+    return _addSelection(
+      PlanPlaceSelection(
+        id: localId,
+        name: candidate.name,
+        address: candidate.formattedAddress,
+        source: PlanPlaceSource.manual,
+        serverPlaceId: record.id,
+        providerPlaceId: candidate.providerPlaceId,
+        latitude: candidate.latitude,
+        longitude: candidate.longitude,
+      ),
+    );
+  }
+
   Future<bool> addRecommendation(RouteRecommendation recommendation) async {
     final candidate = recommendation.candidate;
     final localId = 'recommendation:${candidate.placeId}';
@@ -204,6 +266,7 @@ class PlanActions {
     final record = await _ref.read(planRepositoryProvider).saveWantedPlace(
           PlanRoutePlaceInput(
             localId: localId,
+            providerPlaceId: candidate.placeId,
             name: candidate.name,
             address: candidate.formattedAddress,
             latitude: candidate.latitude,
@@ -217,6 +280,7 @@ class PlanActions {
         address: candidate.formattedAddress,
         source: PlanPlaceSource.freeTime,
         serverPlaceId: record.id,
+        providerPlaceId: candidate.placeId,
         latitude: candidate.latitude,
         longitude: candidate.longitude,
       ),
@@ -327,6 +391,7 @@ class RouteOptimizationController
                   PlanRoutePlaceInput(
                     localId: selection.id,
                     serverPlaceId: selection.serverPlaceId,
+                    providerPlaceId: selection.providerPlaceId,
                     name: selection.name,
                     address: selection.address,
                     latitude: selection.latitude,
@@ -360,10 +425,10 @@ class RouteOptimizationController
             startTime: dayConstraint.startTime,
             timeline: limitedResult.timeline,
           );
-    } catch (_) {
+    } catch (error) {
       if (requestVersion != _requestVersion) return;
-      state = const RouteOptimizationState.failed(
-        '경로 최적화에 실패했어요. 다시 시도해 주세요.',
+      state = RouteOptimizationState.failed(
+        mapApiErrorToMessage(error),
       );
     }
   }
@@ -415,6 +480,7 @@ class RouteOptimizationController
       final record = await repository.saveWantedPlace(
         PlanRoutePlaceInput(
           localId: selection.id,
+          providerPlaceId: selection.providerPlaceId,
           name: selection.name,
           address: selection.address,
           latitude: selection.latitude,

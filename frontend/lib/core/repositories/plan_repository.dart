@@ -30,6 +30,8 @@ abstract class PlanRepository {
   Future<RouteOptimizationResult> optimizeRoute(
     RouteOptimizationRequest request,
   );
+
+  Future<void> confirmRoute(RouteOptimizationResult result);
 }
 
 class MockPlanRepository implements PlanRepository {
@@ -77,6 +79,13 @@ class MockPlanRepository implements PlanRepository {
       warnings: timeline.warnings,
       recommendationGroups: mock.routeRecommendationGroups,
     );
+  }
+
+  @override
+  Future<void> confirmRoute(RouteOptimizationResult result) async {
+    if (result.timeline == null) {
+      throw StateError('확정할 타임라인이 없습니다.');
+    }
   }
 }
 

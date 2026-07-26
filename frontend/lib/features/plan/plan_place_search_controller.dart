@@ -7,7 +7,7 @@ import '../../core/models/place_search_models.dart';
 import '../../core/repositories/place_search_repository.dart';
 import '../../core/services/trip_session_service.dart';
 
-enum PlanPlaceRole { start, end }
+enum PlanPlaceRole { start, end, visit }
 
 enum PlanPlaceSearchStatus { idle, loading, success, empty, failure }
 

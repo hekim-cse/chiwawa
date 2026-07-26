@@ -19,6 +19,7 @@ void main() {
     const draft = TripDraft(
       title: '오사카 여행',
       city: 'Osaka',
+      country: 'Japan',
       startDate: '2026-05-01',
       endDate: '2026-05-03',
       travelers: 3,

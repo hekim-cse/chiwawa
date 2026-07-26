@@ -10,6 +10,7 @@ class PlanRoutePlaceInput {
     required this.localId,
     required this.name,
     this.serverPlaceId,
+    this.providerPlaceId,
     this.address = '',
     this.latitude,
     this.longitude,
@@ -17,6 +18,7 @@ class PlanRoutePlaceInput {
 
   final String localId;
   final String? serverPlaceId;
+  final String? providerPlaceId;
   final String name;
   final String address;
   final double? latitude;
@@ -28,6 +30,7 @@ class PlanRoutePlaceInput {
     return PlanRoutePlaceInput(
       localId: localId,
       serverPlaceId: serverPlaceId ?? this.serverPlaceId,
+      providerPlaceId: providerPlaceId,
       name: name,
       address: address,
       latitude: latitude,
@@ -40,12 +43,14 @@ class WantedPlaceRecord {
   const WantedPlaceRecord({
     required this.id,
     required this.name,
+    this.providerPlaceId,
     this.address = '',
     this.latitude,
     this.longitude,
   });
 
   final String id;
+  final String? providerPlaceId;
   final String name;
   final String address;
   final double? latitude;
@@ -56,6 +61,7 @@ class WantedPlaceRecord {
     final country = json['country'] as String? ?? '';
     return WantedPlaceRecord(
       id: json['id']?.toString() ?? '',
+      providerPlaceId: json['provider_place_id']?.toString(),
       name: json['name'] as String? ?? '',
       address:
           [city, country].where((part) => part.trim().isNotEmpty).join(', '),
@@ -124,6 +130,15 @@ class RouteTimelineStop {
       stayMinutes: (json['stay_minutes'] as num?)?.toInt() ?? 0,
     );
   }
+
+  Map<String, Object?> toJson() => {
+        'stop_type': stopType,
+        'place_id': placeId,
+        'name': name,
+        'arrival_at': arrivalAt,
+        'departure_at': departureAt,
+        'stay_minutes': stayMinutes,
+      };
 }
 
 class RouteTimeline {
@@ -177,6 +192,19 @@ class RouteTimeline {
       warnings: rawWarnings.whereType<String>().toList(growable: false),
     );
   }
+
+  Map<String, Object?> toJson() => {
+        'day_index': dayIndex,
+        'travel_mode': travelMode.aiCode,
+        'planned_start_at': plannedStartAt,
+        'planned_end_at': plannedEndAt,
+        'actual_end_at': actualEndAt,
+        'total_travel_minutes': totalTravelMinutes,
+        'total_stay_minutes': totalStayMinutes,
+        'timeline_stops': [for (final stop in timelineStops) stop.toJson()],
+        'exceeds_planned_end': exceedsPlannedEnd,
+        'warnings': warnings,
+      };
 }
 
 class RouteRecommendationCandidate {

@@ -24,6 +24,9 @@ class _FailingPlanRepository implements PlanRepository {
   List<String> get defaultSelectedPlaces => const ['아사쿠사 센소지', '도쿄 타워'];
 
   @override
+  Future<void> confirmRoute(RouteOptimizationResult result) async {}
+
+  @override
   Future<RouteOptimizationResult> optimizeRoute(
     RouteOptimizationRequest request,
   ) async {
@@ -42,6 +45,9 @@ class _ControlledPlanRepository implements PlanRepository {
 
   @override
   List<String> get defaultSelectedPlaces => const ['첫 장소', '두 번째 장소'];
+
+  @override
+  Future<void> confirmRoute(RouteOptimizationResult result) async {}
 
   @override
   Future<RouteOptimizationResult> optimizeRoute(
@@ -71,6 +77,17 @@ const _testEndPlace = PlaceSearchCandidate(
   formattedAddress: '도쿄도 신주쿠구',
   latitude: 35.6896,
   longitude: 139.6917,
+);
+
+const _testPhotoResult = PhotoSearchResult(
+  id: 'place-sensoji',
+  searchId: 'search-sensoji',
+  name: '아사쿠사 센소지',
+  address: '도쿄 다이토구 아사쿠사 2-3-1',
+  category: '사찰',
+  latitude: 35.7148,
+  longitude: 139.7967,
+  confidence: 0.92,
 );
 
 void main() {
@@ -121,7 +138,7 @@ void main() {
     expect(find.textContaining('도쿄 봄 여행'), findsOneWidget);
     expect(find.text('복잡한 건 치와 두고 일단 와'), findsOneWidget);
     expect(find.bySemanticsLabel('치와와 마스코트'), findsOneWidget);
-    expect(find.text('오늘의 일정'), findsOneWidget);
+    expect(find.text('여행 일정'), findsOneWidget);
     expect(find.byKey(const ValueKey('home-next-schedule')), findsOneWidget);
     expect(find.text('홈'), findsWidgets);
     expect(find.text('일정'), findsOneWidget);
@@ -135,7 +152,7 @@ void main() {
     await tester.tap(find.text('빈 시간 추천').first);
     await tester.pumpAndSettle();
 
-    expect(find.text('지금 1시간 여유가 있어요'), findsOneWidget);
+    expect(find.text('일정 사이에 들를 수 있는 장소예요'), findsOneWidget);
   });
 
   testWidgets('chiwawa app opens the account settings my page', (tester) async {
@@ -361,6 +378,8 @@ void main() {
       ProviderScope(
         overrides: [
           exploreResultVisibleProvider.overrideWith((ref) => true),
+          exploreSelectedResultProvider.overrideWith((ref) => _testPhotoResult),
+          exploreCandidatesProvider.overrideWith((ref) => [_testPhotoResult]),
         ],
         child: const ChiwawaApp(),
       ),
@@ -467,6 +486,10 @@ void main() {
       '후쿠오카 주말 여행',
     );
     await tester.enterText(
+      find.byKey(const ValueKey('trip-country-field')),
+      '일본',
+    );
+    await tester.enterText(
       find.byKey(const ValueKey('trip-city-field')),
       '후쿠오카',
     );
@@ -479,7 +502,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('후쿠오카 주말 여행'), findsOneWidget);
-    expect(find.text('후쿠오카, Japan · 2명'), findsOneWidget);
+    expect(find.text('후쿠오카, 일본 · 2명'), findsOneWidget);
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
   });
 
@@ -507,8 +530,8 @@ void main() {
 
     expect(find.text('Google로 시작하기'), findsOneWidget);
     expect(find.text('로그인 없이 둘러보기'), findsOneWidget);
-    expect(find.text('AI와 함께하는 일본 여행 플래너'), findsOneWidget);
-    expect(find.text('오늘의 일정'), findsNothing);
+    expect(find.text('AI와 함께하는 자유여행 플래너'), findsOneWidget);
+    expect(find.text('여행 일정'), findsNothing);
   });
 
   testWidgets('auth gate blocks app until choice is made', (tester) async {
@@ -530,7 +553,7 @@ void main() {
     await tester.tap(find.text('Google로 시작하기'));
     await tester.pumpAndSettle();
 
-    expect(find.text('오늘의 일정'), findsOneWidget);
+    expect(find.text('여행 일정'), findsOneWidget);
 
     await tester.tap(find.text('마이'));
     await tester.pumpAndSettle();
@@ -614,10 +637,19 @@ void main() {
   testWidgets('Photo search result can be saved for plan building',
       (tester) async {
     useMobileTestSurface(tester);
+    const analyzedResult = PhotoSearchResult(
+      id: 'analyzed-place',
+      name: '아사쿠사 센소지',
+      address: '도쿄',
+      category: '명소',
+      confidence: 0.95,
+    );
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           exploreResultVisibleProvider.overrideWith((ref) => true),
+          exploreCandidatesProvider.overrideWith((ref) => [analyzedResult]),
+          exploreSelectedResultProvider.overrideWith((ref) => analyzedResult),
         ],
         child: const ChiwawaApp(),
       ),
@@ -654,6 +686,8 @@ void main() {
       ProviderScope(
         overrides: [
           exploreResultVisibleProvider.overrideWith((ref) => true),
+          exploreSelectedResultProvider.overrideWith((ref) => _testPhotoResult),
+          exploreCandidatesProvider.overrideWith((ref) => [_testPhotoResult]),
         ],
         child: const ChiwawaApp(),
       ),
@@ -703,6 +737,8 @@ void main() {
       ProviderScope(
         overrides: [
           exploreResultVisibleProvider.overrideWith((ref) => true),
+          exploreSelectedResultProvider.overrideWith((ref) => _testPhotoResult),
+          exploreCandidatesProvider.overrideWith((ref) => [_testPhotoResult]),
         ],
         child: const ChiwawaApp(),
       ),
@@ -945,9 +981,11 @@ void main() {
 
     final itinerary = container.read(planItineraryProvider).currentStops;
     final routeResult = container.read(routeOptimizationProvider).result;
-    expect(itinerary, hasLength(2));
+    expect(itinerary, hasLength(4));
     expect(routeResult?.timeline?.plannedStartAt, contains('T10:30'));
-    expect(itinerary.first.startTime, '10:42');
+    expect(itinerary.first.stopType, 'START');
+    expect(itinerary[1].startTime, '10:42');
+    expect(itinerary.last.stopType, 'END');
     expect(find.text('대중교통 · 2곳'), findsOneWidget);
   });
 
@@ -975,7 +1013,7 @@ void main() {
     );
     expect(container.read(transportModeProvider), TransportMode.transit);
     expect(
-      container.read(planItineraryProvider).currentStops[1].place.name,
+      container.read(planItineraryProvider).currentStops[2].place.name,
       '하라주쿠 다케시타도리',
     );
 
@@ -990,7 +1028,7 @@ void main() {
     expect(container.read(routeOptimizationProvider).status, AiJobStatus.done);
 
     expect(
-      container.read(planItineraryProvider).currentStops[1].place.name,
+      container.read(planItineraryProvider).currentStops[2].place.name,
       '시부야 스크램블',
     );
     expect(find.text('자동차 · 4곳'), findsOneWidget);
@@ -1130,7 +1168,7 @@ void main() {
     await tester.tap(find.widgetWithText(ElevatedButton, 'AI 경로 최적화'));
     await tester.pump(const Duration(milliseconds: 500));
 
-    expect(find.text('경로 최적화에 실패했어요. 다시 시도해 주세요.'), findsOneWidget);
+    expect(find.text('요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.'), findsOneWidget);
     expect(find.text('다시 시도'), findsOneWidget);
   });
 

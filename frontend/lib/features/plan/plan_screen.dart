@@ -6,12 +6,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/theme.dart';
+import '../../core/api/api_exception.dart';
 import '../../core/confirmed_route.dart';
 import '../../core/models/place_search_models.dart';
 import '../../core/models/route_planning_models.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/providers/data_providers.dart';
+import '../../core/repositories/plan_repository.dart';
 import '../../core/saved_photo_places.dart';
+import '../../core/services/trip_session_service.dart';
 import '../../shared/widgets/app_list_group.dart';
 import '../../shared/widgets/app_page_header.dart';
 import '../../shared/widgets/app_section_header.dart';
@@ -65,6 +68,10 @@ class PlanScreen extends ConsumerWidget {
       day: itinerary.selectedDay,
       role: PlanPlaceRole.end,
     );
+    final visitSearchKey = PlanPlaceSearchKey(
+      day: itinerary.selectedDay,
+      role: PlanPlaceRole.visit,
+    );
     final preference = ref.watch(travelPreferenceProvider);
     final transportMode = ref.watch(transportModeProvider);
     final actions = ref.read(planActionsProvider);
@@ -114,7 +121,6 @@ class PlanScreen extends ConsumerWidget {
               ref,
               key: startSearchKey,
               value: value,
-              cityBias: tripInfo?.city,
             ),
             onStartPlaceSelected: (place) => _selectConstraintPlace(
               ref,
@@ -135,7 +141,6 @@ class PlanScreen extends ConsumerWidget {
               ref,
               key: endSearchKey,
               value: value,
-              cityBias: tripInfo?.city,
             ),
             onEndPlaceSelected: (place) => _selectConstraintPlace(
               ref,
@@ -175,8 +180,23 @@ class PlanScreen extends ConsumerWidget {
           const SizedBox(height: ChiwawaSpacing.sm),
           PlaceInputField(
             places: places,
-            onAdd: (value) => unawaited(
-              _saveManualPlace(context, actions, value),
+            searchState: placeSearchStates.forKey(visitSearchKey),
+            onQueryChanged: (value) => _updatePlaceQuery(
+              ref,
+              key: visitSearchKey,
+              value: value,
+            ),
+            onPlaceSelected: (place) => unawaited(
+              _saveSearchedPlace(
+                context,
+                ref,
+                actions,
+                visitSearchKey,
+                place,
+              ),
+            ),
+            onRetry: () => unawaited(
+              ref.read(planPlaceSearchProvider.notifier).retry(visitSearchKey),
             ),
             onRemove: actions.removePlace,
           ),
@@ -217,7 +237,8 @@ class PlanScreen extends ConsumerWidget {
             onConfirm: () => _confirmRoute(
               context,
               ref,
-              itinerary.currentStops.map((stop) => stop.place).toList(),
+              routeState.result,
+              itinerary.currentStops,
             ),
             onAddRecommendation: (recommendation) =>
                 _addRecommendation(context, actions, recommendation),
@@ -330,30 +351,40 @@ class PlanScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _saveManualPlace(
+  Future<void> _saveSearchedPlace(
     BuildContext context,
+    WidgetRef ref,
     PlanActions actions,
-    String value,
+    PlanPlaceSearchKey searchKey,
+    PlaceSearchCandidate place,
   ) async {
     try {
-      final added = await actions.saveAndAddPlace(value);
+      final added = await actions.saveAndAddSearchedPlace(place);
       if (!context.mounted) return;
+      if (added) {
+        ref
+            .read(planPlaceSearchProvider.notifier)
+            .selectPlace(searchKey, place);
+      }
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
           SnackBar(
             content: Text(
-              added ? '$value 서버에 저장했어요.' : '$value 이미 저장 중이거나 일정에 있어요.',
+              added ? '${place.name} 서버에 저장했어요.' : '${place.name} 이미 일정에 있어요.',
             ),
           ),
         );
-    } catch (_) {
+    } catch (error) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          const SnackBar(content: Text('장소를 저장하지 못했어요. 다시 시도해 주세요.')),
+          SnackBar(content: Text(mapApiErrorToMessage(error))),
         );
+      if (error is ApiException && error.isNotFound) {
+        context.go('/trips');
+      }
     }
   }
 
@@ -401,14 +432,36 @@ class PlanScreen extends ConsumerWidget {
       );
   }
 
-  void _confirmRoute(
+  Future<void> _confirmRoute(
     BuildContext context,
     WidgetRef ref,
-    List<RoutePlace> places,
-  ) {
-    ref.read(confirmedRouteProvider.notifier).confirm(places);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('이 일정으로 확정했어요.')),
-    );
+    RouteOptimizationResult? result,
+    List<PlanItineraryStop> stops,
+  ) async {
+    if (result == null || result.timeline == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('확정할 경로 타임라인이 없어요.')),
+      );
+      return;
+    }
+    try {
+      await ref.read(planRepositoryProvider).confirmRoute(result);
+      ref.read(confirmedRouteProvider.notifier).confirm(
+            stops
+                .where((stop) => stop.stopType == 'POI')
+                .map((stop) => stop.place)
+                .toList(growable: false),
+          );
+      ref.read(currentTripRevisionProvider.notifier).state += 1;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('이 일정으로 확정했어요.')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(mapApiErrorToMessage(error))),
+      );
+    }
   }
 }

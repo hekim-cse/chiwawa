@@ -57,7 +57,7 @@ void main() {
     expect(adapter.requests, hasLength(2));
     expect(
       adapter.requests.first.path,
-      '/api/v1/trips/trip-photo-contract/photo-places/search',
+      '/api/v1/trips/trip-photo-contract/photo-places/search-upload',
     );
     final formData = adapter.requests.first.data as FormData;
     expect(formData.fields, isEmpty);

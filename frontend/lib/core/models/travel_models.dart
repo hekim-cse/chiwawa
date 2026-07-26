@@ -126,7 +126,7 @@ class Trip {
       id: json['id']?.toString() ?? '',
       title: json['title'] as String? ?? '여행',
       city: json['city'] as String? ?? '',
-      country: json['country'] as String? ?? 'Japan',
+      country: json['country'] as String? ?? '',
       startDate: json['start_date'] as String? ?? '',
       endDate: json['end_date'] as String? ?? '',
       travelers: (json['travelers'] as num?)?.toInt() ?? 1,
@@ -182,7 +182,7 @@ class Trip {
 class TripDraft {
   const TripDraft({
     required this.city,
-    this.country = 'Japan',
+    required this.country,
     required this.startDate,
     required this.endDate,
     this.travelers = 1,
@@ -424,6 +424,7 @@ class PhotoSearchResult {
     this.id = '',
     this.searchId = '',
     this.wantedPlaceId = '',
+    this.providerPlaceId = '',
     required this.name,
     required this.address,
     required this.category,
@@ -436,6 +437,7 @@ class PhotoSearchResult {
   final String id;
   final String searchId;
   final String wantedPlaceId;
+  final String providerPlaceId;
   final String name;
   final String address;
   final String category;
@@ -448,6 +450,7 @@ class PhotoSearchResult {
     String? id,
     String? searchId,
     String? wantedPlaceId,
+    String? providerPlaceId,
     String? name,
     String? address,
     String? category,
@@ -460,6 +463,7 @@ class PhotoSearchResult {
       id: id ?? this.id,
       searchId: searchId ?? this.searchId,
       wantedPlaceId: wantedPlaceId ?? this.wantedPlaceId,
+      providerPlaceId: providerPlaceId ?? this.providerPlaceId,
       name: name ?? this.name,
       address: address ?? this.address,
       category: category ?? this.category,
@@ -475,6 +479,7 @@ class PhotoSearchResult {
       id: json['place_id']?.toString() ?? json['id']?.toString() ?? '',
       searchId: json['search_id']?.toString() ?? '',
       wantedPlaceId: json['wanted_place_id']?.toString() ?? '',
+      providerPlaceId: json['provider_place_id']?.toString() ?? '',
       name: json['name'] as String? ?? '',
       address: json['address'] as String? ?? '',
       category: json['category'] as String? ?? '',
@@ -490,6 +495,7 @@ class PhotoSearchResult {
       'place_id': id,
       'search_id': searchId,
       'wanted_place_id': wantedPlaceId,
+      'provider_place_id': providerPlaceId,
       'name': name,
       'address': address,
       'category': category,

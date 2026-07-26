@@ -87,22 +87,43 @@ class ApiTripRepository implements TripRepository {
   @override
   Future<List<ScheduleItem>> fetchTodaySchedules() async {
     final tripId = await _requireTripId();
-    final json = await _getJson('/api/v1/trips/$tripId/travel/today');
-    final schedule = json['schedule'] as Map<String, Object?>? ?? const {};
-    final items = schedule['items'] as List<Object?>? ?? const [];
-    return [
+    final json = await _getJson('/api/v1/trips/$tripId/schedule');
+    final items = json['items'] as List<Object?>? ?? const [];
+    final schedules = [
       for (final item in items)
         ScheduleItem.fromJson(item! as Map<String, Object?>),
     ];
+    if (schedules.isEmpty) return const [];
+
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    final dates = schedules
+        .map((item) => DateTime.tryParse(item.date))
+        .whereType<DateTime>()
+        .map((date) => DateTime(date.year, date.month, date.day))
+        .toSet()
+        .toList()
+      ..sort();
+    if (dates.isEmpty) return schedules;
+    final visibleDate = dates.contains(todayDate)
+        ? todayDate
+        : dates.firstWhere(
+            (date) => date.isAfter(todayDate),
+            orElse: () => dates.last,
+          );
+    final visibleDateText = '${visibleDate.year.toString().padLeft(4, '0')}-'
+        '${visibleDate.month.toString().padLeft(2, '0')}-'
+        '${visibleDate.day.toString().padLeft(2, '0')}';
+    return schedules
+        .where((item) => item.date == visibleDateText)
+        .toList(growable: false);
   }
 
   @override
   Future<List<FreeTimeRecommend>> fetchFreeTimeRecommendations() async {
     final tripId = await _requireTripId();
-    // TODO(C4): date/start_time/end_time을 실제 빈 시간대 기준으로 계산해 전달
-    final json = await _postJson(
+    final json = await _getJson(
       '/api/v1/trips/$tripId/travel/free-time-recommendations',
-      const {},
     );
     final items = json['items'] as List<Object?>? ?? const [];
     return [
@@ -114,8 +135,7 @@ class ApiTripRepository implements TripRepository {
     final minutes = (json['duration_minutes'] as num?)?.toInt();
     return FreeTimeRecommend(
       name: json['place_name'] as String? ?? json['title'] as String? ?? '',
-      // TODO(A1): 백엔드 응답에 도보 거리(walk) 없음 — 협의 후 매핑
-      walk: '',
+      walk: '${(json['travel_minutes'] as num?)?.toInt() ?? 0}분',
       duration: minutes == null ? '' : '$minutes분',
     );
   }

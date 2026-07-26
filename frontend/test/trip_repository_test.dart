@@ -32,6 +32,7 @@ void main() {
     const draft = TripDraft(
       title: '오사카 여행',
       city: 'Osaka',
+      country: 'Japan',
       startDate: '2026-08-01',
       endDate: '2026-08-04',
       travelers: 2,
@@ -86,9 +87,56 @@ void main() {
 
     expect(store.tripId, current.tripId);
   });
+
+  test('home schedule selects the nearest travel day when trip is upcoming',
+      () async {
+    final now = DateTime.now();
+    final firstDay = now.add(const Duration(days: 3));
+    final secondDay = now.add(const Duration(days: 4));
+    final interceptor = _TripApiInterceptor(
+      scheduleItems: [
+        _scheduleJson('later', secondDay),
+        _scheduleJson('first', firstDay),
+      ],
+    );
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
+      ..interceptors.add(interceptor);
+    final store = TripIdStore();
+    await store.save('trip-1');
+    final repository = ApiTripRepository(dio: dio, tripIdStore: store);
+
+    final schedules = await repository.fetchTodaySchedules();
+
+    expect(schedules.map((item) => item.id), ['first']);
+    expect(interceptor.requests.single.path, '/api/v1/trips/trip-1/schedule');
+  });
+
+  test('free-time recommendations use the latest optimized route endpoint',
+      () async {
+    final interceptor = _TripApiInterceptor();
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
+      ..interceptors.add(interceptor);
+    final store = TripIdStore();
+    await store.save('trip-1');
+    final repository = ApiTripRepository(dio: dio, tripIdStore: store);
+
+    final recommendations = await repository.fetchFreeTimeRecommendations();
+
+    expect(recommendations.single.name, '에펠탑 전망대');
+    expect(recommendations.single.walk, '18분');
+    expect(recommendations.single.duration, '60분');
+    expect(interceptor.requests.single.method, 'GET');
+    expect(
+      interceptor.requests.single.path,
+      '/api/v1/trips/trip-1/travel/free-time-recommendations',
+    );
+  });
 }
 
 class _TripApiInterceptor extends Interceptor {
+  _TripApiInterceptor({this.scheduleItems = const []});
+
+  final List<Map<String, Object?>> scheduleItems;
   final requests = <RequestOptions>[];
 
   @override
@@ -101,7 +149,28 @@ class _TripApiInterceptor extends Interceptor {
     }
 
     final Object data;
-    if (options.method == 'GET' && options.path == '/api/v1/trips') {
+    if (options.path.endsWith('/travel/free-time-recommendations')) {
+      data = const {
+        'trip_id': 'trip-1',
+        'date': '2026-08-01',
+        'items': [
+          {
+            'id': 'recommendation-1',
+            'trip_id': 'trip-1',
+            'title': '랜드마크·관광명소',
+            'place_name': '에펠탑 전망대',
+            'duration_minutes': 60,
+            'travel_minutes': 18,
+            'reason': '실제 경로에 삽입 가능',
+            'date': '2026-08-01',
+            'start_time': '15:00:00',
+            'end_time': '16:00:00',
+          },
+        ],
+      };
+    } else if (options.path.endsWith('/schedule')) {
+      data = {'trip_id': 'trip-1', 'items': scheduleItems};
+    } else if (options.method == 'GET' && options.path == '/api/v1/trips') {
       data = const {
         'items': [_tripOne],
       };
@@ -124,6 +193,18 @@ class _TripApiInterceptor extends Interceptor {
     );
   }
 }
+
+Map<String, Object?> _scheduleJson(String id, DateTime date) => {
+      'id': id,
+      'trip_id': 'trip-1',
+      'name': id,
+      'date': '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}',
+      'start_time': '10:00:00',
+      'end_time': '11:00:00',
+      'source': 'plan',
+    };
 
 const _tripOne = <String, Object?>{
   'id': 'trip-1',

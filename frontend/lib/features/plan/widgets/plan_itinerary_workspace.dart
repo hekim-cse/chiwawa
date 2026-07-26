@@ -36,7 +36,7 @@ class PlanItineraryWorkspace extends StatelessWidget {
           title: '최적 경로 결과',
           description: '지도 번호와 일정 순서가 함께 바뀌어요.',
           trailing: Text(
-            '${transportMode.label} · ${stops.length}곳',
+            '${transportMode.label} · ${stops.where((stop) => stop.stopType == 'POI').length}곳',
             key: const ValueKey('itinerary-selected-transport'),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: ChiwawaColors.primary,
@@ -69,17 +69,20 @@ class PlanItineraryWorkspace extends StatelessWidget {
                   _ItineraryStopRow(
                     stop: stops[index],
                     order: index + 1,
-                    canMoveUp: index > 0,
-                    canMoveDown: index < stops.length - 1,
+                    canMoveUp: stops[index].stopType == 'POI' && index > 1,
+                    canMoveDown: stops[index].stopType == 'POI' &&
+                        index < stops.length - 2,
                     onMoveUp:
                         onMove == null ? null : () => onMove!(index, index - 1),
                     onMoveDown:
                         onMove == null ? null : () => onMove!(index, index + 1),
-                    onEditTime: onEditTime == null
+                    onEditTime:
+                        onEditTime == null || stops[index].stopType != 'POI'
+                            ? null
+                            : () => onEditTime!(stops[index]),
+                    onDelete: onDelete == null || stops[index].stopType != 'POI'
                         ? null
-                        : () => onEditTime!(stops[index]),
-                    onDelete:
-                        onDelete == null ? null : () => onDelete!(stops[index]),
+                        : () => onDelete!(stops[index]),
                   ),
                   if (index < stops.length - 1)
                     _MovementRow(nextStop: stops[index + 1]),
@@ -93,7 +96,8 @@ class PlanItineraryWorkspace extends StatelessWidget {
           width: double.infinity,
           child: FilledButton.icon(
             key: const ValueKey('confirm-route-button'),
-            onPressed: stops.isEmpty ? null : onConfirm,
+            onPressed:
+                stops.any((stop) => stop.stopType == 'POI') ? onConfirm : null,
             icon: const Icon(Icons.check_rounded),
             label: const Text('이 일정으로 확정하기'),
           ),
@@ -120,7 +124,8 @@ class _ItinerarySummary extends StatelessWidget {
         _sumNumbers(stops.map((stop) => stop.place.transport));
     final stayMinutes = timeline?.totalStayMinutes ??
         _sumNumbers(stops.map((stop) => stop.place.duration));
-    final expectedCost = _formatExpectedCost(stops);
+    final poiStops = stops.where((stop) => stop.stopType == 'POI').toList();
+    final expectedCost = _formatExpectedCost(poiStops);
 
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -146,7 +151,7 @@ class _ItinerarySummary extends StatelessWidget {
             key: const ValueKey('itinerary-summary-places'),
             icon: Icons.place_outlined,
             label: '방문 장소',
-            value: '${stops.length}곳',
+            value: '${poiStops.length}곳',
           ),
           _SummaryItem(
             key: const ValueKey('itinerary-summary-travel-time'),

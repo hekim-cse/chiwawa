@@ -55,7 +55,11 @@ class RouteMapOverview extends StatelessWidget {
                           ],
                         ),
                         child: Text(
-                          '${index + 1}',
+                          stops[index].stopType == 'START'
+                              ? 'S'
+                              : stops[index].stopType == 'END'
+                                  ? 'E'
+                                  : '${stops.take(index + 1).where((stop) => stop.stopType == 'POI').length}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
