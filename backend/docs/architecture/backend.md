@@ -12,9 +12,11 @@
 | 라우터 | `src/chiwawa_backend/routers/` | HTTP 경로와 요청·응답 모델 연결 |
 | 스키마 | `src/chiwawa_backend/schemas/` | frozen/extra-forbid Pydantic v2 경계 모델 |
 | 서비스 | `src/chiwawa_backend/services/` | 여행, 장소, 일정, 추천, 인증, 기록 로직 |
-| 프로토타입 상태 | `src/chiwawa_backend/state.py` | UUID ID와 인메모리 도메인 저장소 |
+| 애플리케이션 상태 | `src/chiwawa_backend/state.py` | UUID ID, 동시성 잠금, 저장 트랜잭션 경계 |
+| 여행 상태 저장소 | `src/chiwawa_backend/services/state_store.py` | 여행·등록 장소·확정 일정 SQLite 영속화 |
 | SQLite 마이그레이션 | `src/chiwawa_backend/sql/*.sql` | wheel에 포함되고 파일명 순서대로 적용되는 사용자·사진 스키마 |
 | 런타임 인증 DB | `data/google_auth.db` | 자동 생성되고 Git에서 제외되는 로컬 파일 |
+| 런타임 여행 DB | `data/chiwawa.db` | 자동 생성되고 Git에서 제외되는 여행 상태 파일 |
 
 ## 요청 처리 흐름
 
@@ -23,7 +25,8 @@ HTTP request
   -> router
   -> Pydantic request validation
   -> service domain validation
-  -> AppState or SQLite auth storage
+  -> AppState transaction boundary
+  -> SQLite application/auth storage
   -> Pydantic response model
   -> HTTP response
 ```
@@ -34,10 +37,15 @@ JWT 작업 시점에 검사하므로 비인증 개발 API와 문서는 독립적
 
 ## 상태와 동시성
 
-- 여행 도메인의 `AppState`는 앱 인스턴스마다 생성되며 재시작 시 초기화됩니다.
+- 실제 앱은 시작할 때 `APP_DB_PATH`의 여행·등록 장소·확정 일정을 읽어
+  `AppState`를 복원합니다. 테스트 앱은 별도 저장소를 주입하지 않는 한 격리된
+  메모리 상태를 사용합니다.
 - ID는 UUID 기반이라 동시 요청의 읽기-수정-쓰기 카운터 충돌이 없습니다.
 - AppState를 읽고 쓰는 서비스 연산은 동일한 재진입 잠금을 사용해 컬렉션 순회와
   변경이 충돌하지 않습니다.
+- 최상위 서비스 변경이 성공하면 여행·장소·일정을 하나의 SQLite 트랜잭션으로
+  반영합니다. 저장 실패 시 DB 트랜잭션을 롤백하고 메모리도 마지막 저장 상태로
+  복원합니다.
 - 계획 확정은 모든 stop을 먼저 검증한 뒤 한 번만 일정으로 투영되어 실패 시
   부분 저장이 없고 반복 요청이 멱등적입니다.
 - Google 사용자 SQLite 연결은 요청 단위로 열고 트랜잭션 후 명시적으로 닫습니다.

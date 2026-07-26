@@ -11,7 +11,7 @@ from ai.image_search.domain.search_schemas import (
     RecognitionSignals,
     RecognitionStatus,
 )
-from ai.image_search.modal_app import search_photo_payload
+from ai.image_search.modal_app import search_photo_payload, validation_error_detail
 
 
 # 요청을 그대로 받아 고정된 성공 결과를 돌려주는 Fake Recognizer
@@ -102,3 +102,13 @@ def test_search_photo_payload_rejects_missing_image_source():
 
     # recognizer까지 도달하지 않고 검증 단계에서 막혔는지 확인
     assert recognizer.received_request is None
+
+
+def test_validation_error_detail_is_json_serializable():
+    with pytest.raises(ValidationError) as captured:
+        ImageSearchRequest.model_validate({})
+
+    detail = validation_error_detail(captured.value)
+
+    assert detail[0]["type"] == "value_error"
+    assert "ctx" not in detail[0]

@@ -25,7 +25,7 @@ class GooglePlacesProvider:
         self,
         place_name: str,
         language_code: str = "ko",
-        region_code: str = "JP",
+        region_code: Optional[str] = None,
     ) -> PlaceResult:
         results = self.search_text(
             query=place_name,
@@ -49,7 +49,7 @@ class GooglePlacesProvider:
         self,
         query: str,
         language_code: str = "ko",
-        region_code: str = "JP",
+        region_code: Optional[str] = None,
         max_result_count: int = 1,
     ) -> List[PlaceResult]:
         headers = {
@@ -68,9 +68,10 @@ class GooglePlacesProvider:
         payload = {
             "textQuery": query,
             "languageCode": language_code,
-            "regionCode": region_code,
-            "maxResultCount": max_result_count,
+            "pageSize": max_result_count,
         }
+        if region_code is not None:
+            payload["regionCode"] = region_code
 
         # Google Places API에 POST 요청 전송
         with httpx.Client(timeout=self.timeout_seconds) as client:

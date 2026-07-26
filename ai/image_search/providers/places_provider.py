@@ -68,7 +68,7 @@ class PlacesProvider:
         self,
         place_name: str,
         language_code: str = "ko",
-        region_code: str = "JP",
+        region_code: str | None = None,
     ) -> ResolvedPlace:
         results = self.search_text(
             query=place_name,
@@ -87,15 +87,16 @@ class PlacesProvider:
         self,
         query: str,
         language_code: str = "ko",
-        region_code: str = "JP",
+        region_code: str | None = None,
         max_result_count: int = 1,
     ) -> list[ResolvedPlace]:
-        payload = {
+        payload: dict[str, object] = {
             "textQuery": query,
             "languageCode": language_code,
-            "regionCode": region_code,
-            "maxResultCount": max_result_count,
+            "pageSize": max_result_count,
         }
+        if region_code is not None:
+            payload["regionCode"] = region_code
 
         return self._post_and_parse(self.SEARCH_TEXT_URL, payload)
 
@@ -110,11 +111,10 @@ class PlacesProvider:
         radius_m: float = 1500,
         max_result_count: int = 5,
         language_code: str = "ko",
-        region_code: str = "JP",
+        region_code: str | None = None,
     ) -> list[ResolvedPlace]:
-        payload: dict = {
+        payload: dict[str, object] = {
             "languageCode": language_code,
-            "regionCode": region_code,
             "maxResultCount": max_result_count,
             "locationRestriction": {
                 "circle": {
@@ -123,6 +123,8 @@ class PlacesProvider:
                 },
             },
         }
+        if region_code is not None:
+            payload["regionCode"] = region_code
 
         included_types = CATEGORY_INCLUDED_TYPES.get(category) if category else None
         if included_types:

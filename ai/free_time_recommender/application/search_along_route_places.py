@@ -30,30 +30,22 @@ class SearchAlongRoutePlaces:
         provider: AlongRoutePlaceProvider,
         candidates_per_category: int,
         language_code: str,
-        region_code: str,
+        region_code: str | None = None,
         catalog: RecommendationCategoryCatalog = (
             DEFAULT_RECOMMENDATION_CATEGORY_CATALOG
         ),
     ) -> None:
-        if (
-            isinstance(candidates_per_category, bool)
-            or not isinstance(candidates_per_category, int)
+        if isinstance(candidates_per_category, bool) or not isinstance(
+            candidates_per_category, int
         ):
             raise TypeError("candidates_per_category는 정수여야 합니다.")
         if not 1 <= candidates_per_category <= 20:
-            raise ValueError(
-                "candidates_per_category는 1 이상 20 이하여야 합니다."
-            )
+            raise ValueError("candidates_per_category는 1 이상 20 이하여야 합니다.")
         self._validate_locale_code(language_code, "language_code")
-        self._validate_locale_code(region_code, "region_code")
+        if region_code is not None:
+            self._validate_locale_code(region_code, "region_code")
         if language_code != "ko":
-            raise ValueError(
-                "language_code는 서비스 지원 언어인 ko여야 합니다."
-            )
-        if region_code != "JP":
-            raise ValueError(
-                "region_code는 서비스 지원 지역인 JP여야 합니다."
-            )
+            raise ValueError("language_code는 서비스 지원 언어인 ko여야 합니다.")
         self._provider = provider
         self._candidates_per_category = candidates_per_category
         self._language_code = language_code
@@ -108,13 +100,11 @@ class SearchAlongRoutePlaces:
         for candidate in searched_candidates:
             if not isinstance(candidate, PlaceCandidate):
                 raise TypeError(
-                    "Provider 검색 결과는 PlaceCandidate만 "
-                    "포함해야 합니다."
+                    "Provider 검색 결과는 PlaceCandidate만 포함해야 합니다."
                 )
             if candidate.category is not expected_category:
                 raise ValueError(
-                    "Provider 검색 결과의 카테고리가 요청과 "
-                    "일치하지 않습니다."
+                    "Provider 검색 결과의 카테고리가 요청과 일치하지 않습니다."
                 )
             if candidate.place_id in seen_place_ids:
                 continue

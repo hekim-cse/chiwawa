@@ -77,7 +77,7 @@ class MyPageScreen extends ConsumerWidget {
       ),
       const MyPageMenuItem(
         title: '언어 및 지역',
-        description: '한국어 · 일본 여행 · 24시간제',
+        description: '한국어 · 전 세계 여행 · 24시간제',
         icon: Icons.language_rounded,
         route: MyPageRoutes.languageRegion,
         value: '한국어',

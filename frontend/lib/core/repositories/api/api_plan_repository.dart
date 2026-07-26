@@ -1,20 +1,16 @@
 import 'package:dio/dio.dart';
 
 import '../../api/api_exception.dart';
+import '../../api/dio_client.dart';
+import '../../models/place_search_models.dart';
 import '../../models/route_planning_models.dart';
 import '../../models/transport_mode.dart';
 import '../../models/travel_models.dart';
 import '../../services/trip_session_service.dart';
 import '../plan_repository.dart';
 
-/// chiwawa_backend 경로 최적화 구현체.
+/// chiwawa_backend를 통해 Modal Route Planner를 호출하는 구현체.
 /// POST /api/v1/trips/{trip_id}/route-optimizations
-///
-/// 계약(backend/src/chiwawa_backend/schemas/plans.py):
-///   요청  RouteOptimizationRequest { start_place?: str, transport_mode = "transit" }
-///   응답  RouteOptimizationResponse { trip_id, transport_mode,
-///          stops:[{ order, place_id, name, estimated_travel_minutes }],
-///          total_estimated_minutes }
 class ApiPlanRepository implements PlanRepository {
   const ApiPlanRepository({required this.dio, required this.tripIdStore});
 
@@ -33,6 +29,8 @@ class ApiPlanRepository implements PlanRepository {
       final response = await dio.post<Map<String, Object?>>(
         '/api/v1/trips/$tripId/wanted-places',
         data: {
+          if (place.providerPlaceId != null)
+            'provider_place_id': place.providerPlaceId,
           'name': place.name,
           if (place.latitude != null) 'latitude': place.latitude,
           if (place.longitude != null) 'longitude': place.longitude,
@@ -40,7 +38,15 @@ class ApiPlanRepository implements PlanRepository {
       );
       return WantedPlaceRecord.fromJson(response.data ?? const {});
     } on DioException catch (error) {
-      throw ApiException.fromDioException(error);
+      final apiError = ApiException.fromDioException(error);
+      if (apiError.isNotFound) {
+        await tripIdStore.clear();
+        throw const ApiException(
+          '현재 선택한 여행이 서버에 없어요. 여행을 다시 선택하거나 만들어 주세요.',
+          statusCode: 404,
+        );
+      }
+      throw apiError;
     }
   }
 
@@ -50,29 +56,63 @@ class ApiPlanRepository implements PlanRepository {
   ) async {
     final tripId = await _requireTripId();
 
-    // 현재 백엔드는 여행에 저장된 wanted-place 전체를 대상으로 계산한다.
-    // FE는 이 호출 전에 선택 장소를 wanted-place로 저장하고 반환 ID를 보존한다.
-    // 선택 ID 목록과 days[].start_place/end_place 필드가 Swagger에 추가되면
-    // request의 providerPlaceId·name·좌표를 api/ 어댑터에서만 연결한다.
     try {
       final response = await dio.post<Map<String, Object?>>(
         '/api/v1/trips/$tripId/route-optimizations',
-        data: {'transport_mode': request.transportMode.backendCode},
+        data: {
+          'transport_mode': request.transportMode.backendCode,
+          'day_index': request.dayIndex,
+          'planned_start_time': request.plannedStartTime,
+          'planned_end_time': request.plannedEndTime,
+          if (request.maxPlaceCount != null)
+            'max_place_count': request.maxPlaceCount,
+          'start': _placePayload(request.startPlace),
+          'end': _placePayload(request.endPlace),
+          'wanted_place_ids': request.wantedPlaceIds,
+          'pace': request.preference.pace.code,
+          // 경로 최적화와 빈 시간 추천은 독립 Endpoint로 실행한다.
+          // 추천 Provider 실패가 기본 경로 생성까지 실패시키지 않도록 분리한다.
+          'include_recommendations': false,
+        },
+        options: waitForServerResponseOptions(),
       );
-      final json = response.data ?? const {};
-      final responseMode = TransportModeMapping.fromBackendCode(
-        json['transport_mode'] as String?,
-        fallback: request.transportMode,
+      return _routeFromJson(
+        response.data ?? const {},
+        fallbackMode: request.transportMode,
       );
-      final stops = json['stops'] as List<Object?>? ?? const [];
-      return RouteOptimizationResult.success(
-        places: [
-          for (final raw in stops)
-            _stopToRoutePlace(
-              Map<String, Object?>.from(raw! as Map),
-              responseMode,
-            ),
-        ],
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
+  @override
+  Future<List<ConfirmedRoutePlan>> fetchConfirmedRoutes() async {
+    final tripId = await _requireTripId();
+    try {
+      final response = await dio.get<Map<String, Object?>>(
+        '/api/v1/trips/$tripId/route-optimizations/confirmed',
+      );
+      final items = response.data?['items'] as List<Object?>? ?? const [];
+      return [
+        for (final raw in items)
+          _confirmedRouteFromJson(Map<String, Object?>.from(raw! as Map)),
+      ];
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
+  @override
+  Future<void> confirmRoute(RouteOptimizationResult result) async {
+    final timeline = result.timeline;
+    if (timeline == null) {
+      throw const ApiException('확정할 타임라인이 없어요. 경로를 다시 계산해 주세요.');
+    }
+    final tripId = await _requireTripId();
+    try {
+      await dio.post<Map<String, Object?>>(
+        '/api/v1/trips/$tripId/route-optimizations/confirm',
+        data: {'timeline': timeline.toJson()},
       );
     } on DioException catch (error) {
       throw ApiException.fromDioException(error);
@@ -91,20 +131,105 @@ class ApiPlanRepository implements PlanRepository {
   RoutePlace _stopToRoutePlace(
     Map<String, Object?> json,
     TransportMode transportMode,
+    Map<String, RouteTimelineStop> timelineStopsById,
   ) {
     final travelMinutes = (json['estimated_travel_minutes'] as num?)?.toInt();
+    final placeId = json['place_id']?.toString() ?? '';
+    final timelineStop = timelineStopsById[placeId];
     return RoutePlace(
-      placeId: json['place_id']?.toString() ?? '',
+      placeId: placeId,
       name: json['name'] as String? ?? '',
-      // NOTE(협의): 백엔드 stop은 이동시간만 제공하며 체류시간(stay)은 없다.
-      duration: '',
-      // 구간별 수단은 미제공이므로 응답의 전체 이동수단과 구간 시간을 조합한다.
+      duration: timelineStop == null ? '' : '${timelineStop.stayMinutes}분',
       transport: travelMinutes == null
           ? transportMode.label
           : '${transportMode.label} $travelMinutes분',
-      // NOTE(협의): 백엔드 stop에 장소 카테고리 필드가 없다.
       category: '',
       travelCost: '',
     );
+  }
+
+  ConfirmedRoutePlan _confirmedRouteFromJson(Map<String, Object?> json) {
+    final routeJson = Map<String, Object?>.from(json['route']! as Map);
+    final route = _routeFromJson(routeJson);
+    return ConfirmedRoutePlan(
+      dayIndex: (json['day_index'] as num?)?.toInt() ?? 1,
+      startPlace: _placeFromJson(
+        Map<String, Object?>.from(json['start']! as Map),
+      ),
+      endPlace: _placeFromJson(
+        Map<String, Object?>.from(json['end']! as Map),
+      ),
+      result: route,
+    );
+  }
+
+  RouteOptimizationResult _routeFromJson(
+    Map<String, Object?> json, {
+    TransportMode fallbackMode = TransportMode.transit,
+  }) {
+    final responseMode = TransportModeMapping.fromBackendCode(
+      json['transport_mode'] as String?,
+      fallback: fallbackMode,
+    );
+    final rawTimeline = json['timeline'];
+    final timeline = rawTimeline is Map
+        ? RouteTimeline.fromJson(Map<String, Object?>.from(rawTimeline))
+        : null;
+    final missingSegments =
+        (json['missing_segments'] as List<Object?>? ?? const [])
+            .whereType<String>()
+            .toList(growable: false);
+    final warnings = (json['warnings'] as List<Object?>? ?? const [])
+        .whereType<String>()
+        .toList(growable: false);
+    if (timeline == null || missingSegments.isNotEmpty) {
+      return RouteOptimizationResult.unavailable(
+        missingSegments: missingSegments,
+        warnings: warnings,
+      );
+    }
+    final timelineStopsById = {
+      for (final stop in timeline.timelineStops) stop.placeId: stop,
+    };
+    final stops = json['stops'] as List<Object?>? ?? const [];
+    final recommendationGroups =
+        json['recommendation_groups'] as List<Object?>? ?? const [];
+    return RouteOptimizationResult.success(
+      places: [
+        for (final raw in stops)
+          _stopToRoutePlace(
+            Map<String, Object?>.from(raw! as Map),
+            responseMode,
+            timelineStopsById,
+          ),
+      ],
+      timeline: timeline,
+      warnings: warnings,
+      recommendationGroups: [
+        for (final raw in recommendationGroups)
+          RouteRecommendationGroup.fromJson(
+            Map<String, Object?>.from(raw! as Map),
+          ),
+      ],
+    );
+  }
+
+  PlaceSearchCandidate _placeFromJson(Map<String, Object?> json) {
+    return PlaceSearchCandidate(
+      providerPlaceId: json['place_id']?.toString() ?? '',
+      name: json['name'] as String? ?? '',
+      formattedAddress: json['formatted_address'] as String? ?? '',
+      latitude: (json['lat'] as num?)?.toDouble() ?? 0,
+      longitude: (json['lng'] as num?)?.toDouble() ?? 0,
+    );
+  }
+
+  Map<String, Object?> _placePayload(PlaceSearchCandidate place) {
+    return {
+      'place_id': place.providerPlaceId,
+      'name': place.name,
+      'lat': place.latitude,
+      'lng': place.longitude,
+    };
   }
 }

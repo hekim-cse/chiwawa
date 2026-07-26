@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from ai.image_search.domain.search_schemas import ImageSearchRequest
 
 from chiwawa_backend.config import Settings
 from chiwawa_backend.errors import DomainValidationError, UpstreamServiceError
+from chiwawa_backend.schemas.image_search import ImageSearchRequest
 from chiwawa_backend.services.image_search_client import (
     RemotePhotoPlaceRecognizer,
 )
@@ -109,7 +109,35 @@ async def test_remote_retries_transient_status_once() -> None:
     result = await recognizer.search(_request())
 
     assert attempts == 2
-    assert result.status.name == "SUCCESS"
+    assert result.status == "SUCCESS"
+
+
+@pytest.mark.anyio
+async def test_remote_search_posts_uploaded_image_as_base64() -> None:
+    received_json: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal received_json
+        received_json = dict(httpx.Response(200, content=request.content).json())
+        return httpx.Response(200, json=_success_payload())
+
+    recognizer = RemotePhotoPlaceRecognizer(
+        _settings(),
+        transport=httpx.MockTransport(handler),
+        retry_backoff_seconds=0,
+    )
+
+    await recognizer.search(
+        ImageSearchRequest(
+            image_base64="iVBORw0KGgo=",
+            image_mime_type="image/png",
+            country="France",
+        ),
+    )
+
+    assert received_json["image_base64"] == "iVBORw0KGgo="
+    assert received_json["image_mime_type"] == "image/png"
+    assert "city" not in received_json
 
 
 @pytest.mark.anyio

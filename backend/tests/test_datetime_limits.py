@@ -22,6 +22,7 @@ async def _create_trip(
         "/api/v1/trips",
         json={
             "city": "Tokyo",
+            "country": "Japan",
             "start_date": start_date,
             "end_date": end_date,
         },

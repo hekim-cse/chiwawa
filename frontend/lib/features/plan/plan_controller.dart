@@ -2,15 +2,19 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/api/api_exception.dart';
+import '../../core/models/place_search_models.dart';
 import '../../core/auth/auth_controller.dart';
 import '../../core/models/route_planning_models.dart';
 import '../../core/models/transport_mode.dart';
 import '../../core/models/travel_models.dart';
 import '../../core/repositories/plan_repository.dart';
+import '../../core/saved_photo_places.dart';
 import '../../core/services/trip_session_service.dart';
 import 'models/plan_itinerary.dart';
 import 'models/plan_place_selection.dart';
 import 'plan_day_constraints_controller.dart';
+import 'plan_place_search_controller.dart';
 
 final selectedPlacesProvider = StateProvider<List<PlanPlaceSelection>>((ref) {
   ref.watch(currentTripRevisionProvider);
@@ -69,26 +73,18 @@ class PlanItineraryController extends StateNotifier<PlanItineraryState> {
     String startTime = '09:00',
     RouteTimeline? timeline,
   }) {
-    final timelineStops = timeline?.timelineStops
-            .where((stop) => stop.stopType == 'POI')
-            .toList(growable: false) ??
-        const <RouteTimelineStop>[];
-    final stops = <PlanItineraryStop>[
-      for (var index = 0; index < places.length; index++)
-        PlanItineraryStop(
-          id: '${places[index].identityKey}-$index',
-          startTime: index < timelineStops.length
-              ? timelineStops[index].arrivalTime
-              : _timeForIndex(index, startTime),
-          departureTime: index < timelineStops.length
-              ? timelineStops[index].departureTime
-              : null,
-          stayMinutes: index < timelineStops.length
-              ? timelineStops[index].stayMinutes
-              : null,
-          place: places[index],
-        ),
-    ];
+    final timelineStops =
+        timeline?.timelineStops ?? const <RouteTimelineStop>[];
+    final stops = timelineStops.isEmpty
+        ? <PlanItineraryStop>[
+            for (var index = 0; index < places.length; index++)
+              PlanItineraryStop(
+                id: '${places[index].identityKey}-$index',
+                startTime: _timeForIndex(index, startTime),
+                place: places[index],
+              ),
+          ]
+        : _itineraryFromTimeline(places, timelineStops);
     _setCurrentStops(stops);
   }
 
@@ -131,6 +127,44 @@ class PlanItineraryController extends StateNotifier<PlanItineraryState> {
       }),
     );
   }
+}
+
+List<PlanItineraryStop> _itineraryFromTimeline(
+  List<RoutePlace> places,
+  List<RouteTimelineStop> timelineStops,
+) {
+  final placesById = {
+    for (final place in places)
+      if (place.placeId.isNotEmpty) place.placeId: place,
+  };
+  var poiIndex = 0;
+  final result = <PlanItineraryStop>[];
+  for (var index = 0; index < timelineStops.length; index++) {
+    final timelineStop = timelineStops[index];
+    RoutePlace? place = placesById[timelineStop.placeId];
+    if (timelineStop.stopType == 'POI' && place == null) {
+      if (poiIndex < places.length) place = places[poiIndex];
+      poiIndex += 1;
+    }
+    place ??= RoutePlace(
+      placeId: timelineStop.placeId,
+      name: timelineStop.name,
+      duration: '',
+      transport: '',
+      category: timelineStop.stopType == 'START' ? '출발지' : '도착지',
+    );
+    result.add(
+      PlanItineraryStop(
+        id: '${timelineStop.stopType}:${timelineStop.placeId}-$index',
+        startTime: timelineStop.arrivalTime,
+        departureTime: timelineStop.departureTime,
+        stayMinutes: timelineStop.stayMinutes,
+        stopType: timelineStop.stopType,
+        place: place,
+      ),
+    );
+  }
+  return result;
 }
 
 String _timeForIndex(int index, String startTime) {
@@ -194,7 +228,40 @@ class PlanActions {
     }
   }
 
-  Future<bool> addRecommendation(RouteRecommendation recommendation) async {
+  Future<bool> saveAndAddSearchedPlace(PlaceSearchCandidate candidate) async {
+    final localId = 'place:${candidate.providerPlaceId}';
+    final existing = _ref
+        .read(selectedPlacesProvider)
+        .any((selection) => selection.id == localId);
+    if (existing) return false;
+    final record = await _ref.read(planRepositoryProvider).saveWantedPlace(
+          PlanRoutePlaceInput(
+            localId: localId,
+            providerPlaceId: candidate.providerPlaceId,
+            name: candidate.name,
+            address: candidate.formattedAddress,
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+          ),
+        );
+    return _addSelection(
+      PlanPlaceSelection(
+        id: localId,
+        name: candidate.name,
+        address: candidate.formattedAddress,
+        source: PlanPlaceSource.manual,
+        serverPlaceId: record.id,
+        providerPlaceId: candidate.providerPlaceId,
+        latitude: candidate.latitude,
+        longitude: candidate.longitude,
+      ),
+    );
+  }
+
+  Future<bool> addRecommendation(
+    RouteRecommendation recommendation, {
+    bool reoptimize = true,
+  }) async {
     final candidate = recommendation.candidate;
     final localId = 'recommendation:${candidate.placeId}';
     final existing = _ref
@@ -204,6 +271,7 @@ class PlanActions {
     final record = await _ref.read(planRepositoryProvider).saveWantedPlace(
           PlanRoutePlaceInput(
             localId: localId,
+            providerPlaceId: candidate.placeId,
             name: candidate.name,
             address: candidate.formattedAddress,
             latitude: candidate.latitude,
@@ -217,11 +285,12 @@ class PlanActions {
         address: candidate.formattedAddress,
         source: PlanPlaceSource.freeTime,
         serverPlaceId: record.id,
+        providerPlaceId: candidate.placeId,
         latitude: candidate.latitude,
         longitude: candidate.longitude,
       ),
     );
-    if (added) {
+    if (added && reoptimize) {
       await optimizeRoute(_ref.read(transportModeProvider));
     }
     return added;
@@ -283,6 +352,50 @@ class PlanActions {
         .optimize(transportMode);
   }
 
+  void restoreConfirmedRoute(ConfirmedRoutePlan plan) {
+    final routeController = _ref.read(routeOptimizationProvider.notifier);
+    if (!routeController.restoreConfirmed(plan.dayIndex, plan.result)) return;
+
+    final selections = [
+      for (final place in plan.result.places)
+        PlanPlaceSelection(
+          id: 'restored:${place.placeId}',
+          serverPlaceId: place.placeId,
+          name: place.name,
+          source: PlanPlaceSource.manual,
+        ),
+    ];
+    _ref.read(selectedPlacesProvider.notifier).state =
+        List.unmodifiable(selections);
+    _ref.read(transportModeProvider.notifier).state =
+        plan.result.timeline?.travelMode ?? TransportMode.transit;
+
+    final constraints = _ref.read(planDayConstraintsProvider.notifier);
+    constraints.selectStartPlace(plan.dayIndex, plan.startPlace);
+    constraints.selectEndPlace(plan.dayIndex, plan.endPlace);
+    final placeSearch = _ref.read(planPlaceSearchProvider.notifier);
+    placeSearch.selectPlace(
+      PlanPlaceSearchKey(day: plan.dayIndex, role: PlanPlaceRole.start),
+      plan.startPlace,
+    );
+    placeSearch.selectPlace(
+      PlanPlaceSearchKey(day: plan.dayIndex, role: PlanPlaceRole.end),
+      plan.endPlace,
+    );
+    final timeline = plan.result.timeline;
+    if (timeline != null) {
+      constraints.updateStartTime(plan.dayIndex, timeline.plannedStartTime);
+      constraints.updateEndTime(plan.dayIndex, timeline.plannedEndTime);
+    }
+
+    final itinerary = _ref.read(planItineraryProvider.notifier);
+    itinerary.selectDay(plan.dayIndex);
+    itinerary.replaceCurrentDay(
+      plan.result.places,
+      timeline: plan.result.timeline,
+    );
+  }
+
   void resetOptimization() {
     _ref.read(routeOptimizationProvider.notifier).reset();
     _ref.read(planItineraryProvider.notifier).clearCurrentDay();
@@ -296,6 +409,20 @@ class RouteOptimizationController
 
   final Ref _ref;
   int _requestVersion = 0;
+  final Set<int> _restoredConfirmedDays = {};
+
+  bool canRestoreConfirmed(int dayIndex) =>
+      state.status == AiJobStatus.idle &&
+      !_restoredConfirmedDays.contains(dayIndex);
+
+  bool restoreConfirmed(int dayIndex, RouteOptimizationResult result) {
+    if (!canRestoreConfirmed(dayIndex) || result.timeline == null) {
+      return false;
+    }
+    _restoredConfirmedDays.add(dayIndex);
+    state = RouteOptimizationState.done(result);
+    return true;
+  }
 
   Future<void> optimize(TransportMode transportMode) async {
     final requestVersion = ++_requestVersion;
@@ -314,6 +441,7 @@ class RouteOptimizationController
     state = const RouteOptimizationState.running();
 
     try {
+      _mergeSavedPhotoPlacesIntoSelections();
       final selections = await _persistSelections(
         _ref.read(selectedPlacesProvider),
       );
@@ -327,6 +455,7 @@ class RouteOptimizationController
                   PlanRoutePlaceInput(
                     localId: selection.id,
                     serverPlaceId: selection.serverPlaceId,
+                    providerPlaceId: selection.providerPlaceId,
                     name: selection.name,
                     address: selection.address,
                     latitude: selection.latitude,
@@ -338,7 +467,7 @@ class RouteOptimizationController
               dayIndex: selectedDay,
               plannedStartTime: dayConstraint.startTime,
               plannedEndTime: dayConstraint.endTime,
-              maxPlaceCount: dayConstraint.maxPlaceCount,
+              maxPlaceCount: null,
               startPlace: dayConstraint.startPlace!,
               endPlace: dayConstraint.endPlace!,
             ),
@@ -348,22 +477,20 @@ class RouteOptimizationController
         result,
         selections,
       );
-      final limitedResult =
-          _limitResult(filteredResult, dayConstraint.maxPlaceCount);
-      state = RouteOptimizationState.done(limitedResult);
-      if (!limitedResult.isAvailable) {
+      state = RouteOptimizationState.done(filteredResult);
+      if (!filteredResult.isAvailable) {
         _ref.read(planItineraryProvider.notifier).clearCurrentDay();
         return;
       }
       _ref.read(planItineraryProvider.notifier).replaceCurrentDay(
-            limitedResult.places,
+            filteredResult.places,
             startTime: dayConstraint.startTime,
-            timeline: limitedResult.timeline,
+            timeline: filteredResult.timeline,
           );
-    } catch (_) {
+    } catch (error) {
       if (requestVersion != _requestVersion) return;
-      state = const RouteOptimizationState.failed(
-        '경로 최적화에 실패했어요. 다시 시도해 주세요.',
+      state = RouteOptimizationState.failed(
+        mapApiErrorToMessage(error),
       );
     }
   }
@@ -415,6 +542,7 @@ class RouteOptimizationController
       final record = await repository.saveWantedPlace(
         PlanRoutePlaceInput(
           localId: selection.id,
+          providerPlaceId: selection.providerPlaceId,
           name: selection.name,
           address: selection.address,
           latitude: selection.latitude,
@@ -426,6 +554,19 @@ class RouteOptimizationController
       _retainPersistedSelection(savedSelection);
     }
     return persisted;
+  }
+
+  void _mergeSavedPhotoPlacesIntoSelections() {
+    final current = _ref.read(selectedPlacesProvider);
+    final currentIds = current.map((selection) => selection.id).toSet();
+    final additions = [
+      for (final place in _ref.read(savedPhotoPlacesProvider))
+        if (currentIds.add(PlanPlaceSelection.photoIdentity(place)))
+          PlanPlaceSelection.fromPhoto(place),
+    ];
+    if (additions.isEmpty) return;
+    _ref.read(selectedPlacesProvider.notifier).state =
+        List.unmodifiable([...current, ...additions]);
   }
 
   void _retainPersistedSelection(PlanPlaceSelection savedSelection) {
@@ -441,19 +582,4 @@ class RouteOptimizationController
     _requestVersion += 1;
     state = const RouteOptimizationState.idle();
   }
-}
-
-RouteOptimizationResult _limitResult(
-  RouteOptimizationResult result,
-  int maxPlaceCount,
-) {
-  if (!result.isAvailable || result.places.length <= maxPlaceCount) {
-    return result;
-  }
-  return RouteOptimizationResult.success(
-    places: result.places.take(maxPlaceCount).toList(growable: false),
-    timeline: result.timeline,
-    warnings: result.warnings,
-    recommendationGroups: result.recommendationGroups,
-  );
 }

@@ -19,6 +19,7 @@ async def _create_trip(client: AsyncClient) -> TripRead:
         "/api/v1/trips",
         json={
             "city": "Tokyo",
+            "country": "Japan",
             "start_date": "2026-07-10",
             "end_date": "2026-07-10",
         },

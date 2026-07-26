@@ -30,6 +30,10 @@ abstract class PlanRepository {
   Future<RouteOptimizationResult> optimizeRoute(
     RouteOptimizationRequest request,
   );
+
+  Future<void> confirmRoute(RouteOptimizationResult result);
+
+  Future<List<ConfirmedRoutePlan>> fetchConfirmedRoutes() async => const [];
 }
 
 class MockPlanRepository implements PlanRepository {
@@ -78,6 +82,16 @@ class MockPlanRepository implements PlanRepository {
       recommendationGroups: mock.routeRecommendationGroups,
     );
   }
+
+  @override
+  Future<void> confirmRoute(RouteOptimizationResult result) async {
+    if (result.timeline == null) {
+      throw StateError('확정할 타임라인이 없습니다.');
+    }
+  }
+
+  @override
+  Future<List<ConfirmedRoutePlan>> fetchConfirmedRoutes() async => const [];
 }
 
 /// 대중교통으로는 경로를 계산할 수 없는 외곽 구간을 식별한다.
@@ -116,13 +130,17 @@ List<RoutePlace> _mockPlacesForRequest(RouteOptimizationRequest request) {
         travelCost: '',
       ),
   ];
-  final retainedBaseCount =
-      (request.maxPlaceCount - recommendationPlaces.length)
-          .clamp(0, request.maxPlaceCount);
-  return [
-    ...mock.routePlacesFor(request.transportMode).take(retainedBaseCount),
+  final maxPlaceCount = request.maxPlaceCount;
+  final basePlaces = mock.routePlacesFor(request.transportMode);
+  final retainedBaseCount = maxPlaceCount == null
+      ? basePlaces.length
+      : (maxPlaceCount - recommendationPlaces.length).clamp(0, maxPlaceCount);
+  final places = [
+    ...basePlaces.take(retainedBaseCount),
     ...recommendationPlaces,
-  ].take(request.maxPlaceCount).toList(growable: false);
+  ];
+  if (maxPlaceCount == null) return List.unmodifiable(places);
+  return places.take(maxPlaceCount).toList(growable: false);
 }
 
 RouteTimeline _buildMockTimeline(

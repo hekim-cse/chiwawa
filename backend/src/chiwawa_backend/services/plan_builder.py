@@ -35,7 +35,13 @@ def build_plan(
     ]
     candidates = sorted(places, key=lambda place: (-place.priority, place.name))
     if not candidates:
-        return _empty_city_plan(state, trip_id, trip.start_date, trip.city, options)
+        return _empty_location_plan(
+            state,
+            trip_id,
+            trip.start_date,
+            trip.city or trip.country,
+            options,
+        )
 
     stop_minutes = _stop_minutes(options.pace)
     available_minutes = int(
@@ -100,7 +106,7 @@ def shift_datetime(day: date, value: time, minutes: int) -> datetime:
     return datetime.combine(day, value) + timedelta(minutes=minutes)
 
 
-def _empty_city_plan(
+def _empty_location_plan(
     state: AppState,
     trip_id: str,
     start_date: date,

@@ -124,9 +124,6 @@ class MockTripRepository implements TripRepository {
 
   @override
   Future<List<FreeTimeRecommend>> fetchFreeTimeRecommendations() async {
-    await tripIdStore.restoreCompleted;
-    final selectedId = tripIdStore.tripId ?? mock.tripInfo.tripId;
-    if (selectedId != mock.tripInfo.tripId) return const [];
-    return mock.freeTimeRecommends;
+    return const [];
   }
 }

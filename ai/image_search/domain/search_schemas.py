@@ -33,6 +33,8 @@ class RecognitionStatus(str, Enum):
 class ImageSearchRequest(BaseModel):
     image_url: str | None = Field(default=None, min_length=1)  # 호스팅 이미지 URL
     image_path: str | None = Field(default=None, min_length=1)  # 로컬 파일 경로
+    image_base64: str | None = Field(default=None, min_length=1)  # API 업로드 이미지
+    image_mime_type: str | None = Field(default=None, pattern=r"^image/")
     note: str | None = Field(default=None, min_length=1)  # 사용자 메모 (예: "야경")
     latitude: float | None = Field(default=None, ge=-90, le=90)  # 촬영/현재 위치 힌트
     longitude: float | None = Field(default=None, ge=-180, le=180)
@@ -40,11 +42,13 @@ class ImageSearchRequest(BaseModel):
     country: str | None = Field(default=None, min_length=1)
     max_candidates: int = Field(default=5, ge=1)  # 반환 후보 최대 개수
 
-    # image_url 또는 image_path 중 최소 하나는 있어야 한다
+    # URL·로컬 경로·API 업로드 중 최소 하나는 있어야 한다.
     @model_validator(mode="after")
     def _require_image_source(self) -> Self:
-        if not self.image_url and not self.image_path:
-            raise ValueError("image_url 또는 image_path 중 하나는 반드시 필요합니다.")
+        if not self.image_url and not self.image_path and not self.image_base64:
+            raise ValueError(
+                "image_url, image_path, image_base64 중 하나는 반드시 필요합니다."
+            )
         return self
 
 

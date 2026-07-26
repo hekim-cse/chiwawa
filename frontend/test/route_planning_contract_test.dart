@@ -8,6 +8,7 @@ import 'package:chiwawa/core/models/transport_mode.dart';
 import 'package:chiwawa/core/models/travel_models.dart';
 import 'package:chiwawa/core/repositories/plan_repository.dart';
 import 'package:chiwawa/core/repositories/api/api_plan_repository.dart';
+import 'package:chiwawa/core/saved_photo_places.dart';
 import 'package:chiwawa/core/services/trip_session_service.dart';
 import 'package:chiwawa/features/plan/models/plan_place_selection.dart';
 import 'package:chiwawa/features/plan/plan_controller.dart';
@@ -70,6 +71,32 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  test('editing endpoint times is not overwritten by confirmed route restore',
+      () {
+    final container = ProviderContainer();
+    addTearDown(container.dispose);
+    final controller = container.read(routeOptimizationProvider.notifier);
+    const result = RouteOptimizationResult.success(
+      places: [],
+      timeline: RouteTimeline(
+        dayIndex: 1,
+        travelMode: TransportMode.walk,
+        plannedStartAt: '2026-08-01T09:00:00+02:00',
+        plannedEndAt: '2026-08-01T20:00:00+02:00',
+        actualEndAt: '2026-08-01T09:00:00+02:00',
+        totalTravelMinutes: 0,
+        totalStayMinutes: 0,
+        timelineStops: [],
+      ),
+    );
+
+    expect(controller.restoreConfirmed(1, result), isTrue);
+    controller.reset();
+
+    expect(controller.canRestoreConfirmed(1), isFalse);
+    expect(controller.restoreConfirmed(1, result), isFalse);
+  });
+
   test('timeline and recommendation contracts retain all UI fields', () {
     final timeline = RouteTimeline.fromJson(const {
       'day_index': 2,
@@ -101,7 +128,7 @@ void main() {
             'place_id': 'google-dessert-1',
             'name': '핑크 디저트 라운지',
             'formatted_address': '도쿄 시부야구',
-            'coordinate': {'lat': 35.66, 'lng': 139.7},
+            'coordinate': {'latitude': 35.66, 'longitude': 139.7},
             'rating': 4.7,
             'user_rating_count': 321,
           },
@@ -128,6 +155,46 @@ void main() {
       group.recommendations.single.insertionImpact.updatedTimelineEndTime,
       '18:22',
     );
+  });
+
+  test('recommendation candidate rejects a response without coordinates', () {
+    expect(
+      () => RouteRecommendationCandidate.fromJson(const {
+        'place_id': 'google-missing-coordinate',
+        'name': '좌표 누락 장소',
+      }),
+      throwsA(isA<FormatException>()),
+    );
+  });
+
+  test('route request excludes a selected place already used as an endpoint',
+      () {
+    const request = RouteOptimizationRequest(
+      places: [
+        PlanRoutePlaceInput(
+          localId: 'endpoint-selection',
+          serverPlaceId: 'wanted-start',
+          providerPlaceId: 'google-start',
+          name: '도쿄역',
+        ),
+        PlanRoutePlaceInput(
+          localId: 'poi-selection',
+          serverPlaceId: 'wanted-poi',
+          providerPlaceId: 'google-poi',
+          name: '도쿄 타워',
+        ),
+      ],
+      preference: TravelPreference(),
+      transportMode: TransportMode.transit,
+      dayIndex: 1,
+      plannedStartTime: '09:00',
+      plannedEndTime: '20:00',
+      maxPlaceCount: 4,
+      startPlace: _startPlace,
+      endPlace: _endPlace,
+    );
+
+    expect(request.wantedPlaceIds, ['wanted-poi']);
   });
 
   test('route optimization saves places first and forwards server ids',
@@ -157,6 +224,89 @@ void main() {
           .read(selectedPlacesProvider)
           .every((selection) => selection.isPersisted),
       isTrue,
+    );
+  });
+
+  test('confirmed photo place is included in route optimization request',
+      () async {
+    final repository = _RecordingPlanRepository();
+    final container = ProviderContainer(
+      overrides: [
+        planRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+    _selectEndpoints(container);
+
+    const photoPlace = PhotoSearchResult(
+      id: 'photo-candidate-1',
+      wantedPlaceId: 'wanted-photo-1',
+      providerPlaceId: 'google-sacre-coeur',
+      name: '사크레쾨르 대성당',
+      address: '파리, 프랑스',
+      category: '관광명소',
+      latitude: 48.8867,
+      longitude: 2.3431,
+    );
+    expect(
+      container.read(planActionsProvider).addSavedPlace(photoPlace),
+      isTrue,
+    );
+
+    await container
+        .read(routeOptimizationProvider.notifier)
+        .optimize(TransportMode.drive);
+
+    expect(
+      repository.lastRequest?.wantedPlaceIds,
+      contains('wanted-photo-1'),
+    );
+    expect(
+      repository.lastRequest?.places.map((place) => place.name),
+      contains('사크레쾨르 대성당'),
+    );
+  });
+
+  test('saved photo place is merged before route optimization', () async {
+    final repository = _RecordingPlanRepository();
+    final container = ProviderContainer(
+      overrides: [
+        planRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+    _selectEndpoints(container);
+
+    const photoPlace = PhotoSearchResult(
+      id: 'photo-candidate-existing',
+      wantedPlaceId: 'wanted-photo-existing',
+      providerPlaceId: 'google-sacre-coeur',
+      name: '사크레쾨르 대성당',
+      address: '파리, 프랑스',
+      category: '관광명소',
+      latitude: 48.8867,
+      longitude: 2.3431,
+    );
+    expect(
+      container.read(savedPhotoPlacesProvider.notifier).addPlace(photoPlace),
+      isTrue,
+    );
+    expect(
+      container.read(selectedPlacesProvider).map((place) => place.name),
+      isNot(contains('사크레쾨르 대성당')),
+    );
+
+    await container
+        .read(routeOptimizationProvider.notifier)
+        .optimize(TransportMode.drive);
+
+    expect(
+      repository.lastRequest?.wantedPlaceIds,
+      contains('wanted-photo-existing'),
+    );
+    expect(
+      container.read(selectedPlacesProvider).map((place) => place.name),
+      contains('사크레쾨르 대성당'),
     );
   });
 
@@ -191,6 +341,7 @@ void main() {
     final adapter = _QueueHttpClientAdapter([
       {
         'id': 'wanted-server-1',
+        'provider_place_id': 'google-tokyo-tower',
         'name': '도쿄 타워',
         'city': '도쿄',
         'country': '일본',
@@ -207,7 +358,31 @@ void main() {
             'estimated_travel_minutes': 9,
           },
         ],
+        'timeline': {
+          'day_index': 1,
+          'travel_mode': 'WALK',
+          'planned_start_at': '2026-08-01T09:00:00+09:00',
+          'planned_end_at': '2026-08-01T18:00:00+09:00',
+          'actual_end_at': '2026-08-01T10:09:00+09:00',
+          'total_travel_minutes': 9,
+          'total_stay_minutes': 60,
+          'timeline_stops': [
+            {
+              'stop_type': 'POI',
+              'place_id': 'wanted-server-1',
+              'name': '도쿄 타워',
+              'arrival_at': '2026-08-01T09:09:00+09:00',
+              'departure_at': '2026-08-01T10:09:00+09:00',
+              'stay_minutes': 60,
+            },
+          ],
+          'warnings': <String>[],
+        },
+        'missing_segments': <String>[],
+        'warnings': <String>[],
+        'recommendation_groups': <Object?>[],
       },
+      <String, Object?>{},
     ]);
     dio.httpClientAdapter = adapter;
     final repository = ApiPlanRepository(
@@ -218,6 +393,7 @@ void main() {
     final saved = await repository.saveWantedPlace(
       const PlanRoutePlaceInput(
         localId: 'manual:1',
+        providerPlaceId: 'google-tokyo-tower',
         name: '도쿄 타워',
         latitude: 35.6586,
         longitude: 139.7454,
@@ -229,6 +405,7 @@ void main() {
           PlanRoutePlaceInput(
             localId: 'manual:1',
             serverPlaceId: saved.id,
+            providerPlaceId: saved.providerPlaceId,
             name: saved.name,
             latitude: saved.latitude,
             longitude: saved.longitude,
@@ -244,15 +421,113 @@ void main() {
         endPlace: _endPlace,
       ),
     );
+    await repository.confirmRoute(result);
 
     expect(saved.id, 'wanted-server-1');
     expect(adapter.requests.first.path, contains('/wanted-places'));
-    expect(adapter.requests.last.path, contains('/route-optimizations'));
     expect(
-      adapter.requests.last.data,
+      adapter.requests.last.path,
+      contains('/route-optimizations/confirm'),
+    );
+    expect(adapter.requests[1].path, contains('/route-optimizations'));
+    expect(
+      adapter.requests[1].data,
       containsPair('transport_mode', 'walk'),
     );
+    expect(
+      adapter.requests.first.data,
+      containsPair('provider_place_id', 'google-tokyo-tower'),
+    );
     expect(result.places.single.placeId, 'wanted-server-1');
+  });
+
+  test('confirmed route API restores endpoints and the full timeline',
+      () async {
+    final store = TripIdStore();
+    await store.save('trip-route-contract');
+    final dio = Dio();
+    final adapter = _QueueHttpClientAdapter([
+      {
+        'trip_id': 'trip-route-contract',
+        'items': [
+          {
+            'day_index': 1,
+            'start': {
+              'place_id': 'google-hotel',
+              'name': '파리 숙소',
+              'lat': 48.8566,
+              'lng': 2.3522,
+            },
+            'end': {
+              'place_id': 'google-hotel',
+              'name': '파리 숙소',
+              'lat': 48.8566,
+              'lng': 2.3522,
+            },
+            'route': {
+              'transport_mode': 'walk',
+              'stops': [
+                {
+                  'order': 1,
+                  'place_id': 'wanted-louvre',
+                  'name': '루브르 박물관',
+                  'estimated_travel_minutes': 20,
+                },
+              ],
+              'timeline': {
+                'day_index': 1,
+                'travel_mode': 'WALK',
+                'planned_start_at': '2026-08-01T09:00:00+02:00',
+                'planned_end_at': '2026-08-01T20:00:00+02:00',
+                'actual_end_at': '2026-08-01T12:00:00+02:00',
+                'total_travel_minutes': 60,
+                'total_stay_minutes': 120,
+                'timeline_stops': [
+                  {
+                    'stop_type': 'START',
+                    'place_id': 'google-hotel',
+                    'name': '파리 숙소',
+                    'arrival_at': '2026-08-01T09:00:00+02:00',
+                    'departure_at': '2026-08-01T09:00:00+02:00',
+                    'stay_minutes': 0,
+                  },
+                  {
+                    'stop_type': 'POI',
+                    'place_id': 'wanted-louvre',
+                    'name': '루브르 박물관',
+                    'arrival_at': '2026-08-01T09:30:00+02:00',
+                    'departure_at': '2026-08-01T11:30:00+02:00',
+                    'stay_minutes': 120,
+                  },
+                  {
+                    'stop_type': 'END',
+                    'place_id': 'google-hotel',
+                    'name': '파리 숙소',
+                    'arrival_at': '2026-08-01T12:00:00+02:00',
+                    'departure_at': '2026-08-01T12:00:00+02:00',
+                    'stay_minutes': 0,
+                  },
+                ],
+              },
+              'missing_segments': <String>[],
+              'warnings': <String>[],
+              'recommendation_groups': <Object?>[],
+            },
+          },
+        ],
+      },
+    ]);
+    dio.httpClientAdapter = adapter;
+    final repository = ApiPlanRepository(dio: dio, tripIdStore: store);
+
+    final routes = await repository.fetchConfirmedRoutes();
+
+    expect(adapter.requests.single.path,
+        endsWith('/route-optimizations/confirmed'));
+    expect(routes.single.startPlace.name, '파리 숙소');
+    expect(routes.single.endPlace, routes.single.startPlace);
+    expect(routes.single.result.timeline?.timelineStops, hasLength(3));
+    expect(routes.single.result.places.single.name, '루브르 박물관');
   });
 
   test('adding a recommendation saves it and reoptimizes the route', () async {
@@ -286,6 +561,64 @@ void main() {
     expect(
       container.read(routeOptimizationProvider).result?.recommendationGroups,
       isEmpty,
+    );
+  });
+
+  test('saved recommendation is included when user optimizes later', () async {
+    final repository = _RecordingPlanRepository();
+    final container = ProviderContainer(
+      overrides: [
+        planRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+    _selectEndpoints(container);
+
+    final added = await container.read(planActionsProvider).addRecommendation(
+          _recommendation,
+          reoptimize: false,
+        );
+
+    expect(added, isTrue);
+    expect(repository.optimizeCount, 0);
+
+    await container
+        .read(planActionsProvider)
+        .optimizeRoute(TransportMode.transit);
+
+    expect(repository.optimizeCount, 1);
+    expect(
+      repository.lastRequest?.wantedPlaceIds,
+      contains('wanted-recommendation:google-dessert-1'),
+    );
+  });
+
+  test('selected visit place preserves Google identity and coordinates',
+      () async {
+    final repository = _RecordingPlanRepository();
+    final container = ProviderContainer(
+      overrides: [
+        planRepositoryProvider.overrideWithValue(repository),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final added = await container
+        .read(planActionsProvider)
+        .saveAndAddSearchedPlace(_startPlace);
+
+    expect(added, isTrue);
+    expect(repository.savedInputs.single.providerPlaceId,
+        _startPlace.providerPlaceId);
+    expect(repository.savedInputs.single.latitude, _startPlace.latitude);
+    expect(
+      container
+          .read(selectedPlacesProvider)
+          .singleWhere(
+            (place) => place.providerPlaceId == _startPlace.providerPlaceId,
+          )
+          .providerPlaceId,
+      _startPlace.providerPlaceId,
     );
   });
 
@@ -392,6 +725,12 @@ class _RecordingPlanRepository implements PlanRepository {
 
   @override
   List<String> get defaultSelectedPlaces => const ['첫 장소', '두 장소'];
+
+  @override
+  Future<void> confirmRoute(RouteOptimizationResult result) async {}
+
+  @override
+  Future<List<ConfirmedRoutePlan>> fetchConfirmedRoutes() async => const [];
 
   @override
   Future<WantedPlaceRecord> saveWantedPlace(

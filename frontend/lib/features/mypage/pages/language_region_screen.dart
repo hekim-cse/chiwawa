@@ -15,7 +15,7 @@ class LanguageRegionScreen extends StatelessWidget {
         MyPageStatusBanner(
           icon: Icons.language_rounded,
           title: '현재 지원 범위',
-          description: '앱 문구는 한국어, 여행 장소 정보는 일본 지역을 기준으로 제공해요.',
+          description: '앱 문구는 한국어로, 여행 장소 정보는 선택한 전 세계 지역을 기준으로 제공해요.',
         ),
         SizedBox(height: ChiwawaSpacing.lg),
         MyPageSection(
@@ -23,7 +23,7 @@ class LanguageRegionScreen extends StatelessWidget {
           child: Column(
             children: [
               MyPageInfoRow(label: '표시 언어', value: '한국어'),
-              MyPageInfoRow(label: '여행 지역', value: '일본'),
+              MyPageInfoRow(label: '여행 지역', value: '전 세계'),
               MyPageInfoRow(
                 label: '시간 표기',
                 value: '24시간제',
@@ -52,8 +52,7 @@ class LanguageRegionScreen extends StatelessWidget {
         MyPageStatusBanner(
           icon: Icons.tune_rounded,
           title: '선택 기능 준비 중',
-          description:
-              '현재 버전은 한국어와 일본 여행 형식으로 고정되어 있어요. 지원 범위가 늘어나면 이 화면에서 선택할 수 있어요.',
+          description: '현재 버전은 한국어 화면을 제공하며 여행 장소는 전 세계에서 선택할 수 있어요.',
           color: ChiwawaColors.warning,
         ),
       ],

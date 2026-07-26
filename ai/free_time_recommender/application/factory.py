@@ -47,7 +47,7 @@ def build_route_option_recommendation_generator(
         ),
         candidates_per_category=settings.candidates_per_category,
         language_code="ko",
-        region_code="JP",
+        region_code=None,
     )
     return GenerateRouteOptionRecommendations(
         route_option_adapter=RoutePlannerRouteOptionAdapter(),
@@ -58,9 +58,7 @@ def build_route_option_recommendation_generator(
                 timeout_seconds=timeout,
             )
         ),
-        place_search=SearchOptimizedRouteLegPlaces(
-            search_along_route=search
-        ),
+        place_search=SearchOptimizedRouteLegPlaces(search_along_route=search),
         group_generator=GenerateInitialRecommendationGroups(
             route_metrics_provider=GoogleCandidateRouteMetricsProvider(
                 api_key=api_key,

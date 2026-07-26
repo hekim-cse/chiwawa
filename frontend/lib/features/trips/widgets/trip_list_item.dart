@@ -107,7 +107,10 @@ class TripListItem extends StatelessWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '${trip.city}, ${trip.country} · ${trip.travelers}명',
+                      '${[
+                        trip.city,
+                        trip.country
+                      ].where((part) => part.trim().isNotEmpty).join(', ')} · ${trip.travelers}명',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(

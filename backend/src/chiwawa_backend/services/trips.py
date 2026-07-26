@@ -26,7 +26,7 @@ TRIP_DURATION_ERROR = f"trip duration must not exceed {MAX_TRIP_DAYS} days"
 @synchronized
 def create_trip(state: AppState, payload: TripCreateRequest) -> TripRead:
     trip_id = state.next_id("trip")
-    title = payload.title or f"{payload.city} travel"
+    title = payload.title or f"{payload.city or payload.country} travel"
     trip = TripRead(
         id=trip_id,
         title=title,
@@ -73,7 +73,7 @@ def update_trip(
     updated = TripRead(
         id=trip.id,
         title=payload.title if payload.title is not None else trip.title,
-        city=payload.city if payload.city is not None else trip.city,
+        city=(payload.city if "city" in payload.model_fields_set else trip.city),
         country=payload.country if payload.country is not None else trip.country,
         start_date=start_date,
         end_date=end_date,
@@ -88,6 +88,13 @@ def update_trip(
         else trip.travel_style,
     )
     state.trips[trip_id] = updated
+    for route_key in [key for key in state.issued_route_timelines if key[0] == trip_id]:
+        _ = state.issued_route_timelines.pop(route_key, None)
+        _ = state.issued_route_recommendations.pop(route_key, None)
+        _ = state.issued_route_endpoints.pop(route_key, None)
+        _ = state.issued_route_responses.pop(route_key, None)
+        _ = state.issued_route_options.pop(route_key, None)
+        _ = state.issued_route_timezones.pop(route_key, None)
     return updated
 
 
@@ -127,6 +134,17 @@ def delete_trip(state: AppState, trip_id: str) -> None:
         del state.confirmed_photo_places[candidate_id]
     for recommendation_id in recommendation_ids:
         _ = state.added_recommendations.pop(recommendation_id, None)
+    for route_key in [key for key in state.confirmed_route_items if key[0] == trip_id]:
+        _ = state.confirmed_route_items.pop(route_key, None)
+    for route_key in [key for key in state.confirmed_routes if key[0] == trip_id]:
+        _ = state.confirmed_routes.pop(route_key, None)
+    for route_key in [key for key in state.issued_route_timelines if key[0] == trip_id]:
+        _ = state.issued_route_timelines.pop(route_key, None)
+        _ = state.issued_route_recommendations.pop(route_key, None)
+        _ = state.issued_route_endpoints.pop(route_key, None)
+        _ = state.issued_route_responses.pop(route_key, None)
+        _ = state.issued_route_options.pop(route_key, None)
+        _ = state.issued_route_timezones.pop(route_key, None)
 
 
 def _has_dated_resource_outside(

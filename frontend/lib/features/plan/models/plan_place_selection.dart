@@ -9,6 +9,7 @@ class PlanPlaceSelection {
     required this.source,
     this.address = '',
     this.serverPlaceId,
+    this.providerPlaceId,
     this.latitude,
     this.longitude,
   });
@@ -20,6 +21,8 @@ class PlanPlaceSelection {
       address: place.address,
       source: PlanPlaceSource.photoSearch,
       serverPlaceId: place.wantedPlaceId.isEmpty ? null : place.wantedPlaceId,
+      providerPlaceId:
+          place.providerPlaceId.isEmpty ? null : place.providerPlaceId,
       latitude: place.latitude,
       longitude: place.longitude,
     );
@@ -30,6 +33,7 @@ class PlanPlaceSelection {
   final String address;
   final PlanPlaceSource source;
   final String? serverPlaceId;
+  final String? providerPlaceId;
   final double? latitude;
   final double? longitude;
 
@@ -42,6 +46,7 @@ class PlanPlaceSelection {
       address: address,
       source: source,
       serverPlaceId: serverPlaceId ?? this.serverPlaceId,
+      providerPlaceId: providerPlaceId,
       latitude: latitude,
       longitude: longitude,
     );

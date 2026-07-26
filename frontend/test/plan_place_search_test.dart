@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:chiwawa/core/models/place_search_models.dart';
 import 'package:chiwawa/core/repositories/api/api_place_search_repository.dart';
 import 'package:chiwawa/core/repositories/place_search_repository.dart';
 import 'package:chiwawa/features/plan/plan_place_search_controller.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 const _tokyoStation = PlaceSearchCandidate(
@@ -160,20 +163,54 @@ void main() {
     expect(state.results, isEmpty);
   });
 
-  test('API mode reports the missing backend search contract explicitly', () {
-    const repository = ApiPlaceSearchRepository();
+  test('API mode maps the backend place search contract', () async {
+    final dio = Dio(BaseOptions(baseUrl: 'http://test'));
+    final adapter = _PlaceSearchHttpAdapter();
+    dio.httpClientAdapter = adapter;
+    final repository = ApiPlaceSearchRepository(dio: dio);
 
-    expect(
-      () => repository.searchPlaces('도쿄역', cityBias: '도쿄'),
-      throwsA(
-        isA<PlaceSearchException>().having(
-          (error) => error.message,
-          'message',
-          '일반 장소 검색 API가 아직 준비되지 않았어요.',
-        ),
-      ),
-    );
+    final result = await repository.searchPlaces('도쿄역', cityBias: 'Tokyo');
+
+    expect(adapter.request?.path, '/api/v1/places/search');
+    expect(adapter.request?.queryParameters, {
+      'query': '도쿄역',
+      'city_bias': 'Tokyo',
+    });
+    expect(result, const [_tokyoStation]);
   });
+}
+
+class _PlaceSearchHttpAdapter implements HttpClientAdapter {
+  RequestOptions? request;
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    request = options;
+    return ResponseBody.fromString(
+      jsonEncode({
+        'items': [
+          {
+            'provider_place_id': 'google-tokyo-station',
+            'name': '도쿄역',
+            'formatted_address': '도쿄도 지요다구 마루노우치 1-9-1',
+            'latitude': 35.6812,
+            'longitude': 139.7671,
+          },
+        ],
+      }),
+      200,
+      headers: {
+        Headers.contentTypeHeader: ['application/json'],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
 }
 
 class _ControlledPlaceSearchRepository implements PlaceSearchRepository {

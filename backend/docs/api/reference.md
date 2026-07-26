@@ -35,8 +35,11 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 - 여행, 장소, 일정, 추천, 기록은 서버 메모리에 저장되므로 재시작 시
   초기화됩니다.
 - 사진 검색은 `ai/image_search`와 Google Maps·Cloud Vision·Gemini를 호출합니다.
-  AI 일정 생성, 동선 최적화, 주변 추천, 빈 시간 추천은 외부 서비스가 아닌 모의
-  휴리스틱입니다.
+- 동선 최적화는 `ROUTE_PLANNER_URL`로 지정한 Modal `plan_trip`을 호출합니다.
+  요청 장소에 좌표가 없거나 Modal 설정·호출·응답 계약에 문제가 있으면 명시적인
+  오류를 반환하며 모의 결과로 대체하지 않습니다.
+- 빈 시간 추천은 최근 경로 최적화가 반환한 실제 추천 그룹을 사용합니다. AI 일정
+  생성과 현재 위치 기반 주변 추천은 현재 모의 휴리스틱입니다.
 - 인증 흐름 상세는 [auth.md](./auth.md)를 봅니다.
 - 회원 단위 Memorial API 상세는 [memorial.md](./memorial.md)를 봅니다.
 - 백엔드 구조는 [backend.md](../architecture/backend.md)를 봅니다.
@@ -60,6 +63,7 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 | places | GET | 200 | 방문 희망 장소 목록 조회 | `/api/v1/trips/{trip_id}/wanted-places` | - | `WantedPlaceListResponse` |
 | places | PATCH | 200 | 방문 희망 장소 수정 | `/api/v1/trips/{trip_id}/wanted-places/{place_id}` | `WantedPlaceUpdateRequest` | `WantedPlaceRead` |
 | places | DELETE | 204 | 방문 희망 장소 삭제 | `/api/v1/trips/{trip_id}/wanted-places/{place_id}` | - | - |
+| places | GET | 200 | 한국어 전 세계 장소 검색 | `/api/v1/places/search` | query: `query`, `city_bias`(선택) | `PlaceSearchResponse` |
 | plans | POST | 202 | AI 여행 일정 생성 요청 | `/api/v1/trips/{trip_id}/ai-plans` | `AIPlanCreateRequest` | `PlanJobRead` |
 | plans | GET | 200 | AI 일정 생성 상태 조회 | `/api/v1/trips/{trip_id}/ai-plans/{plan_job_id}` | - | `PlanJobRead` |
 | plans | GET | 200 | AI 생성 일정 초안 조회 | `/api/v1/trips/{trip_id}/plans/{plan_id}` | - | `PlanDraftRead` |
@@ -106,13 +110,16 @@ uv run uvicorn chiwawa_backend.main:app --reload --no-access-log --host 127.0.0.
 - 여행 종료일은 시작일보다 빠를 수 없습니다.
 - 여행 기간은 시작일과 종료일을 포함해 최대 31일입니다.
 - 일정과 빈 시간 추천의 종료 시각은 시작 시각보다 늦어야 합니다.
-- 일정·추천·계획 시각은 timezone offset 없는 일본 현지 시각이며, 추천과 계획
+- 일정·추천·계획 시각은 timezone offset 없는 여행지 현지 시각이며, 추천과 계획
   시간창은 최소 1분입니다.
 - 일정과 빈 시간 추천 날짜는 여행 기간 안에 있어야 합니다.
 - 여행 날짜를 수정할 때 기존 일정·추천·계획이 새 범위 밖에 남으면 422로
   거부합니다.
 - 일정 초안은 요청한 시작·종료 시각 안에서 겹치지 않게 순차 배치됩니다.
 - 동일 계획 확정 요청은 멱등적으로 처리되어 일정이 중복되지 않습니다.
+- 동선 최적화의 출발지·도착지와 방문 희망 장소에는 좌표가 필요합니다.
+  빈 시간 추천을 함께 요청하면 방문 희망 장소의 `provider_place_id`도
+  Google Place ID로 등록되어 있어야 합니다.
 - 동일 사진 후보 확정과 빈 시간 추천 추가 요청도 기존 결과를 반환해 중복
   장소·일정을 만들지 않습니다.
 - 사진 장소 검색은 `image_url`이 필수이며, 이미지 로딩 실패는 422입니다. 장소를

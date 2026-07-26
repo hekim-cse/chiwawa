@@ -2,7 +2,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from chiwawa_backend.dependencies import get_state
+from chiwawa_backend.dependencies import get_route_planner, get_state
 from chiwawa_backend.schemas.travel import (
     AddRecommendationResponse,
     FreeTimeRecommendationRequest,
@@ -10,10 +10,12 @@ from chiwawa_backend.schemas.travel import (
     TodayScheduleResponse,
 )
 from chiwawa_backend.services import travel as travel_service
+from chiwawa_backend.services.route_optimization import RoutePlanner
 from chiwawa_backend.state import AppState
 
 router = APIRouter(prefix="/api/v1/trips/{trip_id}/travel", tags=["travel"])
 StateDep = Annotated[AppState, Depends(get_state)]
+RoutePlannerDep = Annotated[RoutePlanner, Depends(get_route_planner)]
 
 
 @router.get("/today")
@@ -31,6 +33,20 @@ def recommend_free_time(
     state: StateDep,
 ) -> FreeTimeRecommendationResponse:
     return travel_service.recommend_free_time(state, trip_id, payload)
+
+
+@router.get("/free-time-recommendations")
+async def latest_free_time_recommendations(
+    trip_id: str,
+    state: StateDep,
+    route_planner: RoutePlannerDep,
+) -> FreeTimeRecommendationResponse:
+    """확정 경로를 기준으로 Modal에서 새 삽입 후보를 생성한다."""
+    return await travel_service.latest_free_time_recommendations(
+        state,
+        trip_id,
+        route_planner,
+    )
 
 
 @router.post(

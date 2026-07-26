@@ -1,18 +1,16 @@
 from __future__ import annotations
 
+import base64
 import inspect
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, cast
 
-from ai.image_search.domain.search_schemas import (
-    ImageSearchRequest,
-    ImageSearchResult,
-)
 from ai.image_search.services.image_loader import ImageLoadError
 from fastapi.concurrency import run_in_threadpool
 
 from chiwawa_backend.errors import DomainValidationError, NotFoundError
 from chiwawa_backend.schemas.base import PlaceSource
+from chiwawa_backend.schemas.image_search import ImageSearchRequest, ImageSearchResult
 from chiwawa_backend.schemas.places import (
     ConfirmedPhotoPlaceRead,
     PhotoPlaceCandidateRead,
@@ -29,6 +27,10 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 PHOTO_SEARCH_MAX_CANDIDATES = 5
+PHOTO_UPLOAD_MAX_BYTES = 20 * 1024 * 1024
+INVALID_UPLOAD_TYPE_MESSAGE = "이미지 파일만 업로드할 수 있습니다."
+EMPTY_UPLOAD_MESSAGE = "선택한 이미지 파일이 비어 있습니다."
+UPLOAD_TOO_LARGE_MESSAGE = "이미지는 20MB 이하만 업로드할 수 있습니다."
 
 
 class PhotoPlaceRecognizer(Protocol):
@@ -45,6 +47,38 @@ class PhotoPlaceSearchContext:
     recognizer: PhotoPlaceRecognizer
 
 
+@dataclass(frozen=True, slots=True)
+class PhotoPlaceUploadContext:
+    trip_id: str
+    image_bytes: bytes
+    content_type: str
+    recognizer: PhotoPlaceRecognizer
+
+
+async def search_uploaded_photo_places(
+    state: AppState,
+    context: PhotoPlaceUploadContext,
+) -> PhotoPlaceSearchResponse:
+    if not context.content_type.startswith("image/"):
+        raise DomainValidationError(INVALID_UPLOAD_TYPE_MESSAGE)
+    if not context.image_bytes:
+        raise DomainValidationError(EMPTY_UPLOAD_MESSAGE)
+    if len(context.image_bytes) > PHOTO_UPLOAD_MAX_BYTES:
+        raise DomainValidationError(UPLOAD_TOO_LARGE_MESSAGE)
+
+    with state.lock:
+        trip = require_trip(state, context.trip_id)
+    request = ImageSearchRequest(
+        image_base64=base64.b64encode(context.image_bytes).decode("ascii"),
+        image_mime_type=context.content_type,
+        city=trip.city or None,
+        country=trip.country or None,
+        max_candidates=PHOTO_SEARCH_MAX_CANDIDATES,
+    )
+    result = await _search_recognizer(context.recognizer, request)
+    return _store_photo_search_result(state, context.trip_id, result)
+
+
 async def search_photo_places(
     state: AppState,
     context: PhotoPlaceSearchContext,
@@ -57,8 +91,8 @@ async def search_photo_places(
         note=context.payload.note,
         latitude=context.payload.latitude,
         longitude=context.payload.longitude,
-        city=trip.city,
-        country=trip.country,
+        city=trip.city or None,
+        country=trip.country or None,
         max_candidates=PHOTO_SEARCH_MAX_CANDIDATES,
     )
     try:
@@ -66,11 +100,20 @@ async def search_photo_places(
     except ImageLoadError as error:
         raise DomainValidationError(str(error)) from error
 
+    return _store_photo_search_result(state, context.trip_id, result)
+
+
+def _store_photo_search_result(
+    state: AppState,
+    trip_id: str,
+    result: ImageSearchResult,
+) -> PhotoPlaceSearchResponse:
     with state.lock:
-        trip = require_trip(state, context.trip_id)
+        trip = require_trip(state, trip_id)
         candidates = [
             PhotoPlaceCandidateRead(
                 id=state.next_id("candidate"),
+                provider_place_id=candidate.place_id,
                 name=candidate.name,
                 city=candidate.city or trip.city,
                 country=candidate.country or trip.country,
@@ -83,7 +126,7 @@ async def search_photo_places(
         ]
         search = PhotoPlaceSearchResponse(
             id=state.next_id("photo_search"),
-            trip_id=context.trip_id,
+            trip_id=trip_id,
             candidates=candidates,
         )
         state.photo_searches[search.id] = search
@@ -139,6 +182,7 @@ def confirm_photo_place(
         state,
         trip_id,
         WantedPlaceCreateRequest(
+            provider_place_id=candidate.provider_place_id,
             name=candidate.name,
             city=candidate.city or trip.city,
             country=candidate.country or trip.country,

@@ -18,6 +18,11 @@ MISSING_GOOGLE_CREDENTIAL_MESSAGE = "GOOGLE_CLIENT_SECRET is required"
 MISSING_JWT_KEY_MESSAGE = "JWT_SECRET is required"
 SHORT_JWT_KEY_MESSAGE = "JWT_SECRET must contain at least 32 characters"
 MISSING_IMAGE_SEARCH_URL_MESSAGE = "IMAGE_SEARCH_URL is required"
+MISSING_ROUTE_PLANNER_URL_MESSAGE = "ROUTE_PLANNER_URL is required"
+MISSING_FREE_TIME_RECOMMENDER_URL_MESSAGE = (
+    "FREE_TIME_RECOMMENDER_URL is required"
+)
+MISSING_GOOGLE_MAPS_API_KEY_MESSAGE = "GOOGLE_MAPS_API_KEY is required"
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,6 +44,7 @@ class Settings(BaseSettings):
     google_client_secret: SecretStr | None = None
     google_redirect_uri: str | None = None
     google_auth_db_path: Path = Path("data/google_auth.db")
+    app_db_path: Path = Path("data/chiwawa.db")
     google_oauth_cookie_secure: bool = False
     google_oauth_state_ttl_seconds: int = Field(default=600, ge=60, le=3600)
     jwt_secret: SecretStr | None = None
@@ -48,6 +54,13 @@ class Settings(BaseSettings):
     image_search_url: str | None = None
     image_search_timeout_seconds: float = Field(default=125.0, ge=1, le=180)
     image_search_max_retries: int = Field(default=1, ge=0, le=2)
+    route_planner_url: str | None = None
+    free_time_recommender_url: str | None = None
+    route_planner_timeout_seconds: float = Field(default=305.0, ge=1, le=310)
+    route_planner_max_retries: int = Field(default=1, ge=0, le=2)
+    place_search_timeout_seconds: float = Field(default=10.0, ge=1, le=30)
+    place_search_page_size: int = Field(default=5, ge=1, le=20)
+    time_zone_timeout_seconds: float = Field(default=10.0, ge=1, le=30)
     cors_allow_origins: str = "http://localhost:8080"
     # 데모 모드: 토큰 없이(게스트) 접근 시 고정 데모 유저로 처리한다.
     # 시연에서 로그인 없이 메모리얼 앨범을 보여주기 위한 용도. 기본값 off.
@@ -89,8 +102,33 @@ class Settings(BaseSettings):
             raise ConfigurationError(MISSING_IMAGE_SEARCH_URL_MESSAGE)
         return self.image_search_url.strip()
 
+    def require_route_planner_url(self) -> str:
+        if self.route_planner_url is None or not self.route_planner_url.strip():
+            raise ConfigurationError(MISSING_ROUTE_PLANNER_URL_MESSAGE)
+        return self.route_planner_url.strip()
+
+    def require_free_time_recommender_url(self) -> str:
+        if (
+            self.free_time_recommender_url is None
+            or not self.free_time_recommender_url.strip()
+        ):
+            raise ConfigurationError(MISSING_FREE_TIME_RECOMMENDER_URL_MESSAGE)
+        return self.free_time_recommender_url.strip()
+
+    def require_google_maps_api_key(self) -> str:
+        if self.google_maps_api_key is None:
+            raise ConfigurationError(MISSING_GOOGLE_MAPS_API_KEY_MESSAGE)
+        secret = self.google_maps_api_key.get_secret_value()
+        if not secret.strip():
+            raise ConfigurationError(MISSING_GOOGLE_MAPS_API_KEY_MESSAGE)
+        return secret
+
     def auth_db_path(self) -> Path:
         path = self.google_auth_db_path.expanduser()
+        return path if path.is_absolute() else (Path.cwd() / path).resolve()
+
+    def application_db_path(self) -> Path:
+        path = self.app_db_path.expanduser()
         return path if path.is_absolute() else (Path.cwd() / path).resolve()
 
 

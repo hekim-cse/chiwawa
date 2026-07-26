@@ -158,6 +158,28 @@ void main() {
     );
   });
 
+  test('long-running requests disable every Dio timeout stage', () async {
+    final container = ProviderContainer(
+      overrides: [
+        apiBaseUrlProvider.overrideWithValue('https://api.chiwawa.test'),
+      ],
+    );
+    addTearDown(container.dispose);
+    final dio = container.read(dioClientProvider);
+    final adapter = RecordingHttpClientAdapter();
+    dio.httpClientAdapter = adapter;
+
+    await dio.get<void>(
+      '/api/v1/long-running',
+      options: waitForServerResponseOptions(),
+    );
+
+    final request = adapter.requests.single;
+    expect(request.connectTimeout, Duration.zero);
+    expect(request.sendTimeout, Duration.zero);
+    expect(request.receiveTimeout, Duration.zero);
+  });
+
   test('ApiPlanRepository forwards the selected transport mode', () async {
     SharedPreferences.setMockInitialValues({});
     final tripIdStore = TripIdStore();
@@ -181,7 +203,6 @@ void main() {
         dayIndex: 1,
         plannedStartTime: '09:00',
         plannedEndTime: '18:00',
-        maxPlaceCount: 4,
         startPlace: PlaceSearchCandidate(
           providerPlaceId: 'google-start',
           name: '도쿄역',
@@ -203,6 +224,14 @@ void main() {
     expect(
       adapter.requests.single.data,
       containsPair('transport_mode', 'drive'),
+    );
+    expect(
+      adapter.requests.single.data,
+      containsPair('include_recommendations', false),
+    );
+    expect(
+      adapter.requests.single.data,
+      isNot(contains('max_place_count')),
     );
   });
 

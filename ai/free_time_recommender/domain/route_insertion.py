@@ -23,9 +23,7 @@ def _validate_integer(
         raise TypeError(f"{field_name}는 정수여야 합니다.")
 
     if value < minimum:
-        raise ValueError(
-            f"{field_name}는 {minimum} 이상이어야 합니다."
-        )
+        raise ValueError(f"{field_name}는 {minimum} 이상이어야 합니다.")
 
 
 def _validate_datetime(
@@ -81,26 +79,20 @@ class RouteLegInsertionWindow:
         for value, field_name in datetime_fields:
             _validate_datetime(value, field_name)
 
-        timezone_awareness = {
-            _is_timezone_aware(value)
-            for value, _ in datetime_fields
-        }
+        timezone_awareness = {_is_timezone_aware(value) for value, _ in datetime_fields}
         if len(timezone_awareness) != 1:
             raise ValueError(
-                "경로 구간의 모든 시각은 동일한 시간대 형식을 "
-                "사용해야 합니다."
+                "경로 구간의 모든 시각은 동일한 시간대 형식을 사용해야 합니다."
             )
 
         if self.next_arrival_at < self.previous_departure_at:
             raise ValueError(
-                "next_arrival_at은 previous_departure_at보다 "
-                "빠를 수 없습니다."
+                "next_arrival_at은 previous_departure_at보다 빠를 수 없습니다."
             )
 
         if self.original_timeline_end_at < self.next_arrival_at:
             raise ValueError(
-                "original_timeline_end_at은 next_arrival_at보다 "
-                "빠를 수 없습니다."
+                "original_timeline_end_at은 next_arrival_at보다 빠를 수 없습니다."
             )
 
         _validate_integer(
@@ -109,11 +101,7 @@ class RouteLegInsertionWindow:
             minimum=0,
         )
         expected_travel_minutes = int(
-            (
-                self.next_arrival_at
-                - self.previous_departure_at
-            ).total_seconds()
-            // 60
+            (self.next_arrival_at - self.previous_departure_at).total_seconds() // 60
         )
         if self.original_travel_minutes != expected_travel_minutes:
             raise ValueError(
@@ -141,9 +129,7 @@ class CandidateInsertionSchedule:
 
     def __post_init__(self) -> None:
         if not isinstance(self.travel_times, CandidateTravelTimes):
-            raise TypeError(
-                "travel_times는 CandidateTravelTimes여야 합니다."
-            )
+            raise TypeError("travel_times는 CandidateTravelTimes여야 합니다.")
 
         _validate_integer(
             self.previous_to_candidate_distance_meters,
@@ -167,12 +153,8 @@ class RouteInsertionRejectionReason(str, Enum):
     """경로 구간에 추천 후보를 삽입할 수 없는 사유."""
 
     STAY_DURATION_BELOW_MINIMUM = "STAY_DURATION_BELOW_MINIMUM"
-    PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED = (
-        "PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED"
-    )
-    CANDIDATE_TO_NEXT_LIMIT_EXCEEDED = (
-        "CANDIDATE_TO_NEXT_LIMIT_EXCEEDED"
-    )
+    PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED = "PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED"
+    CANDIDATE_TO_NEXT_LIMIT_EXCEEDED = "CANDIDATE_TO_NEXT_LIMIT_EXCEEDED"
     PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED = (
         "PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED"
     )
@@ -207,83 +189,69 @@ class EvaluateRouteLegInsertionImpact:
         window: RouteLegInsertionWindow,
         policy: RecommendationPolicy,
         candidate_schedule: CandidateInsertionSchedule,
+        *,
+        enforce_one_way_limits: bool = True,
     ) -> RouteLegInsertionImpact:
+        if not isinstance(enforce_one_way_limits, bool):
+            raise TypeError("enforce_one_way_limits는 boolean이어야 합니다.")
         travel_times = candidate_schedule.travel_times
         replacement_travel_minutes = (
             travel_times.previous_to_candidate_minutes
             + travel_times.candidate_to_next_minutes
         )
         replacement_total_minutes = (
-            replacement_travel_minutes
-            + candidate_schedule.stay_minutes
+            replacement_travel_minutes + candidate_schedule.stay_minutes
         )
-        additional_minutes = (
-            replacement_total_minutes
-            - window.original_travel_minutes
+        additional_minutes = replacement_total_minutes - window.original_travel_minutes
+        updated_next_arrival_at = window.next_arrival_at + timedelta(
+            minutes=additional_minutes
         )
-        updated_next_arrival_at = (
-            window.next_arrival_at
-            + timedelta(minutes=additional_minutes)
-        )
-        updated_timeline_end_at = (
-            window.original_timeline_end_at
-            + timedelta(minutes=additional_minutes)
+        updated_timeline_end_at = window.original_timeline_end_at + timedelta(
+            minutes=additional_minutes
         )
         remaining_minutes = int(
-            (
-                window.planned_end_at
-                - updated_timeline_end_at
-            ).total_seconds()
-            // 60
+            (window.planned_end_at - updated_timeline_end_at).total_seconds() // 60
         )
 
         reasons: list[RouteInsertionRejectionReason] = []
         if candidate_schedule.stay_minutes < policy.minimum_stay_minutes:
-            reasons.append(
-                RouteInsertionRejectionReason
-                .STAY_DURATION_BELOW_MINIMUM
-            )
+            reasons.append(RouteInsertionRejectionReason.STAY_DURATION_BELOW_MINIMUM)
 
-        if (
-            travel_times.previous_to_candidate_minutes
-            > policy.maximum_one_way_travel_minutes
-        ):
-            reasons.append(
-                RouteInsertionRejectionReason
-                .PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED
-            )
+        if enforce_one_way_limits:
+            if (
+                travel_times.previous_to_candidate_minutes
+                > policy.maximum_one_way_travel_minutes
+            ):
+                reasons.append(
+                    RouteInsertionRejectionReason.PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED
+                )
 
-        if (
-            travel_times.candidate_to_next_minutes
-            > policy.maximum_one_way_travel_minutes
-        ):
-            reasons.append(
-                RouteInsertionRejectionReason
-                .CANDIDATE_TO_NEXT_LIMIT_EXCEEDED
-            )
+            if (
+                travel_times.candidate_to_next_minutes
+                > policy.maximum_one_way_travel_minutes
+            ):
+                reasons.append(
+                    RouteInsertionRejectionReason.CANDIDATE_TO_NEXT_LIMIT_EXCEEDED
+                )
 
-        if (
-            candidate_schedule.previous_to_candidate_distance_meters
-            > policy.maximum_one_way_distance_meters
-        ):
-            reasons.append(
-                RouteInsertionRejectionReason
-                .PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED
-            )
+            if (
+                candidate_schedule.previous_to_candidate_distance_meters
+                > policy.maximum_one_way_distance_meters
+            ):
+                reasons.append(
+                    RouteInsertionRejectionReason.PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED
+                )
 
-        if (
-            candidate_schedule.candidate_to_next_distance_meters
-            > policy.maximum_one_way_distance_meters
-        ):
-            reasons.append(
-                RouteInsertionRejectionReason
-                .CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED
-            )
+            if (
+                candidate_schedule.candidate_to_next_distance_meters
+                > policy.maximum_one_way_distance_meters
+            ):
+                reasons.append(
+                    RouteInsertionRejectionReason.CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED
+                )
 
         if updated_timeline_end_at > window.planned_end_at:
-            reasons.append(
-                RouteInsertionRejectionReason.PLANNED_END_EXCEEDED
-            )
+            reasons.append(RouteInsertionRejectionReason.PLANNED_END_EXCEEDED)
 
         return RouteLegInsertionImpact(
             replacement_travel_minutes=replacement_travel_minutes,

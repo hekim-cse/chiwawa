@@ -77,10 +77,6 @@ class PlanDayConstraintsController
     _update(day, state.forDay(day).copyWith(endTime: value));
   }
 
-  void updateMaxPlaceCount(int day, int value) {
-    _update(day, state.forDay(day).copyWith(maxPlaceCount: value));
-  }
-
   void _update(int day, PlanDayConstraint constraint) {
     if (day < 1) return;
     final constraints = Map<int, PlanDayConstraint>.unmodifiable({

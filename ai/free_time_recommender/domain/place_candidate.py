@@ -59,13 +59,9 @@ class RecommendationCategoryCatalog:
                     "RecommendationCategoryDefinition이어야 합니다."
                 )
             if definition.category in categories:
-                raise ValueError(
-                    "definitions에는 중복 카테고리를 사용할 수 없습니다."
-                )
+                raise ValueError("definitions에는 중복 카테고리를 사용할 수 없습니다.")
             if definition.display_name in display_names:
-                raise ValueError(
-                    "definitions에는 중복 표시명을 사용할 수 없습니다."
-                )
+                raise ValueError("definitions에는 중복 표시명을 사용할 수 없습니다.")
             categories.add(definition.category)
             display_names.add(definition.display_name)
 
@@ -101,7 +97,7 @@ class AlongRoutePlaceSearchQuery:
     category: RecommendationCategory
     page_size: int
     language_code: str
-    region_code: str
+    region_code: str | None = None
 
     def __post_init__(self) -> None:
         _validate_non_empty_string(self.encoded_polyline, "encoded_polyline")
@@ -112,7 +108,8 @@ class AlongRoutePlaceSearchQuery:
         if not 1 <= self.page_size <= 20:
             raise ValueError("page_size는 1 이상 20 이하여야 합니다.")
         _validate_non_empty_string(self.language_code, "language_code")
-        _validate_non_empty_string(self.region_code, "region_code")
+        if self.region_code is not None:
+            _validate_non_empty_string(self.region_code, "region_code")
 
 
 @dataclass(frozen=True)
@@ -216,6 +213,4 @@ class CategoryRouteLegPlaceCandidates:
                     "candidates는 RouteLegPlaceCandidate만 포함해야 합니다."
                 )
             if candidate.candidate.category is not self.category:
-                raise ValueError(
-                    "후보 카테고리가 그룹 카테고리와 일치하지 않습니다."
-                )
+                raise ValueError("후보 카테고리가 그룹 카테고리와 일치하지 않습니다.")

@@ -7,6 +7,7 @@ import 'package:chiwawa/features/home/widgets/home_quick_actions.dart';
 import 'package:chiwawa/features/plan/widgets/route_optimization_section.dart';
 import 'package:chiwawa/features/plan/models/plan_itinerary.dart';
 import 'package:chiwawa/features/plan/models/plan_place_selection.dart';
+import 'package:chiwawa/features/plan/plan_place_search_controller.dart';
 import 'package:chiwawa/features/plan/widgets/place_input_field.dart';
 import 'package:chiwawa/features/plan/widgets/plan_day_selector.dart';
 import 'package:chiwawa/features/plan/widgets/plan_itinerary_workspace.dart';
@@ -104,7 +105,10 @@ void main() {
               source: PlanPlaceSource.manual,
             ),
           ],
-          onAdd: (_) {},
+          searchState: const PlanPlaceSearchState(),
+          onQueryChanged: (_) {},
+          onPlaceSelected: (_) {},
+          onRetry: () {},
           onRemove: (_) {},
         ),
       ),

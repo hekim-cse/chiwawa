@@ -32,6 +32,7 @@ void main() {
     const draft = TripDraft(
       title: '오사카 여행',
       city: 'Osaka',
+      country: 'Japan',
       startDate: '2026-08-01',
       endDate: '2026-08-04',
       travelers: 2,
@@ -86,9 +87,76 @@ void main() {
 
     expect(store.tripId, current.tripId);
   });
+
+  test('home schedule selects the nearest travel day when trip is upcoming',
+      () async {
+    final now = DateTime.now();
+    final firstDay = now.add(const Duration(days: 3));
+    final secondDay = now.add(const Duration(days: 4));
+    final interceptor = _TripApiInterceptor(
+      scheduleItems: [
+        _scheduleJson('later', secondDay),
+        _scheduleJson('first', firstDay),
+      ],
+    );
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
+      ..interceptors.add(interceptor);
+    final store = TripIdStore();
+    await store.save('trip-1');
+    final repository = ApiTripRepository(dio: dio, tripIdStore: store);
+
+    final schedules = await repository.fetchTodaySchedules();
+
+    expect(schedules.map((item) => item.id), ['first']);
+    expect(interceptor.requests.single.path, '/api/v1/trips/trip-1/schedule');
+  });
+
+  test('free-time recommendations use the latest optimized route endpoint',
+      () async {
+    final interceptor = _TripApiInterceptor();
+    final dio = Dio(BaseOptions(baseUrl: 'https://example.test'))
+      ..interceptors.add(interceptor);
+    final store = TripIdStore();
+    await store.save('trip-1');
+    final repository = ApiTripRepository(dio: dio, tripIdStore: store);
+
+    final recommendations = await repository.fetchFreeTimeRecommendations();
+
+    expect(recommendations, hasLength(4));
+    expect(
+      recommendations.map((item) => item.categoryLabel),
+      [
+        '랜드마크·관광명소',
+        '랜드마크·관광명소',
+        '카페',
+        '카페',
+      ],
+    );
+    expect(recommendations.first.name, '에펠탑 전망대');
+    expect(recommendations.first.walk, '18분');
+    expect(recommendations.first.duration, '60분');
+    expect(recommendations.first.recommendation.candidate.latitude, 48.8584);
+    expect(recommendations.first.recommendation.candidate.longitude, 2.2945);
+    expect(interceptor.requests.single.method, 'GET');
+    expect(
+      interceptor.requests.single.sendTimeout,
+      Duration.zero,
+    );
+    expect(
+      interceptor.requests.single.receiveTimeout,
+      Duration.zero,
+    );
+    expect(
+      interceptor.requests.single.path,
+      '/api/v1/trips/trip-1/travel/free-time-recommendations',
+    );
+  });
 }
 
 class _TripApiInterceptor extends Interceptor {
+  _TripApiInterceptor({this.scheduleItems = const []});
+
+  final List<Map<String, Object?>> scheduleItems;
   final requests = <RequestOptions>[];
 
   @override
@@ -101,7 +169,71 @@ class _TripApiInterceptor extends Interceptor {
     }
 
     final Object data;
-    if (options.method == 'GET' && options.path == '/api/v1/trips') {
+    if (options.path.endsWith('/travel/free-time-recommendations')) {
+      data = {
+        'trip_id': 'trip-1',
+        'date': '2026-08-01',
+        'items': [
+          {
+            'id': 'recommendation-1',
+            'trip_id': 'trip-1',
+            'title': '랜드마크·관광명소',
+            'place_name': '에펠탑 전망대',
+            'duration_minutes': 60,
+            'travel_minutes': 18,
+            'reason': '실제 경로에 삽입 가능',
+            'date': '2026-08-01',
+            'start_time': '15:00:00',
+            'end_time': '16:00:00',
+            'recommendation': _recommendationJson(
+              'google-eiffel',
+              '에펠탑 전망대',
+            ),
+          },
+          {
+            'id': 'recommendation-2',
+            'trip_id': 'trip-1',
+            'title': '랜드마크·관광명소',
+            'place_name': '샤요궁',
+            'duration_minutes': 60,
+            'travel_minutes': 16,
+            'reason': '실제 경로에 삽입 가능',
+            'date': '2026-08-01',
+            'start_time': '16:00:00',
+            'end_time': '17:00:00',
+            'recommendation': _recommendationJson('google-chaillot', '샤요궁'),
+          },
+          {
+            'id': 'recommendation-3',
+            'trip_id': 'trip-1',
+            'title': '카페',
+            'place_name': '카페 A',
+            'duration_minutes': 30,
+            'travel_minutes': 12,
+            'reason': '실제 경로에 삽입 가능',
+            'date': '2026-08-01',
+            'start_time': '17:00:00',
+            'end_time': '17:30:00',
+            'recommendation': _recommendationJson('google-cafe-a', '카페 A'),
+          },
+          {
+            'id': 'recommendation-4',
+            'trip_id': 'trip-1',
+            'title': '카페',
+            'place_name': '카페 B',
+            'duration_minutes': 30,
+            'travel_minutes': 14,
+            'reason': '실제 경로에 삽입 가능',
+            'date': '2026-08-01',
+            'start_time': '17:30:00',
+            'end_time': '18:00:00',
+            'recommendation': _recommendationJson('google-cafe-b', '카페 B'),
+          },
+        ],
+      };
+    } else if (options.path.endsWith('/schedule')) {
+      data = {'trip_id': 'trip-1', 'items': scheduleItems};
+    } else if (options.method == 'GET' && options.path == '/api/v1/trips') {
       data = const {
         'items': [_tripOne],
       };
@@ -124,6 +256,39 @@ class _TripApiInterceptor extends Interceptor {
     );
   }
 }
+
+Map<String, Object?> _recommendationJson(String placeId, String name) => {
+      'candidate': {
+        'place_id': placeId,
+        'name': name,
+        'formatted_address': '프랑스 파리',
+        'coordinate': {
+          'latitude': 48.8584,
+          'longitude': 2.2945,
+        },
+      },
+      'insertion_impact': {
+        'previous_place_id': 'previous',
+        'next_place_id': 'next',
+        'additional_minutes': 18,
+        'candidate_arrival_at': '2026-08-01T15:00:00',
+        'candidate_departure_at': '2026-08-01T16:00:00',
+        'updated_next_arrival_at': '2026-08-01T16:15:00',
+        'updated_timeline_end_at': '2026-08-01T18:00:00',
+      },
+    };
+
+Map<String, Object?> _scheduleJson(String id, DateTime date) => {
+      'id': id,
+      'trip_id': 'trip-1',
+      'name': id,
+      'date': '${date.year.toString().padLeft(4, '0')}-'
+          '${date.month.toString().padLeft(2, '0')}-'
+          '${date.day.toString().padLeft(2, '0')}',
+      'start_time': '10:00:00',
+      'end_time': '11:00:00',
+      'source': 'plan',
+    };
 
 const _tripOne = <String, Object?>{
   'id': 'trip-1',
