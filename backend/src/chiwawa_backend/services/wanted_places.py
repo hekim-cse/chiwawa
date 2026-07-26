@@ -20,9 +20,10 @@ def create_wanted_place(
     place = WantedPlaceRead(
         id=state.next_id("place"),
         trip_id=trip_id,
+        provider_place_id=payload.provider_place_id,
         name=payload.name,
         city=payload.city or trip.city,
-        country=payload.country,
+        country=payload.country or trip.country,
         latitude=payload.latitude,
         longitude=payload.longitude,
         priority=payload.priority,
@@ -53,6 +54,11 @@ def update_wanted_place(
     updated = WantedPlaceRead(
         id=place.id,
         trip_id=place.trip_id,
+        provider_place_id=(
+            payload.provider_place_id
+            if payload.provider_place_id is not None
+            else place.provider_place_id
+        ),
         name=payload.name or place.name,
         city=payload.city or place.city,
         country=payload.country or place.country,

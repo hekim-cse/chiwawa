@@ -88,6 +88,9 @@ def update_trip(
         else trip.travel_style,
     )
     state.trips[trip_id] = updated
+    for route_key in [key for key in state.issued_route_timelines if key[0] == trip_id]:
+        _ = state.issued_route_timelines.pop(route_key, None)
+        _ = state.issued_route_recommendations.pop(route_key, None)
     return updated
 
 
@@ -127,6 +130,11 @@ def delete_trip(state: AppState, trip_id: str) -> None:
         del state.confirmed_photo_places[candidate_id]
     for recommendation_id in recommendation_ids:
         _ = state.added_recommendations.pop(recommendation_id, None)
+    for route_key in [key for key in state.confirmed_route_items if key[0] == trip_id]:
+        _ = state.confirmed_route_items.pop(route_key, None)
+    for route_key in [key for key in state.issued_route_timelines if key[0] == trip_id]:
+        _ = state.issued_route_timelines.pop(route_key, None)
+        _ = state.issued_route_recommendations.pop(route_key, None)
 
 
 def _has_dated_resource_outside(

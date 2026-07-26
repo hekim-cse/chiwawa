@@ -33,6 +33,15 @@ def recommend_free_time(
     return travel_service.recommend_free_time(state, trip_id, payload)
 
 
+@router.get("/free-time-recommendations")
+def latest_free_time_recommendations(
+    trip_id: str,
+    state: StateDep,
+) -> FreeTimeRecommendationResponse:
+    """가장 최근에 최적화한 일정의 실제 삽입 가능 후보를 반환한다."""
+    return travel_service.latest_free_time_recommendations(state, trip_id)
+
+
 @router.post(
     "/free-time-recommendations/{recommendation_id}/add",
     status_code=status.HTTP_201_CREATED,

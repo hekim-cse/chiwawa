@@ -22,6 +22,7 @@ class PhotoPlaceSearchRequest(ApiModel):
 
 class PhotoPlaceCandidateRead(ApiModel):
     id: str
+    provider_place_id: str | None = None
     name: str
     city: str
     country: str
@@ -38,9 +39,10 @@ class PhotoPlaceSearchResponse(ApiModel):
 
 
 class WantedPlaceCreateRequest(ApiModel):
+    provider_place_id: str | None = Field(default=None, min_length=1)
     name: str = Field(min_length=1)
     city: str | None = Field(default=None, min_length=1)
-    country: str = Field(default="Japan", min_length=1)
+    country: str | None = Field(default=None, min_length=1)
     latitude: float | None = Field(default=None, ge=-90, le=90)
     longitude: float | None = Field(default=None, ge=-180, le=180)
     priority: int = Field(default=3, ge=1, le=5)
@@ -48,6 +50,7 @@ class WantedPlaceCreateRequest(ApiModel):
 
 
 class WantedPlaceUpdateRequest(ApiModel):
+    provider_place_id: str | None = Field(default=None, min_length=1)
     name: str | None = Field(default=None, min_length=1)
     city: str | None = Field(default=None, min_length=1)
     country: str | None = Field(default=None, min_length=1)
@@ -60,6 +63,7 @@ class WantedPlaceUpdateRequest(ApiModel):
 class WantedPlaceRead(ApiModel):
     id: str
     trip_id: str
+    provider_place_id: str | None = None
     name: str
     city: str
     country: str

@@ -112,3 +112,70 @@ async def test_google_callback_persists_typed_user_and_returns_documented_token(
     assert response.headers["pragma"] == "no-cache"
     assert response.headers["referrer-policy"] == "no-referrer"
     assert replay_response.status_code == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.anyio
+async def test_google_popup_callback_posts_token_only_to_bound_frontend_origin(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _configure_google_oauth(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-only-secret-at-least-32-characters")
+    monkeypatch.setenv("GOOGLE_AUTH_DB_PATH", str(tmp_path / "google_auth.db"))
+    monkeypatch.setenv("CORS_ALLOW_ORIGINS", "http://localhost:8080")
+    monkeypatch.setattr(httpx, "post", _google_token_response)
+    monkeypatch.setattr(httpx, "get", _google_profile_response)
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        login_response = await client.get(
+            "/api/v1/auth/google/login",
+            params={"popup_origin": "http://localhost:8080"},
+            follow_redirects=False,
+        )
+        state = parse_qs(urlparse(login_response.headers["location"]).query)["state"][0]
+        response = await client.get(
+            f"/api/v1/auth/google/callback?code=test-code&state={state}",
+        )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.headers["content-type"].startswith("text/html")
+    assert "chiwawa-google-oauth-success" in response.text
+    assert "http://localhost:8080" in response.text
+    assert "access_token" in response.text
+    assert "window.close" not in response.text
+
+
+@pytest.mark.anyio
+async def test_browser_callback_without_app_popup_never_displays_token(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _configure_google_oauth(monkeypatch)
+    monkeypatch.setenv("JWT_SECRET", "test-only-secret-at-least-32-characters")
+    monkeypatch.setenv("GOOGLE_AUTH_DB_PATH", str(tmp_path / "google_auth.db"))
+    monkeypatch.setattr(httpx, "post", _google_token_response)
+    monkeypatch.setattr(httpx, "get", _google_profile_response)
+    app = create_app()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        login_response = await client.get(
+            "/api/v1/auth/google/login",
+            follow_redirects=False,
+        )
+        state = parse_qs(urlparse(login_response.headers["location"]).query)["state"][0]
+        response = await client.get(
+            f"/api/v1/auth/google/callback?code=test-code&state={state}",
+            headers={"Accept": "text/html"},
+        )
+
+    assert response.status_code == HTTPStatus.OK
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Google 로그인 버튼에서 다시 시작" in response.text
+    assert "access_token" not in response.text

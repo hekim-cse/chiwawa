@@ -5,7 +5,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from chiwawa_backend.config import get_settings
-from chiwawa_backend.dependencies import get_photo_place_recognizer, get_state
+from chiwawa_backend.dependencies import (
+    get_photo_place_recognizer,
+    get_place_search_provider,
+    get_route_planner,
+    get_state,
+    get_time_zone_provider,
+)
 from chiwawa_backend.errors import (
     ConfigurationError,
     DomainValidationError,
@@ -18,6 +24,7 @@ from chiwawa_backend.routers import (
     health,
     memorial,
     photo_places,
+    place_search,
     plans,
     schedule,
     travel,
@@ -26,17 +33,23 @@ from chiwawa_backend.routers import (
 )
 from chiwawa_backend.schemas.base import ErrorResponse
 from chiwawa_backend.services.photo_places import PhotoPlaceRecognizer
+from chiwawa_backend.services.place_search import PlaceSearchProvider
+from chiwawa_backend.services.route_optimization import RoutePlanner
+from chiwawa_backend.services.time_zone import TimeZoneProvider
 from chiwawa_backend.state import AppState
 
 
 def create_app(
     state: AppState | None = None,
     photo_place_recognizer: PhotoPlaceRecognizer | None = None,
+    route_planner: RoutePlanner | None = None,
+    place_search_provider: PlaceSearchProvider | None = None,
+    time_zone_provider: TimeZoneProvider | None = None,
 ) -> FastAPI:
     app_state = state or AppState()
     app = FastAPI(
         title="Chiwawa Backend",
-        description="AI 기반 일본 자유여행 일정 추천 및 관리 API",
+        description="AI 기반 전 세계 자유여행 일정 추천 및 관리 API",
         version="0.1.0",
         docs_url="/docs",
         redoc_url="/redoc",
@@ -60,12 +73,25 @@ def create_app(
         app.dependency_overrides[get_photo_place_recognizer] = _recognizer_dependency(
             photo_place_recognizer
         )
+    if route_planner is not None:
+        app.dependency_overrides[get_route_planner] = _route_planner_dependency(
+            route_planner,
+        )
+    if place_search_provider is not None:
+        app.dependency_overrides[get_place_search_provider] = (
+            _place_search_provider_dependency(place_search_provider)
+        )
+    if time_zone_provider is not None:
+        app.dependency_overrides[get_time_zone_provider] = (
+            _time_zone_provider_dependency(time_zone_provider)
+        )
     _register_exception_handlers(app)
     for router in (
         health.router,
         auth.router,
         trips.router,
         photo_places.router,
+        place_search.router,
         wanted_places.router,
         plans.router,
         schedule.router,
@@ -90,6 +116,33 @@ def _recognizer_dependency(
 ) -> Callable[[], PhotoPlaceRecognizer]:
     def dependency() -> PhotoPlaceRecognizer:
         return recognizer
+
+    return dependency
+
+
+def _route_planner_dependency(
+    route_planner: RoutePlanner,
+) -> Callable[[], RoutePlanner]:
+    def dependency() -> RoutePlanner:
+        return route_planner
+
+    return dependency
+
+
+def _place_search_provider_dependency(
+    provider: PlaceSearchProvider,
+) -> Callable[[], PlaceSearchProvider]:
+    def dependency() -> PlaceSearchProvider:
+        return provider
+
+    return dependency
+
+
+def _time_zone_provider_dependency(
+    provider: TimeZoneProvider,
+) -> Callable[[], TimeZoneProvider]:
+    def dependency() -> TimeZoneProvider:
+        return provider
 
     return dependency
 

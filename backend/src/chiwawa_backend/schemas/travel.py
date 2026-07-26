@@ -46,6 +46,7 @@ class FreeTimeRecommendationRead(ApiModel):
     title: str
     place_name: str
     duration_minutes: int = Field(ge=1)
+    travel_minutes: int = Field(ge=0)
     reason: str
     date: dt.date
     start_time: dt.time
@@ -54,6 +55,7 @@ class FreeTimeRecommendationRead(ApiModel):
 
 class FreeTimeRecommendationResponse(ApiModel):
     trip_id: str
+    date: dt.date
     items: list[FreeTimeRecommendationRead]
 
 

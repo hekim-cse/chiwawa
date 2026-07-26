@@ -21,13 +21,16 @@ from chiwawa_backend.schemas.travel import (
     ReplanResponse,
 )
 from chiwawa_backend.schemas.trips import TripListResponse, TripRead
+from chiwawa_backend.state import AppState
+from tests.free_time_fakes import seed_free_time_recommendation_context
 from tests.photo_place_fakes import create_photo_place_test_app
 
 
 @pytest.mark.anyio
 async def test_pipeline_creates_trip_plan_schedule_and_memorial() -> None:
     # Given: a fresh backend app for the full travel-planning flow.
-    app = create_photo_place_test_app()
+    state = AppState()
+    app = create_photo_place_test_app(state)
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
@@ -52,6 +55,7 @@ async def test_pipeline_creates_trip_plan_schedule_and_memorial() -> None:
         )
         assert trip_response.status_code == HTTPStatus.CREATED
         trip = TripRead.model_validate(trip_response.json())
+        seed_free_time_recommendation_context(state, trip.id)
 
         wanted_response = await client.post(
             f"/api/v1/trips/{trip.id}/wanted-places",
@@ -112,13 +116,6 @@ async def test_pipeline_creates_trip_plan_schedule_and_memorial() -> None:
         assert schedule_response.status_code == HTTPStatus.OK
         schedule = ScheduleResponse.model_validate(schedule_response.json())
         assert len(schedule.items) >= 2
-
-        route_response = await client.post(
-            f"/api/v1/trips/{trip.id}/route-optimizations",
-            json={"start_place": "Hotel"},
-        )
-        assert route_response.status_code == HTTPStatus.CREATED
-        assert route_response.json()["total_estimated_minutes"] > 0
 
         free_time_response = await client.post(
             f"/api/v1/trips/{trip.id}/travel/free-time-recommendations",

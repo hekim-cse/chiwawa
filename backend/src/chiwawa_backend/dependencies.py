@@ -10,12 +10,18 @@ from pydantic import SecretStr
 
 from chiwawa_backend.config import get_settings
 from chiwawa_backend.errors import ConfigurationError
+from chiwawa_backend.services.google_place_search import GooglePlaceSearchProvider
+from chiwawa_backend.services.google_time_zone import GoogleTimeZoneProvider
 from chiwawa_backend.services.image_search_client import RemotePhotoPlaceRecognizer
 from chiwawa_backend.services.jwt_auth import (
     get_current_user_from_credentials,
     security,
 )
 from chiwawa_backend.services.photo_places import PhotoPlaceRecognizer
+from chiwawa_backend.services.place_search import PlaceSearchProvider
+from chiwawa_backend.services.route_optimization import RoutePlanner
+from chiwawa_backend.services.route_planner_client import RemoteRoutePlanner
+from chiwawa_backend.services.time_zone import TimeZoneProvider
 from chiwawa_backend.state import AppState
 
 
@@ -67,6 +73,21 @@ def get_photo_place_recognizer() -> PhotoPlaceRecognizer:
     if settings.image_search_url and settings.image_search_url.strip():
         return RemotePhotoPlaceRecognizer(settings)
     return _LazyPhotoPlaceRecognizer()
+
+
+@lru_cache(maxsize=1)
+def get_route_planner() -> RoutePlanner:
+    return RemoteRoutePlanner(get_settings())
+
+
+@lru_cache(maxsize=1)
+def get_place_search_provider() -> PlaceSearchProvider:
+    return GooglePlaceSearchProvider(get_settings())
+
+
+@lru_cache(maxsize=1)
+def get_time_zone_provider() -> TimeZoneProvider:
+    return GoogleTimeZoneProvider(get_settings())
 
 
 def _build_photo_place_recognizer() -> PlaceRecognizer:

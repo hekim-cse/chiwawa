@@ -1,13 +1,23 @@
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from secrets import compare_digest, token_urlsafe
 from typing import Annotated
 from urllib.parse import urlencode
 
 import httpx
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Response, status
-from fastapi.responses import RedirectResponse
+from fastapi import (
+    APIRouter,
+    Cookie,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import ValidationError
 
@@ -39,14 +49,22 @@ OAUTH_COOKIE_PATH = "/api/v1/auth/google"
     status_code=status.HTTP_302_FOUND,
     response_class=RedirectResponse,
 )
-def google_login(app_state: StateDep) -> RedirectResponse:
+def google_login(
+    app_state: StateDep,
+    popup_origin: Annotated[str | None, Query()] = None,
+) -> RedirectResponse:
     settings = get_settings()
     oauth = settings.require_google_oauth()
     oauth_state = token_urlsafe(32)
     expires_at = datetime.now(UTC) + timedelta(
         seconds=settings.google_oauth_state_ttl_seconds,
     )
-    app_state.issue_oauth_state(oauth_state, expires_at)
+    if popup_origin is not None and popup_origin not in settings.allowed_origins():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="허용되지 않은 OAuth 팝업 출처입니다.",
+        )
+    app_state.issue_oauth_state(oauth_state, expires_at, popup_origin)
     params = {
         "client_id": oauth.client_id,
         "redirect_uri": oauth.redirect_uri,
@@ -80,7 +98,8 @@ def google_login(app_state: StateDep) -> RedirectResponse:
         status.HTTP_502_BAD_GATEWAY: {"model": ErrorResponse},
     },
 )
-def google_callback(
+def google_callback(  # noqa: PLR0913 - FastAPI 계약별 요청 요소를 명시적으로 주입
+    request: Request,
     response: Response,
     app_state: StateDep,
     code: Annotated[str, Query(min_length=1, max_length=4096)],
@@ -102,7 +121,7 @@ def google_callback(
             pattern=r"^[A-Za-z0-9_-]+$",
         ),
     ],
-) -> GoogleAuthResponse:
+) -> GoogleAuthResponse | HTMLResponse:
     if not compare_digest(
         state_value.encode(),
         state_cookie.encode(),
@@ -116,6 +135,7 @@ def google_callback(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="invalid OAuth state",
         )
+    popup_origin = app_state.consume_oauth_popup_origin(state_value)
 
     settings = get_settings()
     oauth = settings.require_google_oauth()
@@ -131,9 +151,23 @@ def google_callback(
         subject=user.id,
         payload={"email": user.email, "name": user.name},
     )
+    auth = GoogleAuthResponse(user=user, access_token=access_token)
+    if popup_origin is not None:
+        popup_response = _oauth_popup_response(auth, popup_origin)
+        popup_response.delete_cookie(key=OAUTH_STATE_COOKIE, path=OAUTH_COOKIE_PATH)
+        _set_no_store_headers(popup_response)
+        return popup_response
+    if "text/html" in request.headers.get("accept", ""):
+        browser_response = _oauth_browser_without_popup_response()
+        browser_response.delete_cookie(
+            key=OAUTH_STATE_COOKIE,
+            path=OAUTH_COOKIE_PATH,
+        )
+        _set_no_store_headers(browser_response)
+        return browser_response
     response.delete_cookie(key=OAUTH_STATE_COOKIE, path=OAUTH_COOKIE_PATH)
     _set_no_store_headers(response)
-    return GoogleAuthResponse(user=user, access_token=access_token)
+    return auth
 
 
 @router.get(
@@ -197,3 +231,54 @@ def _set_no_store_headers(response: Response) -> None:
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     response.headers["Referrer-Policy"] = "no-referrer"
+
+
+def _oauth_popup_response(
+    auth: GoogleAuthResponse,
+    popup_origin: str,
+) -> HTMLResponse:
+    message = json.dumps(
+        {
+            "type": "chiwawa-google-oauth-success",
+            "payload": auth.model_dump(mode="json"),
+        },
+        ensure_ascii=False,
+    )
+    message_literal = json.dumps(message).replace("<", "\\u003c")
+    target_origin = json.dumps(popup_origin)
+    html = f"""<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>로그인 완료</title></head>
+<body>
+<p>로그인이 완료되었습니다. 앱으로 돌아가는 중입니다.</p>
+<script>
+window.opener?.postMessage({message_literal}, {target_origin});
+</script>
+</body>
+</html>"""
+    return HTMLResponse(
+        content=html,
+        headers={
+            "Content-Security-Policy": (
+                "default-src 'none'; script-src 'unsafe-inline'; "
+                "style-src 'none'; frame-ancestors 'none'"
+            ),
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+def _oauth_browser_without_popup_response() -> HTMLResponse:
+    return HTMLResponse(
+        content="""<!doctype html>
+<html lang="ko">
+<head><meta charset="utf-8"><title>로그인 다시 시작</title></head>
+<body>
+<p>앱의 Google 로그인 버튼에서 다시 시작해 주세요.</p>
+</body>
+</html>""",
+        headers={
+            "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
