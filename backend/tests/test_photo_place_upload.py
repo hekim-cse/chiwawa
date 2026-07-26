@@ -66,6 +66,36 @@ async def test_photo_upload_reaches_recognizer_as_base64() -> None:
 
 
 @pytest.mark.anyio
+async def test_photo_upload_omits_optional_empty_city_from_ai_contract() -> None:
+    recognizer = CapturingRecognizer()
+    app = create_app(photo_place_recognizer=recognizer)
+    app.dependency_overrides[get_current_user_id] = lambda: 1
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        trip_response = await client.post(
+            "/api/v1/trips",
+            json={
+                "country": "France",
+                "start_date": "2026-08-01",
+                "end_date": "2026-08-01",
+            },
+        )
+        trip_id = TripRead.model_validate(trip_response.json()).id
+        response = await client.post(
+            f"/api/v1/trips/{trip_id}/photo-places/search-upload",
+            files={"file": ("eiffel.png", b"\x89PNG\r\n\x1a\nphoto", "image/png")},
+        )
+
+    assert response.status_code == HTTPStatus.CREATED
+    assert recognizer.request is not None
+    assert recognizer.request.city is None
+    assert recognizer.request.country == "France"
+
+
+@pytest.mark.anyio
 async def test_photo_upload_rejects_non_image_file() -> None:
     recognizer = CapturingRecognizer()
     app = create_app(photo_place_recognizer=recognizer)

@@ -5,14 +5,12 @@ import json
 from typing import TYPE_CHECKING, cast
 
 import httpx
-from ai.image_search.domain.search_schemas import ImageSearchRequest, ImageSearchResult
 from pydantic import ValidationError
 
 from chiwawa_backend.errors import DomainValidationError, UpstreamServiceError
+from chiwawa_backend.schemas.image_search import ImageSearchRequest, ImageSearchResult
 
 if TYPE_CHECKING:
-    from pydantic import BaseModel
-
     from chiwawa_backend.config import Settings
 
 RETRYABLE_STATUS_CODES = frozenset({500, 502, 503, 504})
@@ -39,13 +37,7 @@ class RemotePhotoPlaceRecognizer:
         self._retry_backoff_seconds: float = retry_backoff_seconds
 
     async def search(self, request: ImageSearchRequest) -> ImageSearchResult:
-        payload = cast(
-            "dict[str, object]",
-            cast("BaseModel", cast("object", request)).model_dump(
-                mode="json",
-                exclude_none=True,
-            ),
-        )
+        payload = request.model_dump(mode="json", exclude_none=True)
         for attempt in range(self._max_retries + 1):
             try:
                 async with httpx.AsyncClient(
@@ -72,10 +64,7 @@ class RemotePhotoPlaceRecognizer:
                 raise UpstreamServiceError(message)
 
             try:
-                result = cast("type[BaseModel]", ImageSearchResult).model_validate_json(
-                    response.content,
-                )
-                return cast("ImageSearchResult", cast("object", result))
+                return ImageSearchResult.model_validate_json(response.content)
             except (ValidationError, ValueError) as error:
                 raise UpstreamServiceError(INVALID_RESPONSE_MESSAGE) from error
 

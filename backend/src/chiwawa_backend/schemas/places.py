@@ -24,7 +24,7 @@ class PhotoPlaceCandidateRead(ApiModel):
     id: str
     provider_place_id: str | None = None
     name: str
-    city: str
+    city: str | None
     country: str
     latitude: float
     longitude: float
@@ -65,7 +65,7 @@ class WantedPlaceRead(ApiModel):
     trip_id: str
     provider_place_id: str | None = None
     name: str
-    city: str
+    city: str | None
     country: str
     latitude: float | None
     longitude: float | None

@@ -26,7 +26,7 @@ TRIP_DURATION_ERROR = f"trip duration must not exceed {MAX_TRIP_DAYS} days"
 @synchronized
 def create_trip(state: AppState, payload: TripCreateRequest) -> TripRead:
     trip_id = state.next_id("trip")
-    title = payload.title or f"{payload.city} travel"
+    title = payload.title or f"{payload.city or payload.country} travel"
     trip = TripRead(
         id=trip_id,
         title=title,
@@ -73,7 +73,7 @@ def update_trip(
     updated = TripRead(
         id=trip.id,
         title=payload.title if payload.title is not None else trip.title,
-        city=payload.city if payload.city is not None else trip.city,
+        city=(payload.city if "city" in payload.model_fields_set else trip.city),
         country=payload.country if payload.country is not None else trip.country,
         start_date=start_date,
         end_date=end_date,

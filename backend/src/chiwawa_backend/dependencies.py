@@ -2,7 +2,6 @@ from functools import lru_cache
 from threading import RLock
 from typing import Annotated
 
-from ai.image_search.domain.search_schemas import ImageSearchRequest, ImageSearchResult
 from ai.image_search.services.place_recognizer import PlaceRecognizer
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
@@ -10,6 +9,7 @@ from pydantic import SecretStr
 
 from chiwawa_backend.config import get_settings
 from chiwawa_backend.errors import ConfigurationError
+from chiwawa_backend.schemas.image_search import ImageSearchRequest, ImageSearchResult
 from chiwawa_backend.services.google_place_search import GooglePlaceSearchProvider
 from chiwawa_backend.services.google_time_zone import GoogleTimeZoneProvider
 from chiwawa_backend.services.image_search_client import RemotePhotoPlaceRecognizer

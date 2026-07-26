@@ -5,15 +5,12 @@ import inspect
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, cast
 
-from ai.image_search.domain.search_schemas import (
-    ImageSearchRequest,
-    ImageSearchResult,
-)
 from ai.image_search.services.image_loader import ImageLoadError
 from fastapi.concurrency import run_in_threadpool
 
 from chiwawa_backend.errors import DomainValidationError, NotFoundError
 from chiwawa_backend.schemas.base import PlaceSource
+from chiwawa_backend.schemas.image_search import ImageSearchRequest, ImageSearchResult
 from chiwawa_backend.schemas.places import (
     ConfirmedPhotoPlaceRead,
     PhotoPlaceCandidateRead,
@@ -74,8 +71,8 @@ async def search_uploaded_photo_places(
     request = ImageSearchRequest(
         image_base64=base64.b64encode(context.image_bytes).decode("ascii"),
         image_mime_type=context.content_type,
-        city=trip.city,
-        country=trip.country,
+        city=trip.city or None,
+        country=trip.country or None,
         max_candidates=PHOTO_SEARCH_MAX_CANDIDATES,
     )
     result = await _search_recognizer(context.recognizer, request)
@@ -94,8 +91,8 @@ async def search_photo_places(
         note=context.payload.note,
         latitude=context.payload.latitude,
         longitude=context.payload.longitude,
-        city=trip.city,
-        country=trip.country,
+        city=trip.city or None,
+        country=trip.country or None,
         max_candidates=PHOTO_SEARCH_MAX_CANDIDATES,
     )
     try:
