@@ -35,6 +35,7 @@ from chiwawa_backend.schemas.base import ErrorResponse
 from chiwawa_backend.services.photo_places import PhotoPlaceRecognizer
 from chiwawa_backend.services.place_search import PlaceSearchProvider
 from chiwawa_backend.services.route_optimization import RoutePlanner
+from chiwawa_backend.services.state_store import SQLiteStateStore
 from chiwawa_backend.services.time_zone import TimeZoneProvider
 from chiwawa_backend.state import AppState
 
@@ -191,4 +192,10 @@ def _register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(UpstreamServiceError, not_found_handler)
 
 
-app = create_app()
+def create_persistent_app() -> FastAPI:
+    settings = get_settings()
+    store = SQLiteStateStore.from_settings(settings)
+    return create_app(state=AppState(store=store))
+
+
+app = create_persistent_app()

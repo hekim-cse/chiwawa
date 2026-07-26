@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     google_client_secret: SecretStr | None = None
     google_redirect_uri: str | None = None
     google_auth_db_path: Path = Path("data/google_auth.db")
+    app_db_path: Path = Path("data/chiwawa.db")
     google_oauth_cookie_secure: bool = False
     google_oauth_state_ttl_seconds: int = Field(default=600, ge=60, le=3600)
     jwt_secret: SecretStr | None = None
@@ -112,6 +113,10 @@ class Settings(BaseSettings):
 
     def auth_db_path(self) -> Path:
         path = self.google_auth_db_path.expanduser()
+        return path if path.is_absolute() else (Path.cwd() / path).resolve()
+
+    def application_db_path(self) -> Path:
+        path = self.app_db_path.expanduser()
         return path if path.is_absolute() else (Path.cwd() / path).resolve()
 
 
