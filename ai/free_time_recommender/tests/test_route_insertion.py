@@ -37,13 +37,9 @@ def make_window(
         previous_place_id="poi-a",
         next_place_id="poi-b",
         previous_departure_at=at(12),
-        next_arrival_at=(
-            at(12) + timedelta(minutes=original_travel_minutes)
-        ),
+        next_arrival_at=(at(12) + timedelta(minutes=original_travel_minutes)),
         original_travel_minutes=original_travel_minutes,
-        original_timeline_end_at=(
-            original_timeline_end_at or at(17)
-        ),
+        original_timeline_end_at=(original_timeline_end_at or at(17)),
         planned_end_at=planned_end_at or at(18),
     )
 
@@ -56,9 +52,7 @@ def make_policy(
 ) -> RecommendationPolicy:
     return RecommendationPolicy(
         minimum_stay_minutes=minimum_stay_minutes,
-        maximum_one_way_travel_minutes=(
-            maximum_one_way_travel_minutes
-        ),
+        maximum_one_way_travel_minutes=(maximum_one_way_travel_minutes),
         maximum_one_way_distance_meters=3000,
         candidate_limit=10,
     )
@@ -74,6 +68,7 @@ def evaluate(
     previous_distance_meters: int = 1000,
     next_distance_meters: int = 1000,
     stay_minutes: int = 30,
+    enforce_one_way_limits: bool = True,
 ) -> RouteLegInsertionImpact:
     return EvaluateRouteLegInsertionImpact().evaluate(
         window=window or make_window(),
@@ -83,12 +78,11 @@ def evaluate(
                 previous_to_candidate_minutes=previous_minutes,
                 candidate_to_next_minutes=next_minutes,
             ),
-            previous_to_candidate_distance_meters=(
-                previous_distance_meters
-            ),
+            previous_to_candidate_distance_meters=(previous_distance_meters),
             candidate_to_next_distance_meters=next_distance_meters,
             stay_minutes=stay_minutes,
         ),
+        enforce_one_way_limits=enforce_one_way_limits,
     )
 
 
@@ -120,6 +114,27 @@ def test_evaluate_accepts_updated_end_equal_to_planned_end() -> None:
     assert result.is_insertable is True
 
 
+# 말단 빈 시간 추천은 편도 상한 대신 고정 도착시각만 검증하는지 확인
+def test_evaluate_can_use_only_total_end_budget() -> None:
+    result = evaluate(
+        window=make_window(
+            original_timeline_end_at=at(12, 20),
+            planned_end_at=at(20),
+        ),
+        previous_minutes=60,
+        next_minutes=60,
+        previous_distance_meters=10_000,
+        next_distance_meters=10_000,
+        stay_minutes=30,
+        enforce_one_way_limits=False,
+    )
+
+    assert result.updated_timeline_end_at == at(14, 30)
+    assert result.remaining_minutes == 330
+    assert result.is_insertable is True
+    assert result.rejection_reasons == ()
+
+
 # 양쪽 편도 거리 상한 초과 사유를 각각 반환하는지 검증
 def test_evaluate_rejects_each_one_way_distance_limit() -> None:
     result = evaluate(
@@ -129,10 +144,8 @@ def test_evaluate_rejects_each_one_way_distance_limit() -> None:
 
     assert result.is_insertable is False
     assert result.rejection_reasons == (
-        RouteInsertionRejectionReason
-        .PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED,
-        RouteInsertionRejectionReason
-        .CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED,
+        RouteInsertionRejectionReason.PREVIOUS_TO_CANDIDATE_DISTANCE_LIMIT_EXCEEDED,
+        RouteInsertionRejectionReason.CANDIDATE_TO_NEXT_DISTANCE_LIMIT_EXCEEDED,
     )
 
 
@@ -177,10 +190,8 @@ def test_evaluate_reports_all_policy_rejection_reasons() -> None:
 
     assert result.rejection_reasons == (
         RouteInsertionRejectionReason.STAY_DURATION_BELOW_MINIMUM,
-        RouteInsertionRejectionReason
-        .PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED,
-        RouteInsertionRejectionReason
-        .CANDIDATE_TO_NEXT_LIMIT_EXCEEDED,
+        RouteInsertionRejectionReason.PREVIOUS_TO_CANDIDATE_LIMIT_EXCEEDED,
+        RouteInsertionRejectionReason.CANDIDATE_TO_NEXT_LIMIT_EXCEEDED,
     )
 
 
@@ -189,11 +200,7 @@ def test_evaluate_reports_all_policy_rejection_reasons() -> None:
 def test_candidate_schedule_rejects_invalid_stay_minutes(
     invalid_value: object,
 ) -> None:
-    expected_exception = (
-        ValueError
-        if invalid_value in (0, -1)
-        else TypeError
-    )
+    expected_exception = ValueError if invalid_value in (0, -1) else TypeError
 
     with pytest.raises(expected_exception):
         CandidateInsertionSchedule(
