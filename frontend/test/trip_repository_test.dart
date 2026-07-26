@@ -122,10 +122,30 @@ void main() {
 
     final recommendations = await repository.fetchFreeTimeRecommendations();
 
-    expect(recommendations.single.name, '에펠탑 전망대');
-    expect(recommendations.single.walk, '18분');
-    expect(recommendations.single.duration, '60분');
+    expect(recommendations, hasLength(4));
+    expect(
+      recommendations.map((item) => item.categoryLabel),
+      [
+        '랜드마크·관광명소',
+        '랜드마크·관광명소',
+        '카페',
+        '카페',
+      ],
+    );
+    expect(recommendations.first.name, '에펠탑 전망대');
+    expect(recommendations.first.walk, '18분');
+    expect(recommendations.first.duration, '60분');
+    expect(recommendations.first.recommendation.candidate.latitude, 48.8584);
+    expect(recommendations.first.recommendation.candidate.longitude, 2.2945);
     expect(interceptor.requests.single.method, 'GET');
+    expect(
+      interceptor.requests.single.sendTimeout,
+      Duration.zero,
+    );
+    expect(
+      interceptor.requests.single.receiveTimeout,
+      Duration.zero,
+    );
     expect(
       interceptor.requests.single.path,
       '/api/v1/trips/trip-1/travel/free-time-recommendations',
@@ -150,7 +170,7 @@ class _TripApiInterceptor extends Interceptor {
 
     final Object data;
     if (options.path.endsWith('/travel/free-time-recommendations')) {
-      data = const {
+      data = {
         'trip_id': 'trip-1',
         'date': '2026-08-01',
         'items': [
@@ -165,6 +185,49 @@ class _TripApiInterceptor extends Interceptor {
             'date': '2026-08-01',
             'start_time': '15:00:00',
             'end_time': '16:00:00',
+            'recommendation': _recommendationJson(
+              'google-eiffel',
+              '에펠탑 전망대',
+            ),
+          },
+          {
+            'id': 'recommendation-2',
+            'trip_id': 'trip-1',
+            'title': '랜드마크·관광명소',
+            'place_name': '샤요궁',
+            'duration_minutes': 60,
+            'travel_minutes': 16,
+            'reason': '실제 경로에 삽입 가능',
+            'date': '2026-08-01',
+            'start_time': '16:00:00',
+            'end_time': '17:00:00',
+            'recommendation': _recommendationJson('google-chaillot', '샤요궁'),
+          },
+          {
+            'id': 'recommendation-3',
+            'trip_id': 'trip-1',
+            'title': '카페',
+            'place_name': '카페 A',
+            'duration_minutes': 30,
+            'travel_minutes': 12,
+            'reason': '실제 경로에 삽입 가능',
+            'date': '2026-08-01',
+            'start_time': '17:00:00',
+            'end_time': '17:30:00',
+            'recommendation': _recommendationJson('google-cafe-a', '카페 A'),
+          },
+          {
+            'id': 'recommendation-4',
+            'trip_id': 'trip-1',
+            'title': '카페',
+            'place_name': '카페 B',
+            'duration_minutes': 30,
+            'travel_minutes': 14,
+            'reason': '실제 경로에 삽입 가능',
+            'date': '2026-08-01',
+            'start_time': '17:30:00',
+            'end_time': '18:00:00',
+            'recommendation': _recommendationJson('google-cafe-b', '카페 B'),
           },
         ],
       };
@@ -193,6 +256,27 @@ class _TripApiInterceptor extends Interceptor {
     );
   }
 }
+
+Map<String, Object?> _recommendationJson(String placeId, String name) => {
+      'candidate': {
+        'place_id': placeId,
+        'name': name,
+        'formatted_address': '프랑스 파리',
+        'coordinate': {
+          'latitude': 48.8584,
+          'longitude': 2.2945,
+        },
+      },
+      'insertion_impact': {
+        'previous_place_id': 'previous',
+        'next_place_id': 'next',
+        'additional_minutes': 18,
+        'candidate_arrival_at': '2026-08-01T15:00:00',
+        'candidate_departure_at': '2026-08-01T16:00:00',
+        'updated_next_arrival_at': '2026-08-01T16:15:00',
+        'updated_timeline_end_at': '2026-08-01T18:00:00',
+      },
+    };
 
 Map<String, Object?> _scheduleJson(String id, DateTime date) => {
       'id': id,

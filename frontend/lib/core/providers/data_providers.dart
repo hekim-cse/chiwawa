@@ -6,9 +6,12 @@ import '../env.dart';
 import '../auth/auth_controller.dart';
 import '../models/memorial_map_models.dart';
 import '../models/memorial_models.dart';
+import '../models/route_planning_models.dart';
+import '../models/transport_mode.dart';
 import '../models/travel_models.dart';
 import '../repositories/memorial_repository.dart';
 import '../repositories/photo_place_repository.dart';
+import '../repositories/plan_repository.dart';
 import '../repositories/trip_repository.dart';
 import '../services/trip_session_service.dart';
 import '../utils/geo_cluster.dart';
@@ -38,13 +41,70 @@ final freeTimeRecommendsProvider = FutureProvider<List<FreeTimeRecommend>>(
   },
 );
 
+final confirmedRoutesProvider = FutureProvider<List<ConfirmedRoutePlan>>(
+  (ref) {
+    ref.watch(currentTripRevisionProvider);
+    return ref.watch(planRepositoryProvider).fetchConfirmedRoutes();
+  },
+);
+
 final homeDataProvider = FutureProvider<HomeData>((ref) async {
   ref.watch(currentTripRevisionProvider);
   final repository = ref.watch(tripRepositoryProvider);
   final tripInfo = await repository.fetchCurrentTrip();
-  final schedules = await repository.fetchTodaySchedules();
+  final confirmedRoutes = await ref.watch(confirmedRoutesProvider.future);
+  final schedules = confirmedRoutes.isEmpty
+      ? await repository.fetchTodaySchedules()
+      : _scheduleFromConfirmedRoute(_visibleConfirmedRoute(confirmedRoutes));
   return (tripInfo: tripInfo, schedules: schedules);
 });
+
+ConfirmedRoutePlan _visibleConfirmedRoute(List<ConfirmedRoutePlan> routes) {
+  final sorted = [...routes]..sort((left, right) {
+      final leftDate =
+          DateTime.tryParse(left.result.timeline?.plannedStartAt ?? '');
+      final rightDate =
+          DateTime.tryParse(right.result.timeline?.plannedStartAt ?? '');
+      if (leftDate == null || rightDate == null) {
+        return left.dayIndex.compareTo(right.dayIndex);
+      }
+      return leftDate.compareTo(rightDate);
+    });
+  final now = DateTime.now();
+  return sorted.firstWhere(
+    (route) {
+      final date =
+          DateTime.tryParse(route.result.timeline?.plannedStartAt ?? '');
+      return date != null &&
+          !date.isBefore(DateTime(now.year, now.month, now.day));
+    },
+    orElse: () => sorted.last,
+  );
+}
+
+List<ScheduleItem> _scheduleFromConfirmedRoute(ConfirmedRoutePlan plan) {
+  final timeline = plan.result.timeline;
+  if (timeline == null) return const [];
+  return [
+    for (var index = 0; index < timeline.timelineStops.length; index++)
+      ScheduleItem(
+        id: 'confirmed-route-${plan.dayIndex}-$index',
+        tripId: '',
+        date: DateTime.tryParse(timeline.timelineStops[index].arrivalAt)
+                ?.toIso8601String()
+                .split('T')
+                .first ??
+            '',
+        startTime: timeline.timelineStops[index].arrivalTime,
+        endTime: timeline.timelineStops[index].departureTime,
+        name: timeline.timelineStops[index].name,
+        placeId: timeline.timelineStops[index].placeId,
+        source: 'plan',
+        transport: timeline.travelMode.label,
+        stopType: timeline.timelineStops[index].stopType,
+      ),
+  ];
+}
 
 final memorialDataProvider = FutureProvider<MemorialOverview?>((ref) {
   ref.watch(currentTripRevisionProvider);

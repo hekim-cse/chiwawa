@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../../api/api_exception.dart';
+import '../../api/dio_client.dart';
 import '../../models/place_search_models.dart';
 import '../../models/route_planning_models.dart';
 import '../../models/transport_mode.dart';
@@ -63,64 +64,39 @@ class ApiPlanRepository implements PlanRepository {
           'day_index': request.dayIndex,
           'planned_start_time': request.plannedStartTime,
           'planned_end_time': request.plannedEndTime,
-          'max_place_count': request.maxPlaceCount,
+          if (request.maxPlaceCount != null)
+            'max_place_count': request.maxPlaceCount,
           'start': _placePayload(request.startPlace),
           'end': _placePayload(request.endPlace),
           'wanted_place_ids': request.wantedPlaceIds,
           'pace': request.preference.pace.code,
-          'include_recommendations': true,
+          // 경로 최적화와 빈 시간 추천은 독립 Endpoint로 실행한다.
+          // 추천 Provider 실패가 기본 경로 생성까지 실패시키지 않도록 분리한다.
+          'include_recommendations': false,
         },
-        options: Options(
-          sendTimeout: const Duration(seconds: 310),
-          receiveTimeout: const Duration(seconds: 310),
-        ),
+        options: waitForServerResponseOptions(),
       );
-      final json = response.data ?? const {};
-      final responseMode = TransportModeMapping.fromBackendCode(
-        json['transport_mode'] as String?,
-        fallback: request.transportMode,
+      return _routeFromJson(
+        response.data ?? const {},
+        fallbackMode: request.transportMode,
       );
-      final stops = json['stops'] as List<Object?>? ?? const [];
-      final rawTimeline = json['timeline'];
-      final timeline = rawTimeline is Map
-          ? RouteTimeline.fromJson(Map<String, Object?>.from(rawTimeline))
-          : null;
-      final missingSegments =
-          (json['missing_segments'] as List<Object?>? ?? const [])
-              .whereType<String>()
-              .toList(growable: false);
-      final warnings = (json['warnings'] as List<Object?>? ?? const [])
-          .whereType<String>()
-          .toList(growable: false);
-      if (timeline == null || missingSegments.isNotEmpty) {
-        return RouteOptimizationResult.unavailable(
-          missingSegments: missingSegments,
-          warnings: warnings,
-        );
-      }
-      final timelineStopsById = {
-        for (final stop in timeline.timelineStops) stop.placeId: stop,
-      };
-      final recommendationGroups =
-          json['recommendation_groups'] as List<Object?>? ?? const [];
-      return RouteOptimizationResult.success(
-        places: [
-          for (final raw in stops)
-            _stopToRoutePlace(
-              Map<String, Object?>.from(raw! as Map),
-              responseMode,
-              timelineStopsById,
-            ),
-        ],
-        timeline: timeline,
-        warnings: warnings,
-        recommendationGroups: [
-          for (final raw in recommendationGroups)
-            RouteRecommendationGroup.fromJson(
-              Map<String, Object?>.from(raw! as Map),
-            ),
-        ],
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
+  }
+
+  @override
+  Future<List<ConfirmedRoutePlan>> fetchConfirmedRoutes() async {
+    final tripId = await _requireTripId();
+    try {
+      final response = await dio.get<Map<String, Object?>>(
+        '/api/v1/trips/$tripId/route-optimizations/confirmed',
       );
+      final items = response.data?['items'] as List<Object?>? ?? const [];
+      return [
+        for (final raw in items)
+          _confirmedRouteFromJson(Map<String, Object?>.from(raw! as Map)),
+      ];
     } on DioException catch (error) {
       throw ApiException.fromDioException(error);
     }
@@ -169,6 +145,82 @@ class ApiPlanRepository implements PlanRepository {
           : '${transportMode.label} $travelMinutes분',
       category: '',
       travelCost: '',
+    );
+  }
+
+  ConfirmedRoutePlan _confirmedRouteFromJson(Map<String, Object?> json) {
+    final routeJson = Map<String, Object?>.from(json['route']! as Map);
+    final route = _routeFromJson(routeJson);
+    return ConfirmedRoutePlan(
+      dayIndex: (json['day_index'] as num?)?.toInt() ?? 1,
+      startPlace: _placeFromJson(
+        Map<String, Object?>.from(json['start']! as Map),
+      ),
+      endPlace: _placeFromJson(
+        Map<String, Object?>.from(json['end']! as Map),
+      ),
+      result: route,
+    );
+  }
+
+  RouteOptimizationResult _routeFromJson(
+    Map<String, Object?> json, {
+    TransportMode fallbackMode = TransportMode.transit,
+  }) {
+    final responseMode = TransportModeMapping.fromBackendCode(
+      json['transport_mode'] as String?,
+      fallback: fallbackMode,
+    );
+    final rawTimeline = json['timeline'];
+    final timeline = rawTimeline is Map
+        ? RouteTimeline.fromJson(Map<String, Object?>.from(rawTimeline))
+        : null;
+    final missingSegments =
+        (json['missing_segments'] as List<Object?>? ?? const [])
+            .whereType<String>()
+            .toList(growable: false);
+    final warnings = (json['warnings'] as List<Object?>? ?? const [])
+        .whereType<String>()
+        .toList(growable: false);
+    if (timeline == null || missingSegments.isNotEmpty) {
+      return RouteOptimizationResult.unavailable(
+        missingSegments: missingSegments,
+        warnings: warnings,
+      );
+    }
+    final timelineStopsById = {
+      for (final stop in timeline.timelineStops) stop.placeId: stop,
+    };
+    final stops = json['stops'] as List<Object?>? ?? const [];
+    final recommendationGroups =
+        json['recommendation_groups'] as List<Object?>? ?? const [];
+    return RouteOptimizationResult.success(
+      places: [
+        for (final raw in stops)
+          _stopToRoutePlace(
+            Map<String, Object?>.from(raw! as Map),
+            responseMode,
+            timelineStopsById,
+          ),
+      ],
+      timeline: timeline,
+      warnings: warnings,
+      recommendationGroups: [
+        for (final raw in recommendationGroups)
+          RouteRecommendationGroup.fromJson(
+            Map<String, Object?>.from(raw! as Map),
+          ),
+      ],
+    );
+  }
+
+  PlaceSearchCandidate _placeFromJson(Map<String, Object?> json) {
+    return PlaceSearchCandidate(
+      providerPlaceId: json['place_id']?.toString() ?? '',
+      name: json['name'] as String? ?? '',
+      formattedAddress: json['formatted_address'] as String? ?? '',
+      latitude: (json['lat'] as num?)?.toDouble() ?? 0,
+      longitude: (json['lng'] as num?)?.toDouble() ?? 0,
     );
   }
 

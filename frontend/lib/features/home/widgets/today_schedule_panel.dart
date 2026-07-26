@@ -17,13 +17,16 @@ class TodaySchedulePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final visibleSchedules = schedules
+    final displayableSchedules = schedules
         .where(
           (schedule) =>
               schedule.place != null || schedule.status == ScheduleStatus.free,
         )
-        .take(4)
         .toList(growable: false);
+    // 확정 타임라인은 서버가 반환한 순서와 장소를 그대로 노출한다.
+    // 중간 POI를 표시 개수로 잘라내면 추천 장소가 확정된 후에도
+    // 홈에서 사라져 보이므로 전체 일정을 사용한다.
+    final visibleSchedules = displayableSchedules;
     final nextSchedule = _findNextSchedule(visibleSchedules);
     final remainingSchedules = nextSchedule == null
         ? visibleSchedules
@@ -31,7 +34,6 @@ class TodaySchedulePanel extends StatelessWidget {
             .where(
               (schedule) => schedule.identityKey != nextSchedule.identityKey,
             )
-            .take(3)
             .toList(growable: false);
 
     return Padding(
@@ -151,7 +153,7 @@ class _NextScheduleCard extends StatelessWidget {
                     ),
                     const SizedBox(height: ChiwawaSpacing.xxs),
                     Text(
-                      schedule.place ?? '빈 시간 추천',
+                      schedule.displayPlace ?? '빈 시간 추천',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -222,7 +224,7 @@ class _ScheduleSummaryRow extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.only(top: 10),
                   child: Text(
-                    schedule.place ?? '빈 시간 추천',
+                    schedule.displayPlace ?? '빈 시간 추천',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -234,7 +236,7 @@ class _ScheduleSummaryRow extends StatelessWidget {
               ),
               const SizedBox(width: 10),
               _PlaceThumbnail(
-                label: schedule.place ?? '빈 시간 추천',
+                label: schedule.displayPlace ?? '빈 시간 추천',
               ),
             ],
           ),

@@ -20,8 +20,9 @@ class RouteMapOverview extends StatelessWidget {
           builder: (context, constraints) {
             final points = _routePoints(
               Size(constraints.maxWidth, constraints.maxHeight),
-              stops.length,
+              stops,
             );
+            final markerIndexes = _markerIndexes(stops);
             return Stack(
               children: [
                 Positioned.fill(
@@ -29,7 +30,7 @@ class RouteMapOverview extends StatelessWidget {
                     painter: _RouteMapPainter(points: points),
                   ),
                 ),
-                for (var index = 0; index < points.length; index++)
+                for (final index in markerIndexes)
                   Positioned(
                     left: points[index].dx - 17,
                     top: points[index].dy - 17,
@@ -55,11 +56,13 @@ class RouteMapOverview extends StatelessWidget {
                           ],
                         ),
                         child: Text(
-                          stops[index].stopType == 'START'
-                              ? 'S'
-                              : stops[index].stopType == 'END'
-                                  ? 'E'
-                                  : '${stops.take(index + 1).where((stop) => stop.stopType == 'POI').length}',
+                          _isRoundTripEndpoint(stops, index)
+                              ? 'S/E'
+                              : stops[index].stopType == 'START'
+                                  ? 'S'
+                                  : stops[index].stopType == 'END'
+                                      ? 'E'
+                                      : '${stops.take(index + 1).where((stop) => stop.stopType == 'POI').length}',
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 12,
@@ -78,7 +81,8 @@ class RouteMapOverview extends StatelessWidget {
   }
 }
 
-List<Offset> _routePoints(Size size, int count) {
+List<Offset> _routePoints(Size size, List<PlanItineraryStop> stops) {
+  final count = stops.length;
   if (count <= 0) return const [];
   const fractions = [
     Offset(0.18, 0.73),
@@ -88,13 +92,37 @@ List<Offset> _routePoints(Size size, int count) {
     Offset(0.84, 0.73),
     Offset(0.55, 0.82),
   ];
-  return [
-    for (var index = 0; index < count; index++)
-      Offset(
-        size.width * fractions[index % fractions.length].dx,
-        size.height * fractions[index % fractions.length].dy,
-      ),
-  ];
+  final points = <Offset>[];
+  final firstIndexByPlaceId = <String, int>{};
+  for (var index = 0; index < count; index++) {
+    final placeId = stops[index].place.placeId.trim();
+    final existingIndex = placeId.isEmpty ? null : firstIndexByPlaceId[placeId];
+    if (existingIndex != null) {
+      points.add(points[existingIndex]);
+      continue;
+    }
+    final fraction = fractions[index % fractions.length];
+    points.add(Offset(size.width * fraction.dx, size.height * fraction.dy));
+    if (placeId.isNotEmpty) firstIndexByPlaceId[placeId] = index;
+  }
+  return points;
+}
+
+List<int> _markerIndexes(List<PlanItineraryStop> stops) {
+  final indexes = <int>[];
+  final seenPlaceIds = <String>{};
+  for (var index = 0; index < stops.length; index++) {
+    final placeId = stops[index].place.placeId.trim();
+    if (placeId.isNotEmpty && !seenPlaceIds.add(placeId)) continue;
+    indexes.add(index);
+  }
+  return indexes;
+}
+
+bool _isRoundTripEndpoint(List<PlanItineraryStop> stops, int index) {
+  if (index != 0 || stops.length < 2) return false;
+  final startId = stops.first.place.placeId.trim();
+  return startId.isNotEmpty && startId == stops.last.place.placeId.trim();
 }
 
 class _RouteMapPainter extends CustomPainter {

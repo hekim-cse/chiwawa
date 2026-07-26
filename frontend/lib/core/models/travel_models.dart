@@ -1,4 +1,5 @@
 import '../utils/time_formatters.dart';
+import 'route_planning_models.dart';
 
 enum ScheduleStatus { completed, ongoing, free, upcoming }
 
@@ -153,7 +154,8 @@ class Trip {
   }
 
   TripInfo toTripInfo({DateTime? today}) {
-    final cityLabel = country.isEmpty ? city : '$city, $country';
+    final cityLabel =
+        [city, country].where((part) => part.trim().isNotEmpty).join(', ');
     return TripInfo(
       tripId: id,
       tripName: title,
@@ -202,7 +204,7 @@ class TripDraft {
 
   Map<String, Object?> toJson() {
     return {
-      'city': city,
+      'city': city.trim().isEmpty ? null : city.trim(),
       'country': country,
       'start_date': startDate,
       'end_date': endDate,
@@ -281,6 +283,7 @@ class ScheduleItem {
     this.transport = '',
     this.freeMinutes,
     this.status = ScheduleStatus.upcoming,
+    this.stopType = 'POI',
   });
 
   final String id;
@@ -298,9 +301,18 @@ class ScheduleItem {
   final String transport;
   final int? freeMinutes;
   final ScheduleStatus status;
+  final String stopType;
 
   String get time => formatTime(startTime);
   String? get place => name;
+  String? get displayPlace {
+    if (name == null) return null;
+    return switch (stopType) {
+      'START' => '출발 · $name',
+      'END' => '도착 · $name',
+      _ => name,
+    };
+  }
 
   factory ScheduleItem.fromJson(Map<String, Object?> json) {
     return ScheduleItem(
@@ -313,6 +325,7 @@ class ScheduleItem {
       placeId: json['place_id']?.toString(),
       notes: json['notes'] as String?,
       source: json['source'] as String? ?? 'mock',
+      stopType: json['stop_type'] as String? ?? 'POI',
     );
   }
 
@@ -327,6 +340,7 @@ class ScheduleItem {
       'place_id': placeId,
       'notes': notes,
       'source': source,
+      'stop_type': stopType,
     };
   }
 }
@@ -392,21 +406,41 @@ extension RoutePlaceIdentity on RoutePlace {
 
 class FreeTimeRecommend {
   const FreeTimeRecommend({
+    required this.id,
+    required this.dayIndex,
+    required this.date,
+    required this.categoryLabel,
     required this.name,
     required this.walk,
     required this.duration,
+    required this.recommendation,
   });
 
+  final String id;
+  final int dayIndex;
+  final String date;
+  final String categoryLabel;
   final String name;
   final String walk;
   final String duration;
+  final RouteRecommendation recommendation;
 
   factory FreeTimeRecommend.fromJson(Map<String, Object?> json) {
     return FreeTimeRecommend(
-      name: json['title'] as String? ?? json['name'] as String? ?? '',
+      id: json['id']?.toString() ?? '',
+      dayIndex: (json['day_index'] as num?)?.toInt() ?? 1,
+      date: json['date']?.toString() ?? '',
+      categoryLabel: json['title'] as String? ?? '',
+      name: json['place_name'] as String? ??
+          json['name'] as String? ??
+          json['title'] as String? ??
+          '',
       walk: json['walk'] as String? ?? '',
       duration:
           json['duration'] as String? ?? '${json['duration_minutes'] ?? ''}분',
+      recommendation: RouteRecommendation.fromJson(
+        Map<String, Object?>.from(json['recommendation'] as Map? ?? const {}),
+      ),
     );
   }
 
@@ -415,6 +449,10 @@ class FreeTimeRecommend {
       'name': name,
       'walk': walk,
       'duration': duration,
+      'id': id,
+      'day_index': dayIndex,
+      'date': date,
+      'title': categoryLabel,
     };
   }
 }

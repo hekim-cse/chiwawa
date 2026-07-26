@@ -14,7 +14,6 @@ import '../../core/models/travel_models.dart';
 import '../../core/providers/data_providers.dart';
 import '../../core/repositories/plan_repository.dart';
 import '../../core/saved_photo_places.dart';
-import '../../core/services/trip_session_service.dart';
 import '../../shared/widgets/app_list_group.dart';
 import '../../shared/widgets/app_page_header.dart';
 import '../../shared/widgets/app_section_header.dart';
@@ -76,6 +75,18 @@ class PlanScreen extends ConsumerWidget {
     final transportMode = ref.watch(transportModeProvider);
     final actions = ref.read(planActionsProvider);
     final tripInfo = ref.watch(tripInfoProvider).valueOrNull;
+    final confirmedRoutes = ref.watch(confirmedRoutesProvider).valueOrNull;
+    final routeController = ref.read(routeOptimizationProvider.notifier);
+    if (confirmedRoutes != null &&
+        confirmedRoutes.isNotEmpty &&
+        routeController.canRestoreConfirmed(confirmedRoutes.first.dayIndex) &&
+        itinerary.currentStops.isEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(planActionsProvider).restoreConfirmedRoute(
+              confirmedRoutes.first,
+            );
+      });
+    }
 
     return SafeArea(
       child: ListView(
@@ -153,13 +164,6 @@ class PlanScreen extends ConsumerWidget {
             onEndTimeChanged: (value) => _updateDayConstraint(
               ref,
               (controller) => controller.updateEndTime(
-                itinerary.selectedDay,
-                value,
-              ),
-            ),
-            onMaxPlaceCountChanged: (value) => _updateDayConstraint(
-              ref,
-              (controller) => controller.updateMaxPlaceCount(
                 itinerary.selectedDay,
                 value,
               ),
@@ -270,15 +274,24 @@ class PlanScreen extends ConsumerWidget {
   }) {
     final constraints = ref.read(planDayConstraintsProvider);
     final constraint = constraints.forDay(key.day);
-    final selected = key.role == PlanPlaceRole.start
-        ? constraint.startPlace
-        : constraint.endPlace;
+    final selected = switch (key.role) {
+      PlanPlaceRole.start => constraint.startPlace,
+      PlanPlaceRole.end => constraint.endPlace,
+      PlanPlaceRole.visit => null,
+    };
     if (selected != null && value != selected.name) {
       _updateDayConstraint(
         ref,
-        (controller) => key.role == PlanPlaceRole.start
-            ? controller.clearStartPlace(key.day)
-            : controller.clearEndPlace(key.day),
+        (controller) {
+          switch (key.role) {
+            case PlanPlaceRole.start:
+              controller.clearStartPlace(key.day);
+            case PlanPlaceRole.end:
+              controller.clearEndPlace(key.day);
+            case PlanPlaceRole.visit:
+              return;
+          }
+        },
       );
     }
     ref.read(planPlaceSearchProvider.notifier).updateQuery(
@@ -452,7 +465,13 @@ class PlanScreen extends ConsumerWidget {
                 .map((stop) => stop.place)
                 .toList(growable: false),
           );
-      ref.read(currentTripRevisionProvider.notifier).state += 1;
+      // 확정 직후 홈·확정 일정만 새로 조회한다.
+      // currentTripRevision을 변경하면 선택 장소와 방금 계산한
+      // 최적화 결과까지 초기화되어 이전 확정 경로가 복원될 수 있다.
+      ref.invalidate(confirmedRoutesProvider);
+      ref.invalidate(todaySchedulesProvider);
+      ref.invalidate(homeDataProvider);
+      ref.invalidate(freeTimeRecommendsProvider);
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('이 일정으로 확정했어요.')),

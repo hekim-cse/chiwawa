@@ -79,7 +79,7 @@ class RouteOptimizationRequest {
     required this.dayIndex,
     required this.plannedStartTime,
     required this.plannedEndTime,
-    required this.maxPlaceCount,
+    this.maxPlaceCount,
     required this.startPlace,
     required this.endPlace,
   });
@@ -90,14 +90,31 @@ class RouteOptimizationRequest {
   final int dayIndex;
   final String plannedStartTime;
   final String plannedEndTime;
-  final int maxPlaceCount;
+  final int? maxPlaceCount;
   final PlaceSearchCandidate startPlace;
   final PlaceSearchCandidate endPlace;
 
   List<String> get wantedPlaceIds => [
         for (final place in places)
-          if (place.isPersisted) place.serverPlaceId!,
+          if (place.isPersisted &&
+              place.providerPlaceId != startPlace.providerPlaceId &&
+              place.providerPlaceId != endPlace.providerPlaceId)
+            place.serverPlaceId!,
       ];
+}
+
+class ConfirmedRoutePlan {
+  const ConfirmedRoutePlan({
+    required this.dayIndex,
+    required this.startPlace,
+    required this.endPlace,
+    required this.result,
+  });
+
+  final int dayIndex;
+  final PlaceSearchCandidate startPlace;
+  final PlaceSearchCandidate endPlace;
+  final RouteOptimizationResult result;
 }
 
 class RouteTimelineStop {
@@ -167,6 +184,7 @@ class RouteTimeline {
   final List<String> warnings;
 
   String get actualEndTime => _dateTimeToTime(actualEndAt);
+  String get plannedStartTime => _dateTimeToTime(plannedStartAt);
   String get plannedEndTime => _dateTimeToTime(plannedEndAt);
 
   factory RouteTimeline.fromJson(Map<String, Object?> json) {
@@ -228,21 +246,47 @@ class RouteRecommendationCandidate {
 
   factory RouteRecommendationCandidate.fromJson(Map<String, Object?> json) {
     final coordinate = json['coordinate'] as Map<Object?, Object?>? ?? const {};
+    final latitude = _requiredCandidateCoordinate(
+      coordinate: coordinate,
+      json: json,
+      canonicalKey: 'latitude',
+      legacyKey: 'lat',
+    );
+    final longitude = _requiredCandidateCoordinate(
+      coordinate: coordinate,
+      json: json,
+      canonicalKey: 'longitude',
+      legacyKey: 'lng',
+    );
     return RouteRecommendationCandidate(
       placeId: json['place_id']?.toString() ?? '',
       name: json['name'] as String? ?? '',
       formattedAddress: json['formatted_address'] as String? ?? '',
-      latitude: (coordinate['lat'] as num?)?.toDouble() ??
-          (json['latitude'] as num?)?.toDouble() ??
-          0,
-      longitude: (coordinate['lng'] as num?)?.toDouble() ??
-          (json['longitude'] as num?)?.toDouble() ??
-          0,
+      latitude: latitude,
+      longitude: longitude,
       rating: (json['rating'] as num?)?.toDouble(),
       userRatingCount: (json['user_rating_count'] as num?)?.toInt() ??
           (json['review_count'] as num?)?.toInt(),
     );
   }
+}
+
+double _requiredCandidateCoordinate({
+  required Map<Object?, Object?> coordinate,
+  required Map<String, Object?> json,
+  required String canonicalKey,
+  required String legacyKey,
+}) {
+  final value = coordinate[canonicalKey] ??
+      coordinate[legacyKey] ??
+      json[canonicalKey] ??
+      json[legacyKey];
+  if (value is! num) {
+    throw FormatException(
+      '추천 장소 응답에 $canonicalKey 좌표가 누락되었습니다.',
+    );
+  }
+  return value.toDouble();
 }
 
 class RouteInsertionImpact {

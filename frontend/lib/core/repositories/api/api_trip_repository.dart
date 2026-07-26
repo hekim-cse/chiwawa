@@ -1,7 +1,9 @@
 import 'package:dio/dio.dart';
 
 import '../../api/api_exception.dart';
+import '../../api/dio_client.dart';
 import '../../models/travel_models.dart';
+import '../../models/route_planning_models.dart';
 import '../../services/trip_session_service.dart';
 import '../trip_repository.dart';
 
@@ -122,9 +124,16 @@ class ApiTripRepository implements TripRepository {
   @override
   Future<List<FreeTimeRecommend>> fetchFreeTimeRecommendations() async {
     final tripId = await _requireTripId();
-    final json = await _getJson(
-      '/api/v1/trips/$tripId/travel/free-time-recommendations',
-    );
+    final Map<String, Object?> json;
+    try {
+      final response = await dio.get<Map<String, Object?>>(
+        '/api/v1/trips/$tripId/travel/free-time-recommendations',
+        options: waitForServerResponseOptions(),
+      );
+      json = response.data ?? const {};
+    } on DioException catch (error) {
+      throw ApiException.fromDioException(error);
+    }
     final items = json['items'] as List<Object?>? ?? const [];
     return [
       for (final raw in items) _freeTimeFromJson(raw! as Map<String, Object?>),
@@ -134,9 +143,16 @@ class ApiTripRepository implements TripRepository {
   FreeTimeRecommend _freeTimeFromJson(Map<String, Object?> json) {
     final minutes = (json['duration_minutes'] as num?)?.toInt();
     return FreeTimeRecommend(
+      id: json['id']?.toString() ?? '',
+      dayIndex: (json['day_index'] as num?)?.toInt() ?? 1,
+      date: json['date']?.toString() ?? '',
+      categoryLabel: json['title'] as String? ?? '',
       name: json['place_name'] as String? ?? json['title'] as String? ?? '',
       walk: '${(json['travel_minutes'] as num?)?.toInt() ?? 0}분',
       duration: minutes == null ? '' : '$minutes분',
+      recommendation: RouteRecommendation.fromJson(
+        Map<String, Object?>.from(json['recommendation'] as Map? ?? const {}),
+      ),
     );
   }
 

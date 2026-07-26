@@ -15,11 +15,16 @@ import 'package:chiwawa/core/saved_photo_places.dart';
 import 'package:chiwawa/features/auth/auth_screen.dart';
 import 'package:chiwawa/features/explore/explore_screen.dart';
 import 'package:chiwawa/features/plan/plan_screen.dart';
+import 'package:chiwawa/features/plan/models/plan_itinerary.dart';
+import 'package:chiwawa/features/plan/widgets/route_map_overview.dart';
 import 'package:chiwawa/main.dart';
 import 'package:chiwawa/shared/widgets/adaptive_segmented_control.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FailingPlanRepository implements PlanRepository {
+  @override
+  Future<List<ConfirmedRoutePlan>> fetchConfirmedRoutes() async => const [];
+
   @override
   List<String> get defaultSelectedPlaces => const ['아사쿠사 센소지', '도쿄 타워'];
 
@@ -41,6 +46,9 @@ class _FailingPlanRepository implements PlanRepository {
 }
 
 class _ControlledPlanRepository implements PlanRepository {
+  @override
+  Future<List<ConfirmedRoutePlan>> fetchConfirmedRoutes() async => const [];
+
   final completer = Completer<RouteOptimizationResult>();
 
   @override
@@ -61,6 +69,84 @@ class _ControlledPlanRepository implements PlanRepository {
     PlanRoutePlaceInput place,
   ) async =>
       WantedPlaceRecord(id: 'server-${place.localId}', name: place.name);
+}
+
+class _ConfirmedPlanRepository implements PlanRepository {
+  const _ConfirmedPlanRepository();
+
+  static const timeline = RouteTimeline(
+    dayIndex: 1,
+    travelMode: TransportMode.transit,
+    plannedStartAt: '2026-08-01T09:00:00+02:00',
+    plannedEndAt: '2026-08-01T20:00:00+02:00',
+    actualEndAt: '2026-08-01T13:30:00+02:00',
+    totalTravelMinutes: 90,
+    totalStayMinutes: 180,
+    timelineStops: [
+      RouteTimelineStop(
+        stopType: 'START',
+        placeId: 'google-test-start',
+        name: '도쿄역',
+        arrivalAt: '2026-08-01T09:00:00+02:00',
+        departureAt: '2026-08-01T09:00:00+02:00',
+        stayMinutes: 0,
+      ),
+      RouteTimelineStop(
+        stopType: 'POI',
+        placeId: 'wanted-louvre',
+        name: '루브르 박물관',
+        arrivalAt: '2026-08-01T09:30:00+02:00',
+        departureAt: '2026-08-01T12:30:00+02:00',
+        stayMinutes: 180,
+      ),
+      RouteTimelineStop(
+        stopType: 'END',
+        placeId: 'google-test-end',
+        name: '신주쿠 호텔',
+        arrivalAt: '2026-08-01T13:30:00+02:00',
+        departureAt: '2026-08-01T13:30:00+02:00',
+        stayMinutes: 0,
+      ),
+    ],
+  );
+
+  @override
+  List<String> get defaultSelectedPlaces => const [];
+
+  @override
+  Future<void> confirmRoute(RouteOptimizationResult result) async {}
+
+  @override
+  Future<List<ConfirmedRoutePlan>> fetchConfirmedRoutes() async => const [
+        ConfirmedRoutePlan(
+          dayIndex: 1,
+          startPlace: _testStartPlace,
+          endPlace: _testEndPlace,
+          result: RouteOptimizationResult.success(
+            places: [
+              RoutePlace(
+                placeId: 'wanted-louvre',
+                name: '루브르 박물관',
+                duration: '180분',
+                transport: '대중교통 30분',
+                category: '박물관',
+              ),
+            ],
+            timeline: timeline,
+          ),
+        ),
+      ];
+
+  @override
+  Future<RouteOptimizationResult> optimizeRoute(
+    RouteOptimizationRequest request,
+  ) async =>
+      (await fetchConfirmedRoutes()).single.result;
+
+  @override
+  Future<WantedPlaceRecord> saveWantedPlace(PlanRoutePlaceInput place) async {
+    return WantedPlaceRecord(id: place.localId, name: place.name);
+  }
 }
 
 const _testStartPlace = PlaceSearchCandidate(
@@ -142,6 +228,99 @@ void main() {
     expect(find.byKey(const ValueKey('home-next-schedule')), findsOneWidget);
     expect(find.text('홈'), findsWidgets);
     expect(find.text('일정'), findsOneWidget);
+  });
+
+  testWidgets('round-trip map renders the same endpoint as one marker',
+      (tester) async {
+    const hotel = RoutePlace(
+      placeId: 'google-hotel',
+      name: '파리 호텔',
+      duration: '',
+      transport: '',
+      category: '',
+    );
+    const poi = RoutePlace(
+      placeId: 'google-louvre',
+      name: '루브르 박물관',
+      duration: '60분',
+      transport: '자동차 20분',
+      category: '박물관',
+    );
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: RouteMapOverview(
+            stops: [
+              PlanItineraryStop(
+                id: 'start',
+                startTime: '09:00',
+                stopType: 'START',
+                place: hotel,
+              ),
+              PlanItineraryStop(
+                id: 'poi',
+                startTime: '10:00',
+                place: poi,
+              ),
+              PlanItineraryStop(
+                id: 'end',
+                startTime: '12:00',
+                stopType: 'END',
+                place: hotel,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('S/E'), findsOneWidget);
+    expect(
+        find.byKey(const ValueKey('route-map-marker-start')), findsOneWidget);
+    expect(find.byKey(const ValueKey('route-map-marker-end')), findsNothing);
+  });
+
+  testWidgets('confirmed route appears on home and is restored by full view',
+      (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          planRepositoryProvider.overrideWithValue(
+            const _ConfirmedPlanRepository(),
+          ),
+        ],
+        child: const ChiwawaApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('로그인 없이 둘러보기'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('출발 · 도쿄역'), findsOneWidget);
+    expect(find.text('루브르 박물관'), findsOneWidget);
+    expect(find.text('도착 · 신주쿠 호텔'), findsOneWidget);
+
+    await tester.tap(find.text('전체 보기'));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChiwawaApp)),
+    );
+    expect(container.read(routeOptimizationProvider).status, AiJobStatus.done);
+    expect(
+      container.read(planDayConstraintsProvider).forDay(1).startPlace,
+      _testStartPlace,
+    );
+    expect(
+      container.read(planDayConstraintsProvider).forDay(1).endPlace,
+      _testEndPlace,
+    );
+    expect(
+      container.read(planItineraryProvider).currentStops,
+      hasLength(3),
+    );
+    expect(find.text('도쿄역'), findsWidgets);
+    expect(find.text('신주쿠 호텔'), findsWidgets);
   });
 
   testWidgets('home timeline keeps free time entry actionable', (tester) async {
@@ -489,10 +668,6 @@ void main() {
       find.byKey(const ValueKey('trip-country-field')),
       '일본',
     );
-    await tester.enterText(
-      find.byKey(const ValueKey('trip-city-field')),
-      '후쿠오카',
-    );
     await tester.tap(find.byKey(const ValueKey('increase-travelers')));
     await tester.ensureVisible(
       find.byKey(const ValueKey('submit-trip-create')),
@@ -502,7 +677,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('후쿠오카 주말 여행'), findsOneWidget);
-    expect(find.text('후쿠오카, 일본 · 2명'), findsOneWidget);
+    expect(find.text('일본 · 2명'), findsOneWidget);
     expect(find.byIcon(Icons.check_circle_rounded), findsOneWidget);
   });
 
@@ -666,7 +841,7 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, '일정에 추가'));
     await tester.pump(const Duration(milliseconds: 250));
 
-    expect(find.text('아사쿠사 센소지 일정 후보에 저장했어요.'), findsOneWidget);
+    expect(find.text('아사쿠사 센소지 일정에 추가했어요.'), findsOneWidget);
     expect(find.text('일정 후보 저장됨'), findsOneWidget);
 
     await tester.ensureVisible(find.text('일정에 추가'));
@@ -678,6 +853,10 @@ void main() {
       tester.element(find.byType(ChiwawaApp)),
     );
     expect(container.read(savedPhotoPlacesProvider), hasLength(1));
+    expect(
+      container.read(selectedPlacesProvider).map((place) => place.name),
+      contains('아사쿠사 센소지'),
+    );
   });
 
   testWidgets('Saved photo place appears on the plan screen', (tester) async {
@@ -718,16 +897,14 @@ void main() {
       findsOneWidget,
     );
 
-    final savedPlace = find.byKey(
-      const ValueKey('select-saved-place-place-sensoji'),
-      skipOffstage: false,
+    expect(
+      find.widgetWithText(
+        InputChip,
+        '아사쿠사 센소지',
+        skipOffstage: false,
+      ),
+      findsOneWidget,
     );
-    await tester.ensureVisible(savedPlace);
-    await tester.pumpAndSettle();
-    await tester.tap(savedPlace);
-    await tester.pump(const Duration(milliseconds: 250));
-
-    expect(find.widgetWithText(InputChip, '아사쿠사 센소지'), findsOneWidget);
   });
 
   testWidgets('Saved photo place can be removed from plan saved section',
@@ -815,6 +992,36 @@ void main() {
       find.byKey(const ValueKey('itinerary-summary-cost')),
       findsOneWidget,
     );
+
+    final optimizedNames = container
+        .read(planItineraryProvider)
+        .currentStops
+        .map((stop) => stop.place.name)
+        .toList(growable: false);
+    await tester.ensureVisible(
+      find.byKey(
+        const ValueKey('confirm-route-button'),
+        skipOffstage: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(
+        const ValueKey('confirm-route-button'),
+        skipOffstage: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(container.read(routeOptimizationProvider).status, AiJobStatus.done);
+    expect(
+      container
+          .read(planItineraryProvider)
+          .currentStops
+          .map((stop) => stop.place.name),
+      optimizedNames,
+    );
+    expect(find.text('이 일정으로 확정했어요.'), findsOneWidget);
   });
 
   testWidgets('plan day constraints stay isolated and block invalid time',
@@ -832,10 +1039,7 @@ void main() {
       find.text('검색 결과에서 출발지와 도착지를 선택해 주세요.'),
       findsOneWidget,
     );
-    expect(
-      find.byKey(const ValueKey('plan-max-place-count-1')),
-      findsOneWidget,
-    );
+    expect(find.text('최대 방문 장소'), findsNothing);
 
     final container = ProviderScope.containerOf(
       tester.element(find.byType(ChiwawaApp)),
@@ -901,11 +1105,6 @@ void main() {
     await tester.pumpAndSettle();
     container.read(planItineraryProvider.notifier).selectDay(2);
     await tester.pumpAndSettle();
-    await tester.enterText(
-      find.byKey(const ValueKey('plan-start-place-2')),
-      '도쿄역',
-    );
-    await tester.pump(const Duration(milliseconds: 600));
 
     expect(
       container.read(planDayConstraintsProvider).forDay(2).startPlace,
@@ -916,6 +1115,32 @@ void main() {
       '신주쿠 그랜드 호텔',
     );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('searching for a visit place preserves the selected endpoints',
+      (tester) async {
+    useNarrowTestSurface(tester);
+    await pumpAppAsGuest(tester);
+
+    await tester.tap(find.bySemanticsLabel('일정'));
+    await tester.pumpAndSettle();
+    await selectPlanEndpoints(tester);
+
+    final visitSearch = find.byKey(
+      const ValueKey('plan-visit-place-search'),
+      skipOffstage: false,
+    );
+    await tester.ensureVisible(visitSearch);
+    await tester.pumpAndSettle();
+    await tester.enterText(visitSearch, '하네다');
+    await tester.pump(const Duration(milliseconds: 600));
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(ChiwawaApp)),
+    );
+    final constraint = container.read(planDayConstraintsProvider).forDay(1);
+    expect(constraint.startPlace, _testStartPlace);
+    expect(constraint.endPlace, _testEndPlace);
   });
 
   testWidgets('place candidates and time buttons fit at 390px', (tester) async {
@@ -949,7 +1174,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('mock optimization follows start time and max place count',
+  testWidgets('mock optimization follows the configured start time',
       (tester) async {
     useMobileTestSurface(tester);
     await pumpAppAsGuest(tester);
@@ -964,9 +1189,6 @@ void main() {
     container
         .read(planDayConstraintsProvider.notifier)
         .updateStartTime(1, '10:30');
-    container
-        .read(planDayConstraintsProvider.notifier)
-        .updateMaxPlaceCount(1, 2);
     await tester.pump();
 
     await tester.ensureVisible(
@@ -981,12 +1203,12 @@ void main() {
 
     final itinerary = container.read(planItineraryProvider).currentStops;
     final routeResult = container.read(routeOptimizationProvider).result;
-    expect(itinerary, hasLength(4));
+    expect(itinerary.length, greaterThan(4));
     expect(routeResult?.timeline?.plannedStartAt, contains('T10:30'));
     expect(itinerary.first.stopType, 'START');
     expect(itinerary[1].startTime, '10:42');
     expect(itinerary.last.stopType, 'END');
-    expect(find.text('대중교통 · 2곳'), findsOneWidget);
+    expect(find.textContaining('대중교통 ·'), findsOneWidget);
   });
 
   testWidgets('transport selection changes mock route timeline and summary',
