@@ -13,7 +13,10 @@
 - `/api/v1/auth/me`, 사진 장소 검색, 회원 단위 Memorial API
   (`/api/v1/memorial/*`)가 JWT 보호 대상이며 나머지 여행 API는 현재 공개다.
 - 사진 장소 검색은 `ai/image_search`와 Google Maps·Cloud Vision·Gemini를
-  호출하고, AI 일정·동선 최적화·주변 추천·빈 시간 추천은 모의 휴리스틱이다.
+  호출한다.
+- 동선 최적화는 설정된 Modal `plan_trip`을 호출하며 실패 시 모의 결과로
+  대체하지 않는다. 빈 시간 추천은 이 최적화 결과의 검증된 추천 그룹을 사용한다.
+  AI 일정과 현재 위치 기반 주변 추천은 모의 휴리스틱이다.
 
 ## 빠른 링크
 

@@ -1,6 +1,6 @@
 # Chiwawa Backend
 
-일본 자유여행 일정 추천·관리 흐름을 검증하기 위한 FastAPI 개발
+전 세계 자유여행 일정 추천·관리 흐름을 검증하기 위한 FastAPI 개발
 프로토타입입니다. 이 디렉터리만으로 실행, 테스트, wheel 빌드가 가능합니다.
 
 ## 현재 구현 범위
@@ -8,19 +8,26 @@
 - 여행, 방문 희망 장소, 일정, 여행 기록 API
 - Google OAuth 로그인과 8시간 JWT 발급
 - 오늘 일정, 빈 시간 추천, 주변 추천, 지연 재계획
+- Google Places 기반 한국어 전 세계 장소 검색
 - Swagger UI, ReDoc, OpenAPI JSON
 - Pydantic 요청 검증과 서비스 계층 도메인 검증
 
 현재 아래 기능 중 외부 공급자와 연결되지 않은 모의 구현은 다음과 같습니다.
 
 - AI 일정 초안 생성
-- 방문 동선 최적화
 - 현재 위치 기반 주변 추천
-- 빈 시간 활동 추천
 
 사진 기반 장소 후보 검색은 `ai/image_search`를 직접 호출하며 Google Maps,
-Cloud Vision, Gemini API 키가 필요합니다. 나머지 후보·추천 기능은 생성 ID와
-시각을 제외하고 같은 입력에 같은 규칙을 적용하는 시연용 휴리스틱입니다.
+Cloud Vision, Gemini API 키가 필요합니다. 방문 동선 최적화는 배포된 Modal
+`plan_trip`을 호출하며, 설정이나 외부 호출에 실패하면 모의 결과로 대체하지
+않습니다. 빈 시간 추천은 해당 최적화 응답에 포함된 실제 추천 그룹을 재사용합니다.
+AI 일정 초안과 현재 위치 기반 주변 추천은 시연용 휴리스틱입니다.
+
+일반 장소 검색은 Backend가 Google Places Text Search(New)를 호출하므로
+`GOOGLE_MAPS_API_KEY`가 필요합니다. 표시 언어는 한국어(`ko`)로 유지하되 지역은
+제한하지 않으며 Google Place ID, 표시명, 주소, 좌표를 반환합니다. 경로 최적화
+시 출발지 좌표의 IANA 시간대를 확인하므로 같은 키에서 Time Zone API도
+활성화해야 합니다.
 
 ## 개발 단계의 저장·인증 범위
 
@@ -58,6 +65,10 @@ PYTHONPATH=..:src uv run uvicorn chiwawa_backend.main:app --reload --no-access-l
 실행됩니다. 기본 실행은 인증 없는 프로토타입 API가 외부에 노출되지 않도록
 로컬 호스트에만 바인딩합니다.
 
+방문 동선 최적화를 사용하려면 `.env`에 배포된 Modal `plan_trip` URL을
+`ROUTE_PLANNER_URL`로 설정해야 합니다. 호출 제한시간과 일시적 오류 재시도 횟수는
+각각 `ROUTE_PLANNER_TIMEOUT_SECONDS`, `ROUTE_PLANNER_MAX_RETRIES`로 관리합니다.
+
 | 문서/상태 | URL |
 | --- | --- |
 | Swagger UI 바로가기 | `http://localhost:8000/` |
@@ -89,7 +100,7 @@ uv build --wheel
 6. 여행 중에는 `/travel`과 `/assistant` API로 추천과 재계획을 사용합니다.
 7. 여행 후에는 `/memorial/photos`와 `/memorial/generate`로 기록을 만듭니다.
 
-현재 여행 기간은 최대 31일이며 일정 시각은 오프셋 없는 일본 현지 시각으로
+현재 여행 기간은 최대 31일이며 일정 시각은 오프셋 없는 여행지 현지 시각으로
 입력합니다. `/travel/today`의 기준 시간대는 `Asia/Tokyo`입니다.
 
 문서 인덱스는 [`docs/README.md`](./docs/README.md), 전체 경로 목록은
