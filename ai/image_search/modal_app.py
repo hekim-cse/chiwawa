@@ -71,6 +71,11 @@ def search_photo_payload(
     )
 
 
+def validation_error_detail(error: ValidationError) -> list[dict[str, Any]]:
+    """Pydantic 오류를 FastAPI가 안전하게 JSON 직렬화할 형태로 변환한다."""
+    return error.errors(include_context=False)
+
+
 # Modal HTTP Web Function
 #
 # 보안 주의: 현재 인증 미적용(공개 URL). 호출마다 Vision+Gemini+Places 유료 API 를 쓰므로
@@ -119,7 +124,7 @@ def search_photo(
 
         raise HTTPException(
             status_code=422,
-            detail=error.errors(),
+            detail=validation_error_detail(error),
         ) from error
     except ValueError as error:
         from fastapi import HTTPException
