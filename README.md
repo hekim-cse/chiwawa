@@ -519,6 +519,24 @@ Backend
 
 <br>
 
+### 기술·구조 선택 기준과 트레이드오프
+
+> 아래 내용은 팀 전체 시스템의 기술 선택 기준입니다. 김형은은 PM·AI Modeling을 중심으로 날짜별 장소 배정, 이동수단별 경로 최적화, 빈 시간대 추천 연동, DTO·테스트·CI·Modal 배포 흐름을 담당했습니다.
+
+| 선택 | 왜 사용했는가 | 트레이드오프와 대응 |
+|---|---|---|
+| Flutter + Riverpod + Dio + go_router | App·Web 화면을 한 코드베이스로 구성하고 인증·여행·일정·사진·Memorial의 비동기 상태와 라우팅을 분리하기 위해 사용했습니다. | 상태가 화면 전역으로 퍼지지 않도록 Feature별 Provider와 Repository 경계를 두고 인증 Deep Link를 별도 검증했습니다. |
+| FastAPI + Pydantic v2 | Front·Backend·AI 모듈 사이의 요청·응답과 오류 상태를 OpenAPI 및 타입 검증으로 명확히 합의하기 위해 선택했습니다. | Schema 중복과 변경 누락을 막기 위해 DTO 문서와 계약 테스트를 함께 관리했습니다. |
+| Service Layer + Router·Schema 분리 | HTTP 처리, 서비스 규칙, 외부 Provider 호출과 저장 책임이 한 파일에 섞이지 않도록 구성했습니다. | 초기 파일 수는 늘지만 Provider 교체와 단위 테스트 범위가 명확해집니다. |
+| SQLite | 프로토타입 단계에서 Google 사용자와 Memorial 메타데이터를 별도 운영 DB 없이 빠르게 영속화하기 위해 사용했습니다. | 동시성·확장성 한계가 있어 여행 전체 데이터의 운영 전환 시 PostgreSQL 같은 DB가 필요합니다. |
+| Cloud Vision + Gemini + Google Places | 하나의 모델이 사진 속 실제 장소를 항상 확정하기 어려워 랜드마크 감지, 의미 추론, 실제 Place 검증을 단계별로 결합했습니다. | 외부 API 비용·지연·오류가 누적되므로 Provider 인터페이스, Timeout, 근거 필드와 사용자 수정 흐름을 유지합니다. |
+| Google Routes API | 직선거리 대신 DRIVE·WALK·TRANSIT의 실제 이동시간 행렬을 이용해 방문 가능성과 경로를 계산하기 위해 선택했습니다. | 호출 비용과 누락 값에 대비해 Matrix 검증, Mock Provider와 명시적 오류 상태를 사용했습니다. |
+| Held-Karp DP + Partition DP | 제한된 POI 범위에서 휴리스틱보다 재현 가능하고 최적인 날짜 배정·방문 순서를 계산하기 위해 사용했습니다. | 지수 시간 복잡도로 인해 기본 POI 수를 제한하고, 규모가 커질 경우 OR-Tools나 휴리스틱 전환이 필요합니다. |
+| Domain / Provider / Service 구조 | 경로 Solver와 추천 정책이 Google API·HTTP 구현에 직접 의존하지 않도록 분리했습니다. | 추상화 계층이 늘어나는 대신 Fixture·Mock으로 핵심 알고리즘을 빠르고 결정적으로 테스트할 수 있습니다. |
+| Modal | Image Search와 Route Planner를 별도 서버 운영 없이 Web Endpoint로 배포하고 GPU·Secret·실행 환경을 관리하기 위해 선택했습니다. | 플랫폼 종속성과 Cold Start를 고려해 Endpoint 계약, Healthcheck와 배포 Workflow를 문서화했습니다. |
+| GitHub Actions + Main Guard | PR에서 테스트·평가를 수행하고 검증된 Main 커밋만 Modal 운영 환경에 배포하기 위해 구성했습니다. | 외부 Google API를 CI에서 직접 호출하지 않고 Fixture와 Mock Transport로 정상·Timeout·Network 오류를 검증했습니다. |
+| AI 모듈별 독립 패키지 | Image Search, Route Planner, Free Time Recommender의 입력·출력과 배포 주기가 달라 독립적으로 개발·평가할 수 있게 했습니다. | 통합 시 계약 불일치가 생길 수 있어 E2E Benchmark와 Backend↔AI DTO를 별도로 관리했습니다. |
+
 ## 8. 프로젝트 구조
 
 ```text
