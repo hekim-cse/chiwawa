@@ -25,6 +25,23 @@
 
 ---
 
+## 📑 목차
+
+1. [사용자 경험](#user-experience)
+2. [핵심 기술 문제와 해결](#technical-solutions)
+3. [시스템 아키텍처](#system-architecture)
+4. [구현 및 배포 범위](#implementation-and-deployment)
+5. [검증 결과](#validation-results)
+6. [기술 스택](#tech-stack)
+7. [프로젝트 구조](#project-structure)
+8. [실행 방법](#getting-started)
+9. [주요 API](#main-api)
+10. [협업 방식](#collaboration)
+
+<br>
+
+<a id="user-experience"></a>
+
 ## ✨ 사용자 경험
 
 <p align="center">
@@ -64,6 +81,10 @@
 - 날짜별 사진 그리드와 Timeline 구성
 - 위치 보정과 Paw Map 동선 시각화
 - 여행 요약과 공유 UI 제공
+
+<br>
+
+<a id="technical-solutions"></a>
 
 ## 🧩 핵심 기술 문제와 해결
 
@@ -119,6 +140,10 @@ Route Planner는 임의 휴리스틱으로 결과를 바꾸지 않고, 기본 PO
 - 같은 결과를 다시 확정해도 중복 생성되지 않는 멱등 처리
 - 확정 후 Riverpod Provider 무효화로 홈·일정 화면 동기화
 
+<br>
+
+<a id="system-architecture"></a>
+
 ## 🏗️ 시스템 아키텍처
 
 <p align="center">
@@ -156,6 +181,10 @@ Route Planner 저장소에는 장소명으로 좌표를 만드는 개발 스크�
 있지만, 현재 Modal 운영 경로는 앞단에서 확정된 좌표를 입력받아 Google Routes를
 직접 호출합니다.
 
+<br>
+
+<a id="implementation-and-deployment"></a>
+
 ## 🚀 구현 및 배포 범위
 
 | 영역 | 구현 내용 |
@@ -181,6 +210,10 @@ main 반영
 현재 저장소에서 자동 배포가 확인되는 범위는 Modal AI 서비스입니다. FastAPI와
 Flutter는 Docker·로컬 실행 구성을 제공하며, 운영 호스팅 주소는 저장소에 포함하지
 않습니다.
+
+<br>
+
+<a id="validation-results"></a>
 
 ## ✅ 검증 결과
 
@@ -227,6 +260,10 @@ PYTHONPATH=. pytest ai/route_planner/tests
 PYTHONPATH=. pytest ai/free_time_recommender/tests
 ```
 
+<br>
+
+<a id="tech-stack"></a>
+
 ## 🛠️ 기술 스택
 
 | 구분 | 기술 | 사용 목적 |
@@ -243,6 +280,10 @@ PYTHONPATH=. pytest ai/free_time_recommender/tests
 | Optimization | Held-Karp DP, Partition DP | 방문 순서와 날짜 배정의 정확 계산 |
 | Serverless | Modal | Image Search·Route Planner 실행 환경 |
 | CI/CD | GitHub Actions | 회귀 테스트, 평가 결과와 Modal 자동 배포 |
+
+<br>
+
+<a id="project-structure"></a>
 
 ## 🗂️ 프로젝트 구조
 
@@ -281,6 +322,10 @@ chiwawa/
 | Image Search | [`ai/image_search/README.md`](ai/image_search/README.md) |
 | Route Planner | [`ai/route_planner/README.md`](ai/route_planner/README.md) |
 | Free Time Recommender | [`ai/free_time_recommender/README.md`](ai/free_time_recommender/README.md) |
+
+<br>
+
+<a id="getting-started"></a>
 
 ## ▶️ 실행 방법
 
@@ -339,6 +384,10 @@ APP_DB_PATH=data/chiwawa.db
 실제 Secret은 Git에 포함하지 않으며, Modal 배포에서는 GitHub Actions Secret과
 Modal Secret을 통해 주입합니다.
 
+<br>
+
+<a id="main-api"></a>
+
 ## 🔌 주요 API
 
 | Method | Endpoint | 역할 |
@@ -358,6 +407,10 @@ Modal Secret을 통해 주입합니다.
 
 전체 HTTP 계약은 [`backend/docs/api/reference.md`](backend/docs/api/reference.md)에서
 관리합니다.
+
+<br>
+
+<a id="collaboration"></a>
 
 ## 🤝 협업 방식
 
