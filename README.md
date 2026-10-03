@@ -31,7 +31,7 @@
 2. [핵심 기술 문제와 해결](#technical-solutions)
 3. [시스템 아키텍처](#system-architecture)
 4. [구현 및 배포 범위](#implementation-and-deployment)
-5. [검증 결과](#validation-results)
+5. [테스트 및 품질 관리](#quality-assurance)
 6. [기술 스택](#tech-stack)
 7. [프로젝트 구조](#project-structure)
 8. [실행 방법](#getting-started)
@@ -213,30 +213,27 @@ Flutter는 Docker·로컬 실행 구성을 제공하며, 운영 호스팅 주소
 
 <br>
 
-<a id="validation-results"></a>
+<a id="quality-assurance"></a>
 
-## ✅ 검증 결과
+## ✅ 테스트 및 품질 관리
 
-Route Planner는 정답을 알고 있는 Fixture와 반복 Benchmark로 정확성·완전성·결정성을
-검증합니다.
+Frontend, Backend와 세 AI 모듈을 파트별 정적 검사, 자동 테스트와 빌드로 검증합니다.
+Pull Request에서는 변경 영역의 회귀 테스트를 실행하고, `main` 반영 후에는 검증을
+통과한 AI 서비스를 Modal에 배포합니다.
 
-| 검증 항목 | 저장된 결과 |
-|---|---:|
-| 기준 순서 이동시간 | 140분 |
-| 정확 DP 최적화 이동시간 | 40분 |
-| 이동시간 감소 | 100분 |
-| Fixture 개선율 | 71.43% |
-| E2E 반복 실행 | 3회 |
-| Route Matrix 예상·반환 구간 | 80 / 80 |
-| 누락 Matrix 구간 | 0 |
-| POI 완전 배정 | 3회 모두 성공 |
-| 결과 Fingerprint | 3회 동일 |
+| 영역 | 검증 범위 |
+|---|---|
+| Frontend | 정적 분석, 단위·Widget 테스트, Web Build |
+| Backend | Format, Lint, Type Check, API·Service 테스트, Wheel Build |
+| Image Search | 사진 입력 검증, Provider 응답 계약, 장소 확정 흐름 |
+| Route Planner | 일정 완전성, 날짜 배정, 방문 순서, 결정성, E2E Benchmark |
+| Free Time Recommender | 시간 제약, 후보 삽입, 우회 이동시간, 카테고리별 추천 |
+| CI/CD | Pull Request 회귀 테스트, `main` 반영 후 Modal 자동 배포 |
 
-> 위 수치는 [`artifacts/route_evaluation_result.json`](artifacts/route_evaluation_result.json)과
-> [`artifacts/e2e_benchmark_result.json`](artifacts/e2e_benchmark_result.json)에 저장된
-> 평가 시나리오 결과이며, 모든 실제 여행에 대한 일반화 성능을 의미하지 않습니다.
+Route Planner의 Fixture, 정확성·완전성·결정성 평가와 Benchmark 결과는
+[`ai/route_planner/README.md`](ai/route_planner/README.md)에서 별도로 관리합니다.
 
-### 품질 검사
+### 로컬 검증 명령
 
 ```bash
 # Frontend
