@@ -3,7 +3,6 @@ name: AI Route Planner CI
 on:
   pull_request:
     branches:
-      - develop
       - main
     paths:
       - "ai/route_planner/**"
