@@ -3,7 +3,6 @@ name: AI Image Search CI
 on:
   pull_request:
     branches:
-      - develop
       - main
     paths:
       - "ai/image_search/**"
