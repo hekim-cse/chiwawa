@@ -12,22 +12,22 @@ Route Planner의 **정확 일자 배정**, **이동수단별 정확 경로 계�
 
 ## 📚 목차
 
-1. [🎯 디렉터리 역할](#-디렉터리-역할)
-2. [📁 파일 구성](#-파일-구성)
-3. [🔄 전체 Solver 흐름](#-전체-solver-흐름)
-4. [🛣️ ExactRouteSolver](#-exactroutesolver)
-5. [📅 ExactDayAssignmentSolver](#-exactdayassignmentsolver)
-6. [🧩 DayAssignmentSolver](#-dayassignmentsolver)
-7. [🚘 RouteOptionSolver](#-routeoptionsolver)
-8. [🚦 RouteOptionsByModeSolver](#-routeoptionsbymodesolver)
-9. [⏱️ TimelineBuilder](#-timelinebuilder)
-10. [🕒 TimelineOptionsBuilder](#-timelineoptionsbuilder)
-11. [✅ 불변조건과 교차 검증](#-불변조건과-교차-검증)
-12. [🚨 예외와 실패 정책](#-예외와-실패-정책)
-13. [📊 계산 복잡도와 제한](#-계산-복잡도와-제한)
-14. [🧪 테스트 관점](#-테스트-관점)
-15. [⚠️ 현재 한계](#-현재-한계)
-16. [🔗 관련 문서](#-관련-문서)
+1. [디렉터리 역할](#-디렉터리-역할)
+2. [파일 구성](#-파일-구성)
+3. [전체 Solver 흐름](#-전체-solver-흐름)
+4. [ExactRouteSolver](#-exactroutesolver)
+5. [ExactDayAssignmentSolver](#-exactdayassignmentsolver)
+6. [DayAssignmentSolver](#-dayassignmentsolver)
+7. [RouteOptionSolver](#-routeoptionsolver)
+8. [RouteOptionsByModeSolver](#-routeoptionsbymodesolver)
+9. [TimelineBuilder](#-timelinebuilder)
+10. [TimelineOptionsBuilder](#-timelineoptionsbuilder)
+11. [불변조건과 교차 검증](#-불변조건과-교차-검증)
+12. [예외와 실패 정책](#-예외와-실패-정책)
+13. [계산 복잡도와 제한](#-계산-복잡도와-제한)
+14. [테스트 관점](#-테스트-관점)
+15. [현재 한계](#-현재-한계)
+16. [관련 문서](#-관련-문서)
 
 <br>
 

@@ -18,21 +18,21 @@ Route Leg Geometry
 
 ## 📚 목차
 
-1. [🎯 디렉터리 역할](#-디렉터리-역할)
-2. [📁 파일 구성](#-파일-구성)
-3. [🔄 전체 Provider 흐름](#-전체-provider-흐름)
-4. [🗺️ GoogleRoutesGeometryProvider](#-googleroutesgeometryprovider)
-5. [📍 GoogleAlongRoutePlaceProvider](#-googlealongrouteplaceprovider)
-6. [🚶 GoogleCandidateRouteMetricsProvider](#-googlecandidateroutemetricsprovider)
-7. [🕒 출발시각 처리](#-출발시각-처리)
-8. [⏱️ 이동시간 반올림 정책](#-이동시간-반올림-정책)
-9. [📨 요청 Header와 Field Mask](#-요청-header와-field-mask)
-10. [✅ 응답 검증](#-응답-검증)
-11. [🚨 오류 처리](#-오류-처리)
-12. [🔐 API Key와 민감정보](#-api-key와-민감정보)
-13. [🧪 테스트 관점](#-테스트-관점)
-14. [⚠️ 현재 한계](#-현재-한계)
-15. [🔗 관련 문서](#-관련-문서)
+1. [디렉터리 역할](#-디렉터리-역할)
+2. [파일 구성](#-파일-구성)
+3. [전체 Provider 흐름](#-전체-provider-흐름)
+4. [GoogleRoutesGeometryProvider](#-googleroutesgeometryprovider)
+5. [GoogleAlongRoutePlaceProvider](#-googlealongrouteplaceprovider)
+6. [GoogleCandidateRouteMetricsProvider](#-googlecandidateroutemetricsprovider)
+7. [출발시각 처리](#-출발시각-처리)
+8. [이동시간 반올림 정책](#-이동시간-반올림-정책)
+9. [요청 Header와 Field Mask](#-요청-header와-field-mask)
+10. [응답 검증](#-응답-검증)
+11. [오류 처리](#-오류-처리)
+12. [API Key와 민감정보](#-api-key와-민감정보)
+13. [테스트 관점](#-테스트-관점)
+14. [현재 한계](#-현재-한계)
+15. [관련 문서](#-관련-문서)
 
 <br>
 
