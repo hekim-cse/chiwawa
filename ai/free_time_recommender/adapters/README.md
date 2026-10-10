@@ -11,20 +11,20 @@ Adapter는 단순 필드 복사만 수행하지 않습니다.
 
 ## 📚 목차
 
-1. [🎯 디렉터리 역할](#-디렉터리-역할)
-2. [📁 파일 구성](#-파일-구성)
-3. [🔄 전체 변환 흐름](#-전체-변환-흐름)
-4. [🗺️ RoutePlannerRouteOptionAdapter](#-routeplannerrouteoptionadapter)
-5. [⏱️ RoutePlannerTimelineAdapter](#-routeplannertimelineadapter)
-6. [📆 DayAvailability 변환](#-dayavailability-변환)
-7. [🕰️ 마지막 구간 RecommendationTimeWindow](#-마지막-구간-recommendationtimewindow)
-8. [🛣️ 전체 Route Leg 삽입 구간](#-전체-route-leg-삽입-구간)
-9. [🌏 timezone 변환](#-timezone-변환)
-10. [✅ 정합성 검증](#-정합성-검증)
-11. [🚨 Adapter 오류](#-adapter-오류)
-12. [🧪 테스트 관점](#-테스트-관점)
-13. [⚠️ 현재 구조의 주의사항](#-현재-구조의-주의사항)
-14. [🔗 관련 문서](#-관련-문서)
+1. [디렉터리 역할](#-디렉터리-역할)
+2. [파일 구성](#-파일-구성)
+3. [전체 변환 흐름](#-전체-변환-흐름)
+4. [RoutePlannerRouteOptionAdapter](#-routeplannerrouteoptionadapter)
+5. [RoutePlannerTimelineAdapter](#-routeplannertimelineadapter)
+6. [DayAvailability 변환](#-dayavailability-변환)
+7. [마지막 구간 RecommendationTimeWindow](#-마지막-구간-recommendationtimewindow)
+8. [전체 Route Leg 삽입 구간](#-전체-route-leg-삽입-구간)
+9. [timezone 변환](#-timezone-변환)
+10. [정합성 검증](#-정합성-검증)
+11. [Adapter 오류](#-adapter-오류)
+12. [테스트 관점](#-테스트-관점)
+13. [현재 구조의 주의사항](#-현재-구조의-주의사항)
+14. [관련 문서](#-관련-문서)
 
 <br>
 

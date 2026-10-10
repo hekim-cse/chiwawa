@@ -16,21 +16,21 @@ ai/route_planner/services/trip_planner_service.py
 
 ## 📚 목차
 
-1. [🎯 Application 계층 역할](#-application-계층-역할)
-2. [📁 현재 코드 위치](#-현재-코드-위치)
-3. [🔄 전체 실행 흐름](#-전체-실행-흐름)
-4. [🔌 Provider 인터페이스](#-provider-인터페이스)
-5. [⚙️ TripPlannerServiceConfig](#-tripplannerserviceconfig)
-6. [🧠 TripPlannerService](#-tripplannerservice)
-7. [📅 일자 배정 Matrix 선조회](#-일자-배정-matrix-선조회)
-8. [🚘 이동수단별 Matrix 조회](#-이동수단별-matrix-조회)
-9. [🕒 출발시각과 timezone](#-출발시각과-timezone)
-10. [🪪 Location 식별자 정책](#-location-식별자-정책)
-11. [✅ 결과 조립과 불변성](#-결과-조립과-불변성)
-12. [🚨 오류 처리](#-오류-처리)
-13. [🧪 테스트 관점](#-테스트-관점)
-14. [⚠️ 현재 구조의 주의사항](#-현재-구조의-주의사항)
-15. [🔗 관련 문서](#-관련-문서)
+1. [Application 계층 역할](#-application-계층-역할)
+2. [현재 코드 위치](#-현재-코드-위치)
+3. [전체 실행 흐름](#-전체-실행-흐름)
+4. [Provider 인터페이스](#-provider-인터페이스)
+5. [TripPlannerServiceConfig](#-tripplannerserviceconfig)
+6. [TripPlannerService](#-tripplannerservice)
+7. [일자 배정 Matrix 선조회](#-일자-배정-matrix-선조회)
+8. [이동수단별 Matrix 조회](#-이동수단별-matrix-조회)
+9. [출발시각과 timezone](#-출발시각과-timezone)
+10. [Location 식별자 정책](#-location-식별자-정책)
+11. [결과 조립과 불변성](#-결과-조립과-불변성)
+12. [오류 처리](#-오류-처리)
+13. [테스트 관점](#-테스트-관점)
+14. [현재 구조의 주의사항](#-현재-구조의-주의사항)
+15. [관련 문서](#-관련-문서)
 
 <br>
 
