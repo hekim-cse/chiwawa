@@ -167,11 +167,11 @@ Frontend·Backend·AI 서비스로 통합한 5인 팀 프로젝트입니다.
 
 | 팀원 | 역할 | 주요 담당 영역 |
 |---|---|---|
-| 김형은 | PM · AI 개발 | 날짜별 장소 배정, Held–Karp 방문 순서 최적화, Route Option·Timeline, 빈 시간 추천 연동, Backend–AI DTO, AI 평가·회귀 테스트, GitHub Actions·Modal 배포 |
-| 박재우 | AI 개발 | 사진 기반 장소 탐색, Cloud Vision·Gemini 분석, Google Places 장소 확정, Image Search 계약·Modal 서비스 |
-| 김정민 | Backend | FastAPI API 기반 구축, Google OAuth·JWT, Backend–AI 연동, 서비스 상태·영속화, Memorial·사진 API |
-| 김채연 | Backend | Memorial API·사진 저장, EXIF·위치·시간대 처리, 일정 검증, AI 통합 DTO 보완, Backend Docker 구성 |
-| 고윤재 | Frontend | Flutter App·Web, Riverpod 상태 관리, 여행·일정·탐색·Memorial 화면, AI Route Option·Timeline 사용자 흐름 |
+| 김&#8288;형&#8288;은 | PM&nbsp;·&nbsp;AI&nbsp;개발 | 날짜별 장소 배정, Held–Karp 방문 순서 최적화, Route Option·Timeline, 빈 시간 추천 연동, Backend–AI DTO, AI 평가·회귀 테스트, GitHub Actions·Modal 배포 |
+| 박&#8288;재&#8288;우 | AI&nbsp;개발 | 사진 기반 장소 탐색, Cloud Vision·Gemini 분석, Google Places 장소 확정, Image Search 계약·Modal 서비스 |
+| 김&#8288;정&#8288;민 | Backend | FastAPI API 기반 구축, Google OAuth·JWT, Backend–AI 연동, 서비스 상태·영속화, Memorial·사진 API |
+| 김&#8288;채&#8288;연 | Backend | Memorial API·사진 저장, EXIF·위치·시간대 처리, 일정 검증, AI 통합 DTO 보완, Backend Docker 구성 |
+| 고&#8288;윤&#8288;재 | Frontend | Flutter App·Web, Riverpod 상태 관리, 여행·일정·탐색·Memorial 화면, AI Route Option·Timeline 사용자 흐름 |
 
 ### 담당 영역 상세 문서
 
